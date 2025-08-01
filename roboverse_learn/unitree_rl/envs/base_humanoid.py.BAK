@@ -30,7 +30,7 @@ from roboverse_learn.skillblender_rl.utils import (
 )
 
 
-class HumanoidBaseWrapper(RslRlWrapper):
+class Humanoid(RslRlWrapper):
     """
     Wraps Metasim environments to be compatible with rsl_rl OnPolicyRunner.
 
@@ -47,121 +47,6 @@ class HumanoidBaseWrapper(RslRlWrapper):
         self._parse_joint_cfg(scenario)
         self._prepare_reward_function(scenario.task)
         self._init_buffers()
-
-    def step(self, actions):
-        """
-        Input: actions
-        Output: obs, privileged_obs, rewards, dones, infos
-        """
-        action_dict = self._pre_physics_step(actions)
-        env_states = self._physics_step(action_dict)
-        obs, privileged_obs, rewards = self._post_physics_step(env_states)
-        return obs, privileged_obs, rewards, self.reset_buf, self.extras
-
-    def _pre_physics_step(self, actions):
-        """Apply action smoothing and wrap actions as dict before physics step."""
-        delay = torch.rand((self.num_envs, 1), device=self.device)
-        actions = (1 - delay) * actions.to(self.device) + delay * self.actions
-        clipped_actions = self.clip_actions(actions)
-        self.actions = clipped_actions
-        return self.actions
-
-    def _physics_step(self, action_dict):
-        """
-        Task physics step
-        """
-        env_states, _, terminated, time_out, _ = self.env.step(action_dict)
-        self.reset_buf = terminated | time_out
-        return env_states
-
-    def _post_physics_step(self, env_states):
-        """After physics step, compute reward, get obs and privileged_obs, resample command."""
-        # update episode length from env_wrapper
-        self.episode_length_buf = self.env.episode_length_buf_tensor
-        self.common_step_counter += 1
-
-        self._post_physics_step_callback()
-        # update refreshed tensors from simulaor
-        self._update_refreshed_tensors(env_states)
-        # prepare all the states for reward computation
-        self._parse_state_for_reward(env_states)
-        # compute the reward
-        self.compute_reward(env_states)
-        # reset envs
-        reset_env_idx = self.reset_buf.nonzero(as_tuple=False).flatten().tolist()
-        self.reset(reset_env_idx)
-
-        # compute obs for actor,  privileged_obs for critic network
-        self._compute_observations(env_states)
-        self._update_history(env_states)
-
-        return self.obs_buf, self.privileged_obs_buf, self.rew_buf
-
-    def _post_physics_step_callback(self):
-        """Callback called before computing terminations, rewards, and observations
-        Default behaviour: Compute ang vel command based on target and heading, compute measured terrain heights and randomly push robots
-        """
-        env_ids = (
-            (self.episode_length_buf % int(self.cfg.commands.resampling_time / self.dt) == 0)
-            .nonzero(as_tuple=False)
-            .flatten()
-        )
-        if len(env_ids) > 0:
-            self._resample_commands(env_ids)
-
-        if self.cfg.commands.heading_command:
-            forward = quat_apply(self.base_quat, self.forward_vec)
-            heading = torch.atan2(forward[:, 1], forward[:, 0])
-            self.commands[:, 2] = torch.clip(0.5 * self.wrap_to_pi(self.commands[:, 3] - heading), -1.0, 1.0)
-
-        self._push_robots()
-
-    def reset(self, env_ids=None):
-        """
-        Reset state in the env and buffer in this wrapper
-        """
-        if env_ids is None:
-            env_ids = list(range(self.num_envs))
-        if len(env_ids) == 0:
-            return
-
-        _, _ = self.env.reset(self.init_states, env_ids)
-
-        if self.cfg.commands.curriculum and (self.common_step_counter % self.max_episode_length == 0):
-            self.update_command_curriculum(env_ids)
-
-        self._resample_commands(env_ids)
-
-        # reset state buffer in the wrapper
-        self.actions[env_ids] = 0.0
-        self.last_actions[env_ids] = 0.0
-        self.last_last_actions[env_ids] = 0.0
-        self.last_dof_vel[env_ids] = 0.0
-        self.episode_length_buf[env_ids] = 0
-        self.feet_air_time[env_ids] = 0.0
-        self.base_quat[env_ids] = (
-            torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device, dtype=torch.float32)
-            .unsqueeze(0)
-            .repeat(len(env_ids), 1)
-        )
-        self.base_euler_xyz = get_euler_xyz_tensor(self.base_quat)
-        self.projected_gravity[env_ids] = quat_rotate_inverse(self.base_quat[env_ids], self.gravity_vec[env_ids])
-
-        self.extras["episode"] = {}
-        for key in self.episode_sums.keys():
-            self.extras["episode"]["rew_" + key] = (
-                torch.mean(self.episode_sums[key][env_ids]) / self.cfg.max_episode_length_s
-            )
-            self.episode_sums[key][env_ids] = 0.0
-
-        # log metrics
-        self.extras["episode_metrics"] = deepcopy(self.episode_metrics)
-
-        # reset env handler state buffer
-        for i in range(self.obs_history.maxlen):
-            self.obs_history[i][env_ids] *= 0
-        for i in range(self.critic_history.maxlen):
-            self.critic_history[i][env_ids] *= 0
 
     def _parse_rigid_body_indices(self, robot):
         """
@@ -534,6 +419,29 @@ class HumanoidBaseWrapper(RslRlWrapper):
         self.projected_gravity[:] = quat_rotate_inverse(self.base_quat, self.gravity_vec)
         self.base_euler_xyz = get_euler_xyz_tensor(self.base_quat)
 
+    def _post_physics_step(self, env_states):
+        """After physics step, compute reward, get obs and privileged_obs, resample command."""
+        # update episode length from env_wrapper
+        self.episode_length_buf = self.env.episode_length_buf_tensor
+        self.common_step_counter += 1
+
+        self._post_physics_step_callback()
+        # update refreshed tensors from simulaor
+        self._update_refreshed_tensors(env_states)
+        # prepare all the states for reward computation
+        self._parse_state_for_reward(env_states)
+        # compute the reward
+        self.compute_reward(env_states)
+        # reset envs
+        reset_env_idx = self.reset_buf.nonzero(as_tuple=False).flatten().tolist()
+        self.reset(reset_env_idx)
+
+        # compute obs for actor,  privileged_obs for critic network
+        self._compute_observations(env_states)
+        self._update_history(env_states)
+
+        return self.obs_buf, self.privileged_obs_buf, self.rew_buf
+
     def update_command_curriculum(self, env_ids):
         """Implements a curriculum of increasing commands
 
@@ -556,6 +464,79 @@ class HumanoidBaseWrapper(RslRlWrapper):
         """Clip actions based on cfg."""
         clip_action_limit = self.cfg.normalization.clip_actions
         return torch.clip(actions, -clip_action_limit, clip_action_limit).to(self.device)
+
+    def _pre_physics_step(self, actions):
+        """Apply action smoothing and wrap actions as dict before physics step."""
+        delay = torch.rand((self.num_envs, 1), device=self.device)
+        actions = (1 - delay) * actions.to(self.device) + delay * self.actions
+        clipped_actions = self.clip_actions(actions)
+        self.actions = clipped_actions
+        return self.actions
+
+    def _physics_step(self, action_dict):
+        """
+        Task physics step
+        """
+        env_states, _, terminated, time_out, _ = self.env.step(action_dict)
+        self.reset_buf = terminated | time_out
+        return env_states
+
+    def step(self, actions):
+        """
+        Input: actions
+        Output: obs, privileged_obs, rewards, dones, infos
+        """
+        action_dict = self._pre_physics_step(actions)
+        env_states = self._physics_step(action_dict)
+        obs, privileged_obs, rewards = self._post_physics_step(env_states)
+        return obs, privileged_obs, rewards, self.reset_buf, self.extras
+
+    def reset(self, env_ids=None):
+        """
+        Reset state in the env and buffer in this wrapper
+        """
+        if env_ids is None:
+            env_ids = list(range(self.num_envs))
+        if len(env_ids) == 0:
+            return
+
+        _, _ = self.env.reset(self.init_states, env_ids)
+
+        if self.cfg.commands.curriculum and (self.common_step_counter % self.max_episode_length == 0):
+            self.update_command_curriculum(env_ids)
+
+        self._resample_commands(env_ids)
+
+        # reset state buffer in the wrapper
+        self.actions[env_ids] = 0.0
+        self.last_actions[env_ids] = 0.0
+        self.last_last_actions[env_ids] = 0.0
+        self.last_dof_vel[env_ids] = 0.0
+        self.episode_length_buf[env_ids] = 0
+        self.feet_air_time[env_ids] = 0.0
+        self.base_quat[env_ids] = (
+            torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device, dtype=torch.float32)
+            .unsqueeze(0)
+            .repeat(len(env_ids), 1)
+        )
+        self.base_euler_xyz = get_euler_xyz_tensor(self.base_quat)
+        self.projected_gravity[env_ids] = quat_rotate_inverse(self.base_quat[env_ids], self.gravity_vec[env_ids])
+
+        self.extras["episode"] = {}
+        for key in self.episode_sums.keys():
+            self.extras["episode"]["rew_" + key] = (
+                torch.mean(self.episode_sums[key][env_ids]) / self.cfg.max_episode_length_s
+            )
+            self.episode_sums[key][env_ids] = 0.0
+
+        # log metrics
+        self.extras["episode_metrics"] = deepcopy(self.episode_metrics)
+
+        # reset env handler state buffer
+        for i in range(self.obs_history.maxlen):
+            self.obs_history[i][env_ids] *= 0
+        for i in range(self.critic_history.maxlen):
+            self.critic_history[i][env_ids] *= 0
 
     def _resample_commands(self, env_ids):
         """Randommly select commands of some environments
@@ -592,6 +573,25 @@ class HumanoidBaseWrapper(RslRlWrapper):
 
         # set small commands to zero
         self.commands[env_ids, :2] *= (torch.norm(self.commands[env_ids, :2], dim=1) > 0.2).unsqueeze(1)
+
+    def _post_physics_step_callback(self):
+        """Callback called before computing terminations, rewards, and observations
+        Default behaviour: Compute ang vel command based on target and heading, compute measured terrain heights and randomly push robots
+        """
+        env_ids = (
+            (self.episode_length_buf % int(self.cfg.commands.resampling_time / self.dt) == 0)
+            .nonzero(as_tuple=False)
+            .flatten()
+        )
+        if len(env_ids) > 0:
+            self._resample_commands(env_ids)
+
+        if self.cfg.commands.heading_command:
+            forward = quat_apply(self.base_quat, self.forward_vec)
+            heading = torch.atan2(forward[:, 1], forward[:, 0])
+            self.commands[:, 2] = torch.clip(0.5 * self.wrap_to_pi(self.commands[:, 3] - heading), -1.0, 1.0)
+
+        self._push_robots()
 
     def _push_robots(self):
         """Randomly set robot's root velocity to simulate a push."""
