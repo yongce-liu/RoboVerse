@@ -199,7 +199,7 @@ init_states = [
             },
         },
     }
-]
+] * args.num_envs
 obs, extras = env.reset(states=init_states)
 os.makedirs("get_started/output", exist_ok=True)
 
