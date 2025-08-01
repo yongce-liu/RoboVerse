@@ -1,5 +1,3 @@
-"""SkillBlench wrapper for training primitive skill: walking."""
-
 from __future__ import annotations
 
 import torch
@@ -76,7 +74,7 @@ class WalkingTask(Humanoid):
         self._compute_ref_state()
         self._parse_ref_pos(envstate)
 
-    def _compute_observations(self, envstates):
+    def compute_observations(self, envstates):
         """compute observation and privileged observation."""
 
         phase = self._get_phase()

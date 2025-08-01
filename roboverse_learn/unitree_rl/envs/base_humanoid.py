@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import torch
+from typing import Callable
+from collections import deque
+from copy import deepcopy
 
 from roboverse_learn.rl.rsl_rl.rsl_rl_wrapper import RslRlWrapper
 from roboverse_learn.unitree_rl.utils import(
@@ -287,6 +290,23 @@ class Humanoid(RslRlWrapper):
         cycle_time = self.cfg.reward_cfg.cycle_time
         phase = self.episode_length_buf * self.dt / cycle_time
         return phase
+
+    @staticmethod
+    def get_reward_fn(target: str, reward_functions: list[Callable]) -> Callable:
+        fn = next((f for f in reward_functions if f.__name__ == target), None)
+        if fn is None:
+            raise KeyError(f"No reward function named '{target}'")
+        return fn
+
+    @staticmethod
+    def get_axis_params(value, axis_idx, x_value=0.0, n_dims=3):
+        """construct arguments to `Vec` according to axis index."""
+        zs = torch.zeros((n_dims,))
+        assert axis_idx < n_dims, "the axis dim should be within the vector dimensions"
+        zs[axis_idx] = 1.0
+        params = torch.where(zs == 1.0, value, zs)
+        params[0] = x_value
+        return params.tolist()
     # endregion
 
     # region: Parse configs & Get the necessary parametres
@@ -355,6 +375,25 @@ class Humanoid(RslRlWrapper):
         )
         self.cfg.upper_body_joint_indices = get_joint_reindexed_indices_from_substring(
             self.env.handler, robot.name, upper_body_names, device=self.device
+        )
+
+    def _parse_joint_cfg(self, scenario):
+        """
+        parse default joint positions and torque limits from cfg.
+        """
+
+        torque_limits = scenario.robots[0].torque_limits
+        sorted_joint_names = sorted(torque_limits.keys())
+        sorted_limits = [torque_limits[name] for name in sorted_joint_names]
+        self.cfg.torque_limits = (
+            torch.tensor(sorted_limits, device=self.device).unsqueeze(0).repeat(self.num_envs, 1)
+            * scenario.control.torque_limit_scale
+        )
+
+        default_joint_pos = scenario.robots[0].default_joint_positions
+        sorted_joint_pos = [default_joint_pos[name] for name in sorted_joint_names]
+        self.cfg.default_joint_pd_target = (
+            torch.tensor(sorted_joint_pos, device=self.device).unsqueeze(0).repeat(self.num_envs, 1)
         )
 
     def _init_buffers(self):
@@ -504,21 +543,21 @@ class Humanoid(RslRlWrapper):
         self._parse_local_base_vel(envstate)
 
     def _parse_gait_phase(self, envstate: TensorState):
-        envstate.robots[self.robot.name].extras["gait_phase"] = self._get_gait_phase()
+        envstate.robots[self.robot.name].extra["gait_phase"] = self._get_gait_phase()
 
     def _parse_action(self, envstate: TensorState):
-        envstate.robots[self.robot.name].extras["actions"] = self.actions
+        envstate.robots[self.robot.name].extra["actions"] = self.actions
 
     def _parse_history_state(self, envstate: TensorState):
         """update history buffer, must be called after reset"""
-        envstate.robots[self.robot.name].extras["last_root_vel"] = self.last_root_vel
-        envstate.robots[self.robot.name].extras["last_dof_vel"] = self.last_dof_vel
-        envstate.robots[self.robot.name].extras["last_actions"] = self.last_actions
-        envstate.robots[self.robot.name].extras["last_last_actions"] = self.last_last_actions
+        envstate.robots[self.robot.name].extra["last_root_vel"] = self.last_root_vel
+        envstate.robots[self.robot.name].extra["last_dof_vel"] = self.last_dof_vel
+        envstate.robots[self.robot.name].extra["last_actions"] = self.last_actions
+        envstate.robots[self.robot.name].extra["last_last_actions"] = self.last_last_actions
 
     def _parse_base_euler_xyz(self, envstate: TensorState):
         self.base_euler_xyz = get_euler_xyz_tensor(envstate.robots[self.robot.name].root_state[:, 3:7])
-        envstate.robots[self.robot.name].extras["base_euler_xyz"] = self.base_euler_xyz
+        envstate.robots[self.robot.name].extra["base_euler_xyz"] = self.base_euler_xyz
 
     def _parse_foot_all(self, envstate: TensorState):
         """
@@ -529,7 +568,7 @@ class Humanoid(RslRlWrapper):
         self._parse_feet_air_time(envstate)
         self._parse_feet_clearance(envstate)
 
-    def _parse_feet_air_time(self, envstate):
+    def _parse_feet_air_time(self, envstate: TensorState):
         contact = contact_forces_tensor(envstate, self.robot.name)[:, self.feet_indices, 2] > 5.0
         stance_mask = gait_phase_tensor(envstate, self.robot.name)
         contact_filt = torch.logical_or(torch.logical_or(contact, stance_mask), self.last_contacts)
@@ -540,7 +579,7 @@ class Humanoid(RslRlWrapper):
         self.feet_air_time *= ~contact_filt
         envstate.robots[self.robot.name].extra["feet_air_time"] = air_time
 
-    def _parse_feet_clearance(self, envstate):
+    def _parse_feet_clearance(self, envstate: TensorState):
         """Calculates reward based on the clearance of the swing leg from the ground during movement.
         Encourages appropriate lift of the feet during the swing phase of the gait.
 
@@ -564,14 +603,14 @@ class Humanoid(RslRlWrapper):
 
     def _parse_command(self, envstate: TensorState):
         """Adds the current velocity and heading command to state."""
-        envstate.robots[self.robot.name].extras["command"] = self.commands
+        envstate.robots[self.robot.name].extra["command"] = self.commands
 
     def _parse_projected_gravity(self, envstate: TensorState):
         self.projected_gravity[:] = quat_rotate_inverse(self.base_quat, self.gravity_vec)
-        envstate.robots[self.robot.name].extras["projected_gravity"] = self.projected_gravity
+        envstate.robots[self.robot.name].extra["projected_gravity"] = self.projected_gravity
 
     def _parse_local_base_vel(self, envstate: TensorState):
         """Add local base velocity into states"""
-        envstate.robots[self.robot.name].extras["base_lin_vel"] = self.base_lin_vel
-        envstate.robots[self.robot.name].extras["base_ang_vel"] = self.base_ang_vel
+        envstate.robots[self.robot.name].extra["base_lin_vel"] = self.base_lin_vel
+        envstate.robots[self.robot.name].extra["base_ang_vel"] = self.base_ang_vel
     # endregion

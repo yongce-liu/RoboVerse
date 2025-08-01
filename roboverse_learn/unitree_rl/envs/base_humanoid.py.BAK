@@ -10,7 +10,7 @@ import numpy as np
 import torch
 
 from metasim.cfg.scenario import ScenarioCfg
-from metasim.cfg.tasks.skillblender.base_legged_cfg import BaseLeggedTaskCfg
+from roboverse_learn.unitree_rl.configs.base_legged_cfg import BaseLeggedTaskCfg
 from metasim.utils.humanoid_robot_util import (
     contact_forces_tensor,
     dof_vel_tensor,
