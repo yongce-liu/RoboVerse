@@ -1,11 +1,10 @@
 {
     // Python interpreter (change this to your own path)
     "python.defaultInterpreterPath": "${HOME}/miniforge3/envs/isaaclab/bin/python",
-
     // Formatting
     "[python]": {
         "editor.tabSize": 4,
-        "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.defaultFormatter": "ms-python.black-formatter",
         "editor.formatOnSave": true,
         "editor.codeActionsOnSave": {
             "source.organizeImports": "explicit"
@@ -14,11 +13,11 @@
     "files.insertFinalNewline": true,
     "files.trimFinalNewlines": true,
     "files.trimTrailingWhitespace": true,
-    "editor.rulers": [120],
-
+    "editor.rulers": [
+        120
+    ],
     // Linting
     "ruff.lint.enable": true,
-
     // Exclude
     "files.exclude": {
         "**/__pycache__": true,
@@ -48,7 +47,6 @@
         "third_party/IsaacLab",
         "third_party/pyrep",
     ],
-
     // Python extra paths
     "python.analysis.extraPaths": [
         /*** curobo ***/
@@ -263,6 +261,13 @@
         "${workspaceFolder}/third_party/IsaacLab2/_isaac_sim/exts/isaacsim.util.merge_mesh",
         "${workspaceFolder}/third_party/IsaacLab2/_isaac_sim/exts/isaacsim.util.physics",
         "${workspaceFolder}/third_party/IsaacLab2/_isaac_sim/exts/isaacsim.xr.openxr",
-
     ],
+    "remote.extensionKind": {
+        "GitHub.copilot": [
+            "ui"
+        ],
+        "GitHub.copilot-chat": [
+            "ui"
+        ],
+    },
 }
