@@ -1,5 +1,3 @@
-"""Walking config in SkillBench in Skillblender"""
-
 from __future__ import annotations
 
 from typing import Callable
@@ -59,8 +57,7 @@ class WalkingCfgPPO(BaseHumanoidCfgPPO):
 
 @configclass
 class WalkingCfg(BaseHumanoidCfg):
-    """Cfg class for Skillbench:Walking."""
-
+    """Configuration for the walking task."""
     task_name = "walking"
 
     ppo_cfg = WalkingCfgPPO()

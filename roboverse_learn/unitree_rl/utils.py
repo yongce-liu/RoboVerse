@@ -49,7 +49,7 @@ def get_args(test=False):
         {
             "name": "--task",
             "type": str,
-            "default": "skillblender:Walking",
+            "default": "walking",
             "help": "Resume training or start testing from a checkpoint. Overrides config file if provided.",
         },
         {
@@ -109,7 +109,7 @@ def get_log_dir(args: argparse.Namespace, scenario: ScenarioCfg) -> str:
     task_name = scenario.task.task_name
     task_name = f"{robot_name}_{task_name}"
     now = datetime.datetime.now().strftime("%Y_%m%d_%H%M%S")
-    log_dir = f"./outputs/skillblender/{task_name}/{now}/"
+    log_dir = f"./outputs/unitree_rl/{task_name}/{now}/"
     if not os.path.exists(log_dir):
         os.makedirs(log_dir, exist_ok=True)
     log.info("Log directory: {}", log_dir)

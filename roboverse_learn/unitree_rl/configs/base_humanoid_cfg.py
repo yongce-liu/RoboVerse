@@ -48,7 +48,7 @@ class BaseHumanoidCfg(BaseLeggedTaskCfg):
     contact_indices: indices of the contact joints
     """
 
-    task_name: str = "skillblender_humanoid_task"
+    task_name: str = "humanoid_task"
     human: HumanoidExtraCfg = HumanoidExtraCfg()
     elbow_indices: torch.Tensor = MISSING
     knee_indices: torch.Tensor = MISSING

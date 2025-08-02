@@ -1,5 +1,3 @@
-"""This is a training script for skillblender framework"""
-
 from __future__ import annotations
 
 import os

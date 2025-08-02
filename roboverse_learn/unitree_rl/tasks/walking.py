@@ -13,7 +13,7 @@ from roboverse_learn.unitree_rl.envs.base_humanoid import Humanoid
 
 class WalkingTask(Humanoid):
     """
-    Wrapper for Skillbench:walking
+    Wrapper for walking
 
     # TODO implement push robot
     """
@@ -37,7 +37,7 @@ class WalkingTask(Humanoid):
             self.left_ankle_joint_idx = joint_names.index("left_ankle_pitch")
             self.right_ankle_joint_idx = joint_names.index("right_ankle_pitch")
         else:
-            raise ValueError(f"Unsupported robot: {self.robot.name} for Skillblender Walking Task")
+            raise ValueError(f"Unsupported robot: {self.robot.name} for walking task")
 
     def _compute_ref_state(self):
         """compute reference target position for walking task."""
