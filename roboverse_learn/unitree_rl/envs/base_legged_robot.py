@@ -12,7 +12,7 @@ from roboverse_learn.unitree_rl.utils import(
     get_body_reindexed_indices_from_substring,
     get_joint_reindexed_indices_from_substring
 )
-from roboverse_learn.unitree_rl.configs.base_legged_cfg import BaseLeggedTaskCfg
+from roboverse_learn.unitree_rl.configs.base_legged import BaseLeggedTaskCfg
 
 import metasim.types as mstypes
 from metasim.utils.state import TensorState

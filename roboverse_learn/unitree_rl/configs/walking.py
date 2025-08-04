@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Callable
 
-from .base_humanoid_cfg import BaseHumanoidCfg, BaseHumanoidCfgPPO
-from .reward_func_cfg import (
+from .base_humanoid import BaseHumanoidCfg, BaseHumanoidCfgPPO
+from .reward_funcs import (
     reward_action_rate,
     reward_action_smoothness,
     reward_ang_vel_xy,

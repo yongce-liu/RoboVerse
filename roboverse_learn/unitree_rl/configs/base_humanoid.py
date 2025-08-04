@@ -6,7 +6,7 @@ from dataclasses import MISSING
 
 import torch
 
-from .base_legged_cfg import BaseLeggedTaskCfg, LeggedRobotCfgPPO
+from .base_legged import BaseLeggedTaskCfg, LeggedRobotCfgPPO
 from metasim.utils import configclass
 
 
