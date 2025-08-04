@@ -21,21 +21,33 @@ from rsl_rl.runners.on_policy_runner import OnPolicyRunner
 from metasim.cfg.scenario import ScenarioCfg
 from roboverse_learn.unitree_rl.utils import get_args, get_log_dir, get_class
 
+def make_robots(args):
+    robots_name = args.robot.replace(" ", "").replace("[", "").replace("]", "").replace("'", "").replace('"', '').split(",")
+    print(robots_name)
+    robots = []
+    for _name in robots_name:
+        print(_name)
+        robot_wrapper = get_class(_name, "Cfg")
+        robot = robot_wrapper(name=_name)
+        robots.append(robot)
+    return robots
+
 
 def train(args):
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    # only support single robot for now
+    robots = [make_robots(args)[0]]
+    config_wrapper = get_class(args.task, "Cfg")
+    task = config_wrapper(robots=robots)
 
     scenario = ScenarioCfg(
-        # task=args.task,
-        robots=[args.robot],
+        task=task,
+        robots=robots,
         num_envs=args.num_envs,
         sim=args.sim,
         headless=args.headless,
         cameras=[]
     )
-    config_wrapper = get_class(args.task, "Cfg")
-    scenario.task = config_wrapper(robots=scenario.robots)
-    scenario.__post_init__()
 
     use_wandb = args.use_wandb
     if use_wandb:

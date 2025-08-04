@@ -249,7 +249,7 @@ class BaseLeggedTaskCfg(BaseRLTaskCfg):
     class CommandRanges:
         """Command Ranges for random command sampling when training."""
 
-        lin_vel_x: list[float] = [-1.0, 2.0]
+        lin_vel_x: list[float] = [-1.0, 1.0]
         lin_vel_y: list[float] = [-1.0, 1.0]
         ang_vel_yaw: list[float] = [-1.0, 1.0]
         heading: list[float] = [-3.14, 3.14]
