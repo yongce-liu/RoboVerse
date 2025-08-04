@@ -11,7 +11,7 @@ from metasim.utils.humanoid_robot_util import (
 )
 from roboverse_learn.unitree_rl.envs.base_humanoid import Humanoid
 
-class WalkingTask(Humanoid):
+class HumanoidWalkingTask(Humanoid):
     """
     Wrapper for walking
 

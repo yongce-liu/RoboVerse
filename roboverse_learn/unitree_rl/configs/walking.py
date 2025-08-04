@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Callable
 
 from .base_humanoid import BaseHumanoidCfg, BaseHumanoidCfgPPO
+from .base_legged import LeggedRobotCfgPPO, BaseLeggedTaskCfg
 from .reward_funcs import (
     reward_action_rate,
     reward_action_smoothness,
@@ -41,8 +42,9 @@ from .reward_funcs import (
 from metasim.utils import configclass
 
 
+# region: Humanoid Walking Configuration
 @configclass
-class WalkingCfgPPO(BaseHumanoidCfgPPO):
+class HumanoidWalkingCfgPPO(BaseHumanoidCfgPPO):
     seed: int = 0
 
     @configclass
@@ -54,13 +56,12 @@ class WalkingCfgPPO(BaseHumanoidCfgPPO):
 
     runner: Runner = Runner()
 
-
 @configclass
-class WalkingCfg(BaseHumanoidCfg):
+class HumanoidWalkingCfg(BaseHumanoidCfg):
     """Configuration for the walking task."""
     task_name = "walking"
 
-    ppo_cfg = WalkingCfgPPO()
+    ppo_cfg = HumanoidWalkingCfgPPO()
 
     command_dim = 3
     frame_stack = 1
@@ -148,3 +149,13 @@ class WalkingCfg(BaseHumanoidCfg):
         self.num_observations: int = int(self.frame_stack * self.num_single_obs)
         self.single_num_privileged_obs: int = 4 * self.num_actions + 25
         self.num_privileged_obs = int(self.c_frame_stack * self.single_num_privileged_obs)
+# endregion: Humanoid Walking Configuration
+
+# region: Legged Robot Walking Configuration
+@configclass
+class LeggedWalkingCfgPPO(LeggedRobotCfgPPO):
+    pass
+
+@configclass
+class LeggedWalkingCfg(BaseLeggedTaskCfg):
+    pass

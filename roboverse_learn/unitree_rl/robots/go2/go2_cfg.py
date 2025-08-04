@@ -21,38 +21,38 @@ class Go2Cfg(BaseRobotCfg):
     collapse_fixed_joints: bool = True
 
     actuators: dict[str, BaseActuatorCfg] = {
-        'FL_hip': BaseActuatorCfg(stiffness=20., damping=0.5),
-        'RL_hip': BaseActuatorCfg(stiffness=20., damping=0.5),
-        'FR_hip': BaseActuatorCfg(stiffness=20., damping=0.5),
-        'RR_hip': BaseActuatorCfg(stiffness=20., damping=0.5),
+        'FL_hip_joint': BaseActuatorCfg(stiffness=20., damping=0.5),
+        'RL_hip_joint': BaseActuatorCfg(stiffness=20., damping=0.5),
+        'FR_hip_joint': BaseActuatorCfg(stiffness=20., damping=0.5),
+        'RR_hip_joint': BaseActuatorCfg(stiffness=20., damping=0.5),
 
-        'FL_thigh': BaseActuatorCfg(stiffness=20., damping=0.5),
-        'RL_thigh': BaseActuatorCfg(stiffness=20., damping=0.5),
-        'FR_thigh': BaseActuatorCfg(stiffness=20., damping=0.5),
-        'RR_thigh': BaseActuatorCfg(stiffness=20., damping=0.5),
+        'FL_thigh_joint': BaseActuatorCfg(stiffness=20., damping=0.5),
+        'RL_thigh_joint': BaseActuatorCfg(stiffness=20., damping=0.5),
+        'FR_thigh_joint': BaseActuatorCfg(stiffness=20., damping=0.5),
+        'RR_thigh_joint': BaseActuatorCfg(stiffness=20., damping=0.5),
 
-        'FL_calf': BaseActuatorCfg(stiffness=20., damping=0.5),
-        'RL_calf': BaseActuatorCfg(stiffness=20., damping=0.5),
-        'FR_calf': BaseActuatorCfg(stiffness=20., damping=0.5),
-        'RR_calf': BaseActuatorCfg(stiffness=20., damping=0.5),
+        'FL_calf_joint': BaseActuatorCfg(stiffness=20., damping=0.5),
+        'RL_calf_joint': BaseActuatorCfg(stiffness=20., damping=0.5),
+        'FR_calf_joint': BaseActuatorCfg(stiffness=20., damping=0.5),
+        'RR_calf_joint': BaseActuatorCfg(stiffness=20., damping=0.5),
     }
 
     joint_limits: dict[str, tuple[float, float]] = {
         # rad
-        'FL_hip': (-0.837758, 0.837758),
-        'RL_hip': (-0.837758, 0.837758),
-        'FR_hip': (-0.837758, 0.837758),
-        'RR_hip': (-0.837758, 0.837758),
+        'FL_hip_joint': (-0.837758, 0.837758),
+        'RL_hip_joint': (-0.837758, 0.837758),
+        'FR_hip_joint': (-0.837758, 0.837758),
+        'RR_hip_joint': (-0.837758, 0.837758),
 
-        'FL_thigh': (-3.49066, 1.5708),
-        'RL_thigh': (-4.53786, 0.523599),
-        'FR_thigh': (-3.49066, 1.5708),
-        'RR_thigh': (-4.53786, 0.523599),
+        'FL_thigh_joint': (-3.49066, 1.5708),
+        'RL_thigh_joint': (-4.53786, 0.523599),
+        'FR_thigh_joint': (-3.49066, 1.5708),
+        'RR_thigh_joint': (-4.53786, 0.523599),
 
-        'FL_calf': (-2.72271, -0.837758),
-        'RL_calf': (-2.72271, -0.837758),
-        'FR_calf': (-2.72271, -0.837758),
-        'RR_calf': (-2.72271, -0.837758),
+        'FL_calf_joint': (-2.72271, -0.837758),
+        'RL_calf_joint': (-2.72271, -0.837758),
+        'FR_calf_joint': (-2.72271, -0.837758),
+        'RR_calf_joint': (-2.72271, -0.837758),
     }
 
     # torque_limits: dict[str, float] = {
@@ -73,37 +73,37 @@ class Go2Cfg(BaseRobotCfg):
     # }
 
     default_joint_positions: dict[str, float] = {  # = target angles [rad] when action = 0.0
-        'FL_hip': 0.1,
-        'RL_hip': 0.1,
-        'FR_hip': -0.1,
-        'RR_hip': -0.1,
+        'FL_hip_joint': 0.1,
+        'RL_hip_joint': 0.1,
+        'FR_hip_joint': -0.1,
+        'RR_hip_joint': -0.1,
 
-        'FL_thigh': 0.8,
-        'RL_thigh': 1.0,
-        'FR_thigh': 0.8,
-        'RR_thigh': 1.0,
+        'FL_thigh_joint': 0.8,
+        'RL_thigh_joint': 1.0,
+        'FR_thigh_joint': 0.8,
+        'RR_thigh_joint': 1.0,
 
-        'FL_calf': -1.5,
-        'RL_calf': -1.5,
-        'FR_calf': -1.5,
-        'RR_calf': -1.5,
+        'FL_calf_joint': -1.5,
+        'RL_calf_joint': -1.5,
+        'FR_calf_joint': -1.5,
+        'RR_calf_joint': -1.5,
     }
 
     control_type: dict[str, Literal["position", "effort"]] = {
-        'FL_hip': "effort",
-        'RL_hip': "effort",
-        'FR_hip': "effort",
-        'RR_hip': "effort",
+        'FL_hip_joint': "effort",
+        'RL_hip_joint': "effort",
+        'FR_hip_joint': "effort",
+        'RR_hip_joint': "effort",
 
-        'FL_thigh': "effort",
-        'RL_thigh': "effort",
-        'FR_thigh': "effort",
-        'RR_thigh': "effort",
+        'FL_thigh_joint': "effort",
+        'RL_thigh_joint': "effort",
+        'FR_thigh_joint': "effort",
+        'RR_thigh_joint': "effort",
 
-        'FL_calf': "effort",
-        'RL_calf': "effort",
-        'FR_calf': "effort",
-        'RR_calf': "effort",
+        'FL_calf_joint': "effort",
+        'RL_calf_joint': "effort",
+        'FR_calf_joint': "effort",
+        'RR_calf_joint': "effort",
     }
 
     # rigid body name substrings, to find indices of different rigid bodies.
