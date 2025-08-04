@@ -49,7 +49,7 @@ def get_args(test=False):
         {
             "name": "--task",
             "type": str,
-            "default": "walking",
+            "default": "HumanoidWalking",
             "help": "Resume training or start testing from a checkpoint. Overrides config file if provided.",
         },
         {
@@ -97,18 +97,19 @@ def get_args(test=False):
         },
         {"name": "--headless", "action": "store_true", "default": True, "help": "Force display off at all times"},
         {"name": "--use_wandb", "action": "store_true", "default": True, "help": "Use wandb for logging"},
-        {"name": "--wandb", "type": str, "default": "h1_walking", "help": "Wandb project name"},
+        {"name": "--wandb", "type": str, "default": "g1_walking", "help": "Wandb project name"},
     ]
     args = parse_arguments(custom_parameters=custom_parameters)
     return args
 
-def get_log_dir(args: argparse.Namespace, scenario: ScenarioCfg) -> str:
+def get_log_dir(args: argparse.Namespace, scenario: ScenarioCfg, now: str) -> str:
     """Get the log directory."""
 
     robot_name = args.robot
     task_name = scenario.task.task_name
     task_name = f"{robot_name}_{task_name}"
-    now = datetime.datetime.now().strftime("%Y_%m%d_%H%M%S")
+    if now is not None:
+        now = datetime.datetime.now().strftime("%Y_%m%d_%H%M%S")
     log_dir = f"./outputs/unitree_rl/{task_name}/{now}/"
     if not os.path.exists(log_dir):
         os.makedirs(log_dir, exist_ok=True)

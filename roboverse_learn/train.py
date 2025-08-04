@@ -16,7 +16,7 @@ from metasim.cfg.scenario import ScenarioCfg
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--task", type=str, required=True)
-    parser.add_argument("--robot", type=str, default="franka")
+    parser.add_argument("--robot", type=str, default="g1")
     parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to simulate.")
     parser.add_argument(
         "--sim",

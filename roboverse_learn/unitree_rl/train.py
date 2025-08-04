@@ -19,6 +19,7 @@ import wandb
 from rsl_rl.runners.on_policy_runner import OnPolicyRunner
 
 from metasim.cfg.scenario import ScenarioCfg
+from metasim.utils.setup_util import get_robot
 from roboverse_learn.unitree_rl.utils import get_args, get_log_dir, get_class
 
 def make_robots(args):
@@ -27,8 +28,7 @@ def make_robots(args):
     robots = []
     for _name in robots_name:
         print(_name)
-        robot_wrapper = get_class(_name, "Cfg")
-        robot = robot_wrapper(name=_name)
+        robot = get_robot(_name)
         robots.append(robot)
     return robots
 
@@ -39,7 +39,6 @@ def train(args):
     robots = [make_robots(args)[0]]
     config_wrapper = get_class(args.task, "Cfg")
     task = config_wrapper(robots=robots)
-
     scenario = ScenarioCfg(
         task=task,
         robots=robots,
@@ -53,7 +52,11 @@ def train(args):
     if use_wandb:
         wandb.init(project=args.wandb, name=args.run_name)
 
-    log_dir = get_log_dir(args, scenario)
+    if args.load_run:
+        datetime = args.load_run.split("/")[-2]
+    else:
+        datetime = None
+    log_dir = get_log_dir(args, scenario, datetime)
     task_wrapper = get_class(args.task, "Task")
     env = task_wrapper(scenario)
 
@@ -70,8 +73,10 @@ def train(args):
         device=device,
         log_dir=log_dir,
         # wandb=use_wandb,
-        # args=args,
+        args=args,
     )
+    if args.load_run:
+        ppo_runner.load(args.load_run)
     ppo_runner.learn(num_learning_iterations=args.learning_iterations)
 
 
