@@ -69,8 +69,8 @@ def train(args):
         train_cfg=env.train_cfg,
         device=device,
         log_dir=log_dir,
-        wandb=use_wandb,
-        args=args,
+        # wandb=use_wandb,
+        # args=args,
     )
     ppo_runner.learn(num_learning_iterations=args.learning_iterations)
 

@@ -95,6 +95,7 @@ class Humanoid(RslRlWrapper):
             self.obs_history[i][env_ids] *= 0
         for i in range(self.critic_history.maxlen):
             self.critic_history[i][env_ids] *= 0
+        return None, None
 
     def step(self, actions: torch.Tensor):
         """ Apply actions, simulate, call self.post_physics_step()

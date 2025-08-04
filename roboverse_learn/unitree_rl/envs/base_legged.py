@@ -30,7 +30,7 @@ from metasim.utils.humanoid_robot_util import (
 from metasim.utils.math import quat_apply, quat_rotate_inverse
 
 
-class Humanoid(RslRlWrapper):
+class LeggedRobot(RslRlWrapper):
     """
     This env define the legged robot base env,
     which canbe put into the RslRlWrapper to be used in the RL training.
