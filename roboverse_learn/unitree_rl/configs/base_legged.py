@@ -36,6 +36,11 @@ class LeggedRobotCfgPPO:
         """Hidden dimensions for actor network."""
         critic_hidden_dims = [768, 256, 128]
         """Hidden dimensions for critic network."""
+        activation = 'elu' # can be elu, relu, selu, crelu, lrelu, tanh, sigmoid
+        # only for 'ActorCriticRecurrent':
+        # rnn_type = 'lstm'
+        # rnn_hidden_size = 512
+        # rnn_num_layers = 1
 
     @configclass
     class Algorithm:
@@ -47,7 +52,7 @@ class LeggedRobotCfgPPO:
         """Use clipped value loss."""
         clip_param = 0.2
         """Clipping parameter for PPO."""
-        entropy_coef = 0.001
+        entropy_coef = 0.01
         """Entropy coefficient."""
         num_learning_epochs = 5
         """Number of learning epochs."""
@@ -246,6 +251,18 @@ class BaseLeggedTaskCfg(BaseRLTaskCfg):
         clip_actions = 18.0
 
     @configclass
+    class Noise:
+        add_noise = True
+        noise_level = 1.0 # scales other values
+        class noise_scales:
+            dof_pos = 0.01
+            dof_vel = 1.5
+            lin_vel = 0.1
+            ang_vel = 0.2
+            gravity = 0.05
+            height_measurements = 0.1
+
+    @configclass
     class CommandRanges:
         """Command Ranges for random command sampling when training."""
 
@@ -272,6 +289,8 @@ class BaseLeggedTaskCfg(BaseRLTaskCfg):
     """Checker for resetting the environment."""
     normalization = Normalization()
     """Normalization config."""
+    noise = Noise()
+    """Noise config."""
     decimation: int = 10
     """Decimation pd control loop."""
     num_obs: int = 124

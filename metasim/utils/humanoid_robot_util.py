@@ -251,7 +251,7 @@ def last_dof_vel_tensor(envstate, robot_name: str):
     return envstate.robots[robot_name].extra["last_dof_vel"]
 
 
-def ref_dof_pos_tenosr(envstate, robot_name: str):
+def ref_dof_pos_tensor(envstate, robot_name: str):
     """Returns the dof pos."""
     return envstate.robots[robot_name].extra["ref_dof_pos"]
 

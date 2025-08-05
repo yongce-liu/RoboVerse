@@ -116,15 +116,18 @@ def get_log_dir(args: argparse.Namespace, scenario: ScenarioCfg, now: str) -> st
     log.info("Log directory: {}", log_dir)
     return log_dir
 
-def get_class(name: str, suffix=""):
-    """Get the environment wrapper class for the given task ID."""
+def get_class(name: str, suffix: str, library="roboverse_learn.unitree_rl"):
+    """Get the class wrappers.
+    Example:
+        get_class("ReachOrigin", "Cfg") -> ReachOriginCfg
+        get_class("reach_origin", "Cfg") -> ReachOriginCfg
+    """
     if is_camel_case(name):
         task_name_camel = name
-
     elif is_snake_case(name):
         task_name_camel = to_camel_case(name)
 
-    wrapper_module = importlib.import_module("roboverse_learn.unitree_rl")
+    wrapper_module = importlib.import_module(library)
     wrapper_cls = getattr(wrapper_module, f"{task_name_camel}{suffix}")
     return wrapper_cls
 

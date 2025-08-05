@@ -7,7 +7,7 @@ from metasim.utils.humanoid_robot_util import (
     contact_forces_tensor,
     dof_pos_tensor,
     dof_vel_tensor,
-    ref_dof_pos_tenosr,
+    ref_dof_pos_tensor,
 )
 from roboverse_learn.unitree_rl.envs.base_humanoid import Humanoid
 
@@ -92,7 +92,7 @@ class HumanoidWalkingTask(Humanoid):
             dof_pos_tensor(envstates, self.robot.name) - self.cfg.default_joint_pd_target
         ) * self.cfg.normalization.obs_scales.dof_pos
         dq = dof_vel_tensor(envstates, self.robot.name) * self.cfg.normalization.obs_scales.dof_vel
-        diff = dof_pos_tensor(envstates, self.robot.name) - ref_dof_pos_tenosr(envstates, self.robot.name)
+        diff = dof_pos_tensor(envstates, self.robot.name) - ref_dof_pos_tensor(envstates, self.robot.name)
 
         self.privileged_obs_buf = torch.cat(
             (

@@ -24,10 +24,10 @@ from roboverse_learn.unitree_rl.utils import get_args, get_log_dir, get_class
 
 def make_robots(args):
     robots_name = args.robot.replace(" ", "").replace("[", "").replace("]", "").replace("'", "").replace('"', '').split(",")
-    print(robots_name)
+    # print(robots_name)
     robots = []
     for _name in robots_name:
-        print(_name)
+        # print(_name)
         robot = get_robot(_name)
         robots.append(robot)
     return robots
@@ -37,7 +37,7 @@ def train(args):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     # only support single robot for now
     robots = [make_robots(args)[0]]
-    config_wrapper = get_class(args.task, "Cfg")
+    config_wrapper = get_class(args.task, suffix="Cfg")
     task = config_wrapper(robots=robots)
     scenario = ScenarioCfg(
         task=task,
@@ -57,7 +57,7 @@ def train(args):
     else:
         datetime = None
     log_dir = get_log_dir(args, scenario, datetime)
-    task_wrapper = get_class(args.task, "Task")
+    task_wrapper = get_class(args.task, suffix="Task")
     env = task_wrapper(scenario)
 
     # dump snapshot of training config
@@ -73,7 +73,7 @@ def train(args):
         device=device,
         log_dir=log_dir,
         # wandb=use_wandb,
-        args=args,
+        # args=args,
     )
     if args.load_run:
         ppo_runner.load(args.load_run)
