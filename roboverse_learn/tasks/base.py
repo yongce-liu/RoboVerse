@@ -10,6 +10,7 @@ from traitlets import Dict
 
 from metasim.cfg.scenario import ScenarioCfg
 from metasim.constants import SimType
+from metasim.queries.base import BaseQueryType
 from metasim.sim.base import BaseSimHandler
 from metasim.types import Action, Extra, Obs, Reward, Success, Termination, TimeOut
 from metasim.utils.setup_util import get_sim_handler_class
@@ -29,6 +30,7 @@ class BaseTaskWrapper:
     - _time_out
     - _observation_space
     - _action_space
+    - _extra_spec
 
     And use callbacks to modify the environment. The callbacks are:
     - pre_physics_step_callback: Called before the physics step
@@ -66,7 +68,7 @@ class BaseTaskWrapper:
         """
 
         handler_class = get_sim_handler_class(SimType(scenario.sim))
-        self.env: BaseSimHandler = handler_class(scenario)
+        self.env: BaseSimHandler = handler_class(scenario, self.extra_spec)
         self.env.launch()
 
     def _prepare_callbacks(self) -> None:
@@ -90,6 +92,12 @@ class BaseTaskWrapper:
         Get the action space of the environment.
         """
         return gym.spaces.Box(low=-np.inf, high=np.inf, shape=(0,))
+
+    def _extra_spec(self) -> dict[str, BaseQueryType]:
+        """
+        Get the extra spec of the environment.
+        """
+        return {}
 
     def _observation(self, env_states: Obs) -> Obs:
         """
@@ -234,3 +242,11 @@ class BaseTaskWrapper:
         Get the action space of the environment.
         """
         return self._action_space()
+
+    @property
+    def extra_spec(self) -> dict[str, BaseQueryType]:
+        """
+        Get the extra spec of the environment.
+        Extra specs are optional queries that are used in handler.get_extra() stage.
+        """
+        return self._extra_spec()
