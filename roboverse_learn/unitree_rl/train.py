@@ -19,18 +19,7 @@ import wandb
 from rsl_rl.runners.on_policy_runner import OnPolicyRunner
 
 from metasim.cfg.scenario import ScenarioCfg
-from metasim.utils.setup_util import get_robot
-from roboverse_learn.unitree_rl.utils import get_args, get_log_dir, get_class
-
-def make_robots(args):
-    robots_name = args.robot.replace(" ", "").replace("[", "").replace("]", "").replace("'", "").replace('"', '').split(",")
-    # print(robots_name)
-    robots = []
-    for _name in robots_name:
-        # print(_name)
-        robot = get_robot(_name)
-        robots.append(robot)
-    return robots
+from roboverse_learn.unitree_rl.utils import get_args, get_log_dir, get_class, make_robots
 
 
 def train(args):

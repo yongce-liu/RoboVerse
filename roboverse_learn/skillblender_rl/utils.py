@@ -119,13 +119,13 @@ def get_args(test=False):
         {
             "name": "--task",
             "type": str,
-            "default": "skillblender:Walking",
+            "default": "HumanoidWalking",
             "help": "Resume training or start testing from a checkpoint. Overrides config file if provided.",
         },
         {
             "name": "--robot",
             "type": str,
-            "default": "h1",
+            "default": "g1",
             "help": "Resume training or start testing from a checkpoint. Overrides config file if provided.",
         },
         {

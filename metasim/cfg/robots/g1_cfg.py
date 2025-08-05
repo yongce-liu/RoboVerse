@@ -13,7 +13,8 @@ class G1Cfg(BaseRobotCfg):
     name: str = "g1"
     num_joints: int = 21
     usd_path: str = MISSING
-    xml_path: str = MISSING
+    xml_path: str = "roboverse_data/robots/g1/xml/g1_29dof_lock_waist_rev_1_0_modified.xml"
+    mjcf_path: str = xml_path
     urdf_path: str = "roboverse_data/robots/g1/urdf/g1_29dof_lock_waist_rev_1_0_modified.urdf"
     enabled_gravity: bool = True
     fix_base_link: bool = False
