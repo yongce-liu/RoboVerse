@@ -2,7 +2,7 @@
 
 ## Training
 ``` python
-python3 roboverse_learn/unitree_rl/train.py --task "walking" --sim "isaacgym" --num_envs 2 --robot "h1_wrist"
+python3 roboverse_learn/unitree_rl/train.py --task "humanoid_walking" --sim "isaacgym" --num_envs 2 --robot "h1_wrist"
 ```
 
 ## Setup the rsl_rl_lib

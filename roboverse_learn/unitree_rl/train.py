@@ -61,7 +61,7 @@ def train(args):
     env = task_wrapper(scenario)
 
     # dump snapshot of training config
-    task_path = f"roboverse_learn/unitree_rl/configs/{scenario.task.task_name}.py"
+    task_path = f"roboverse_learn/unitree_rl/tasks/{scenario.task.task_name}.py"
     if not os.path.exists(task_path):
         log.error(f"Task path {task_path} does not exist, please check your task name in config carefully")
         return

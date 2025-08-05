@@ -1,7 +1,6 @@
 # ruff: noqa: F401
-# Task
-from .tasks.walking import HumanoidWalkingTask
+from .tasks.humanoid_walking import HumanoidWalkingCfg
+from .tasks.humanoid_walking import HumanoidWalkingTask
 
-# Configurations
-from .configs.walking import HumanoidWalkingCfg
-# from .configs.walking import LeggedWalkingCfg
+from .tasks.legged_walking import LeggedWalkingCfg
+from .tasks.legged_walking import LeggedWalkingTask

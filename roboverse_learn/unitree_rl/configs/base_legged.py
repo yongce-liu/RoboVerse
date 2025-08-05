@@ -339,3 +339,29 @@ class BaseLeggedTaskCfg(BaseRLTaskCfg):
     """Control config."""
     random: LeggedRobotDomainRandCfg = LeggedRobotDomainRandCfg()
     """Randomization config."""
+    init_states = [
+        {
+            "objects": {},
+            "robots": {
+            "go2": {
+                "pos": torch.tensor([0.0, 0.0, 0.5]),
+                "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
+                "dof_pos": {
+                            'FL_hip_joint': 0.1,
+                            'RL_hip_joint': 0.1,
+                            'FR_hip_joint': -0.1,
+                            'RR_hip_joint': -0.1,
+                            'FL_thigh_joint': 0.8,
+                            'RL_thigh_joint': 1.0,
+                            'FR_thigh_joint': 0.8,
+                            'RR_thigh_joint': 1.0,
+                            'FL_calf_joint': -1.5,
+                            'RL_calf_joint': -1.5,
+                            'FR_calf_joint': -1.5,
+                            'RR_calf_joint': -1.5,
+                },
+            },
+        }
+        }
+    ]
+    """Initial states for the environment. Only used for legged robots, e.g., go2-12dof, g1-12dof, h1-12dof."""

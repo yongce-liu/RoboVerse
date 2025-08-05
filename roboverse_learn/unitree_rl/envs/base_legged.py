@@ -130,25 +130,10 @@ class LeggedRobot(RslRlWrapper):
 
     def compute_observations(self, envstate: TensorState):
         """compute observations and priviledged observation"""
-        q = (
-            dof_pos_tensor(envstate, self.robot.name) - self.cfg.default_joint_pd_target
-        ) * self.cfg.normalization.obs_scales.dof_pos
-        dq = dof_vel_tensor(envstate, self.robot.name) * self.cfg.normalization.obs_scales.dof_vel
-
-        obs_buf = torch.cat((
-            self.commands[:, :3] * self.commands_scale,
-            self.base_lin_vel * self.cfg.normalization.obs_scales.lin_vel,
-            self.base_ang_vel  * self.cfg.normalization.obs_scales.ang_vel,
-            self.projected_gravity,
-            q,
-            dq,
-            self.actions
-            ),dim=-1)
-        self.obs_buf = obs_buf
-        # add perceptive inputs if not blind
-        # add noise if needed
-        if self.add_noise:
-            self.obs_buf += (2 * torch.rand_like(self.obs_buf) - 1) * self.noise_scale_vec
+        raise NotImplementedError(
+            "compute_observations should be implemented in the child class, "
+            "e.g. HumanoidWalkingTask, LeggedWalkingTask, etc."
+        )
 
     # region: For step function
     def _pre_physics_step(self, actions:torch.Tensor):
@@ -310,30 +295,6 @@ class LeggedRobot(RslRlWrapper):
         cycle_time = self.cfg.reward_cfg.cycle_time
         phase = self.episode_length_buf * self.dt / cycle_time
         return phase
-
-    def _get_noise_scale_vec(self, cfg):
-        """ Sets a vector used to scale the noise added to the observations.
-            [NOTE]: Must be adapted when changing the observations structure
-
-        Args:
-            cfg (Dict): Environment config file
-
-        Returns:
-            [torch.Tensor]: Vector of scales used to multiply a uniform distribution in [-1, 1]
-        """
-        noise_vec = torch.zeros_like(self.obs_buf[0])
-        self.add_noise = cfg.noise.add_noise
-        noise_scales = cfg.noise.noise_scales
-        noise_level = cfg.noise.noise_level
-        noise_vec[0:3] = 0. # commands
-        noise_vec[3:6] = noise_scales.lin_vel * noise_level * cfg.normalization.obs_scales.lin_vel
-        noise_vec[6:9] = noise_scales.ang_vel * noise_level * cfg.normalization.obs_scales.ang_vel
-        noise_vec[9:12] = noise_scales.gravity * noise_level
-        noise_vec[12:12+self.num_actions] = noise_scales.dof_pos * noise_level * cfg.normalization.obs_scales.dof_pos
-        noise_vec[12+self.num_actions:12+2*self.num_actions] = noise_scales.dof_vel * noise_level * cfg.normalization.obs_scales.dof_vel
-        noise_vec[12+2*self.num_actions:] = 0. # previous actions
-
-        return noise_vec
 
     @staticmethod
     def get_reward_fn(target: str, reward_functions: list[Callable]) -> Callable:
