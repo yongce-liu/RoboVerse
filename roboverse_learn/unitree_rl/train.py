@@ -67,14 +67,24 @@ def train(args):
         return
     shutil.copy2(task_path, log_dir)
 
-    ppo_runner = OnPolicyRunner(
-        env=env,
-        train_cfg=env.train_cfg,
-        device=device,
-        log_dir=log_dir,
-        # wandb=use_wandb,
-        # args=args,
-    )
+    try:
+        ppo_runner = OnPolicyRunner(
+            env=env,
+            train_cfg=env.train_cfg,
+            device=device,
+            log_dir=log_dir,
+            # wandb=use_wandb,
+            args=args,
+        )
+    except Exception as e:
+            ppo_runner = OnPolicyRunner(
+            env=env,
+            train_cfg=env.train_cfg,
+            device=device,
+            log_dir=log_dir,
+            # wandb=use_wandb,
+            # args=args,
+        )
     if args.load_run:
         ppo_runner.load(args.load_run)
     ppo_runner.learn(num_learning_iterations=args.learning_iterations)
