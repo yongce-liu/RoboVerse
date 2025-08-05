@@ -344,7 +344,7 @@ class BaseLeggedTaskCfg(BaseRLTaskCfg):
             "objects": {},
             "robots": {
             "go2": {
-                "pos": torch.tensor([0.0, 0.0, 0.5]),
+                "pos": torch.tensor([0.0, 0.0, 0.3]),
                 "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
                 "dof_pos": {
                             'FL_hip_joint': 0.1,

@@ -46,7 +46,6 @@ class LeggedRobot(RslRlWrapper):
 
         self._parse_cfg(scenario)
         self._parse_rigid_body_indices(scenario.robots[0])
-        self._parse_joint_indices(scenario.robots[0])
         self._parse_joint_cfg(scenario)
         self._prepare_reward_function(scenario.task)
         self._init_buffers()
@@ -97,6 +96,8 @@ class LeggedRobot(RslRlWrapper):
             self.obs_history[i][env_ids] *= 0
         for i in range(self.critic_history.maxlen):
             self.critic_history[i][env_ids] *= 0
+
+        return None, None
 
     def step(self, actions: torch.Tensor):
         """ Apply actions, simulate, call self.post_physics_step()
@@ -326,10 +327,6 @@ class LeggedRobot(RslRlWrapper):
         Parse rigid body indices from robot cfg.
         """
         feet_names = robot.feet_links
-        knee_names = robot.knee_links
-        elbow_names = robot.elbow_links
-        wrist_names = robot.wrist_links
-        torso_names = robot.torso_links
         termination_contact_names = robot.terminate_contacts_links
         penalised_contact_names = robot.penalized_contacts_links
 
@@ -337,50 +334,16 @@ class LeggedRobot(RslRlWrapper):
         self.feet_indices = get_body_reindexed_indices_from_substring(
             self.env.handler, robot.name, feet_names, device=self.device
         )
-        self.knee_indices = get_body_reindexed_indices_from_substring(
-            self.env.handler, robot.name, knee_names, device=self.device
-        )
-        self.elbow_indices = get_body_reindexed_indices_from_substring(
-            self.env.handler, robot.name, elbow_names, device=self.device
-        )
-        self.wrist_indices = get_body_reindexed_indices_from_substring(
-            self.env.handler, robot.name, wrist_names, device=self.device
-        )
-        self.torso_indices = get_body_reindexed_indices_from_substring(
-            self.env.handler, robot.name, torso_names, device=self.device
-        )
         self.termination_contact_indices = get_body_reindexed_indices_from_substring(
             self.env.handler, robot.name, termination_contact_names, device=self.device
         )
         self.penalised_contact_indices = get_body_reindexed_indices_from_substring(
             self.env.handler, robot.name, penalised_contact_names, device=self.device
         )
-
         # attach to cfg for reward computation.
         self.cfg.feet_indices = self.feet_indices
-        self.cfg.knee_indices = self.knee_indices
-        self.cfg.elbow_indices = self.elbow_indices
-        self.cfg.wrist_indices = self.wrist_indices
-        self.cfg.torso_indices = self.torso_indices
         self.cfg.termination_contact_indices = self.termination_contact_indices
         self.cfg.penalised_contact_indices = self.penalised_contact_indices
-
-    def _parse_joint_indices(self, robot):
-        """
-        Parse joint indices.
-        """
-        left_yaw_roll_names = robot.left_yaw_roll_joints
-        right_yaw_roll_names = robot.right_yaw_roll_joints
-        upper_body_names = robot.upper_body_joints
-        self.cfg.left_yaw_roll_joint_indices = get_joint_reindexed_indices_from_substring(
-            self.env.handler, robot.name, left_yaw_roll_names, device=self.device
-        )
-        self.cfg.right_yaw_roll_joint_indices = get_joint_reindexed_indices_from_substring(
-            self.env.handler, robot.name, right_yaw_roll_names, device=self.device
-        )
-        self.cfg.upper_body_joint_indices = get_joint_reindexed_indices_from_substring(
-            self.env.handler, robot.name, upper_body_names, device=self.device
-        )
 
     def _parse_joint_cfg(self, scenario):
         """
@@ -445,7 +408,6 @@ class LeggedRobot(RslRlWrapper):
             requires_grad=False,
         )
         self.extras = {}
-        self.noise_scale_vec = self._get_noise_scale_vec(self.cfg)
         self.commands_scale = torch.tensor(
             [
                 self.cfg.normalization.obs_scales.lin_vel,
@@ -572,40 +534,16 @@ class LeggedRobot(RslRlWrapper):
         Note that orders matters here, since some of the foot states are computed based on the previous foot states.
         """
         self._parse_feet_air_time(envstate)
-        self._parse_feet_clearance(envstate)
 
     def _parse_feet_air_time(self, envstate: TensorState):
         contact = contact_forces_tensor(envstate, self.robot.name)[:, self.feet_indices, 2] > 5.0
-        stance_mask = gait_phase_tensor(envstate, self.robot.name)
-        contact_filt = torch.logical_or(torch.logical_or(contact, stance_mask), self.last_contacts)
+        contact_filt = torch.logical_or(contact, self.last_contacts)
         self.last_contacts = contact
         first_contact = (self.feet_air_time > 0.0) * contact_filt
         self.feet_air_time += self.dt
         air_time = self.feet_air_time.clamp(0, 0.5) * first_contact
         self.feet_air_time *= ~contact_filt
         envstate.robots[self.robot.name].extra["feet_air_time"] = air_time
-
-    def _parse_feet_clearance(self, envstate: TensorState):
-        """Calculates reward based on the clearance of the swing leg from the ground during movement.
-        Encourages appropriate lift of the feet during the swing phase of the gait.
-
-
-        Directly calculates reward since no intermediate variables are reused for other reward.
-        """
-        contact = contact_forces_tensor(envstate, self.robot.name)[:, self.feet_indices, 2] > 5.0
-        feet_z = envstate.robots[self.robot.name].body_state[:, self.feet_indices, 2] - 0.05
-        delta_z = feet_z - self.last_feet_z
-        self.feet_height += delta_z
-        self.last_feet_z = feet_z
-
-        # Compute swing mask
-        swing_mask = 1 - self._get_gait_phase()
-
-        # feet height should be closed to target feet height at the peak
-        rew_pos = torch.abs(self.feet_height - self.cfg.reward_cfg.target_feet_height) < 0.01
-        rew_pos = torch.sum(rew_pos * swing_mask, dim=1)
-        self.feet_height *= ~contact
-        envstate.robots[self.robot.name].extra["feet_clearance"] = rew_pos
 
     def _parse_command(self, envstate: TensorState):
         """Adds the current velocity and heading command to state."""

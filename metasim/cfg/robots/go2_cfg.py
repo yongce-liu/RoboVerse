@@ -17,7 +17,7 @@ class Go2Cfg(BaseRobotCfg):
     enabled_gravity: bool = True
     fix_base_link: bool = False
     enabled_self_collisions: bool = False
-    isaacgym_flip_visual_attachments: bool = False
+    isaacgym_flip_visual_attachments: bool = True
     collapse_fixed_joints: bool = True
 
     actuators: dict[str, BaseActuatorCfg] = {
@@ -55,22 +55,22 @@ class Go2Cfg(BaseRobotCfg):
         'RR_calf_joint': (-2.72271, -0.837758),
     }
 
-    # torque_limits: dict[str, float] = {
-    #     'FL_hip': 88,
-    #     'RL_hip': 88,
-    #     'FR_hip': 88,
-    #     'RR_hip': 88,
+    torque_limits: dict[str, float] = {
+        'FL_hip_joint': 23.7,
+        'RL_hip_joint': 23.7,
+        'FR_hip_joint': 23.7,
+        'RR_hip_joint': 23.7,
 
-    #     'FL_thigh': 88,
-    #     'RL_thigh': 88,
-    #     'FR_thigh': 88,
-    #     'RR_thigh': 88,
+        'FL_thigh_joint': 23.7,
+        'RL_thigh_joint': 23.7,
+        'FR_thigh_joint': 23.7,
+        'RR_thigh_joint': 23.7,
 
-    #     'FL_calf': 88,
-    #     'RL_calf': 88,
-    #     'FR_calf': 88,
-    #     'RR_calf': 88,
-    # }
+        'FL_calf_joint': 35.55,
+        'RL_calf_joint': 35.55,
+        'FR_calf_joint': 35.55,
+        'RR_calf_joint': 35.55,
+    }
 
     default_joint_positions: dict[str, float] = {  # = target angles [rad] when action = 0.0
         'FL_hip_joint': 0.1,
@@ -108,15 +108,5 @@ class Go2Cfg(BaseRobotCfg):
 
     # rigid body name substrings, to find indices of different rigid bodies.
     feet_links: list[str] = ["foot"]
-    # knee_links: list[str] = ["knee"]
-    # elbow_links: list[str] = ["elbow"]
-    # wrist_links: list[str] = ["rubber_hand"]
-    # torso_links: list[str] = ["torso_link"]
-    # terminate_contacts_links = ["pelvis", "torso", "waist", "shoulder", "elbow", "wrist"]
-    # penalized_contacts_links: list[str] = ["hip", "knee"]
-
-    # # joint substrings, to find indices of joints.
-
-    # left_yaw_roll_joints = ["left_hip_yaw", "left_hip_roll"]
-    # right_yaw_roll_joints = ["right_hip_yaw", "right_hip_roll"]
-    # upper_body_joints = ["shoulder", "elbow", "torso"]
+    terminate_contacts_links = ["base"]
+    penalized_contacts_links: list[str] = ["thigh", "calf"]

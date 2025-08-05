@@ -106,7 +106,7 @@ class LeggedWalkingCfg(BaseLeggedTaskCfg):
 
     def __post_init__(self):
         super().__post_init__()
-        self.num_single_obs: int = 3 * self.num_actions + 6 + self.command_dim  #
+        self.num_single_obs: int = 9 + self.command_dim + 3 * self.num_actions   #
         self.num_observations: int = int(self.frame_stack * self.num_single_obs)
         self.single_num_privileged_obs: int = 4 * self.num_actions + 25
         self.num_privileged_obs = int(self.c_frame_stack * self.single_num_privileged_obs)
@@ -119,6 +119,10 @@ class LeggedWalkingTask(LeggedRobot):
     def __init__(self, scenario: ScenarioCfg):
         super().__init__(scenario)
 
+    def _init_buffers(self):
+        super()._init_buffers()
+        self.noise_scale_vec = self._get_noise_scale_vec(self.cfg)
+
     def compute_observations(self, envstate: TensorState):
         """compute observations and priviledged observation"""
         q = (
@@ -126,16 +130,15 @@ class LeggedWalkingTask(LeggedRobot):
         ) * self.cfg.normalization.obs_scales.dof_pos
         dq = dof_vel_tensor(envstate, self.robot.name) * self.cfg.normalization.obs_scales.dof_vel
 
-        obs_buf = torch.cat((
-            self.commands[:, :3] * self.commands_scale,
-            self.base_lin_vel * self.cfg.normalization.obs_scales.lin_vel,
-            self.base_ang_vel  * self.cfg.normalization.obs_scales.ang_vel,
-            self.projected_gravity,
-            q,
-            dq,
-            self.actions
-            ),dim=-1)
-        self.obs_buf = obs_buf
+        self.obs_buf = torch.cat((
+                        self.commands[:, :3] * self.commands_scale,
+                        self.base_lin_vel * self.cfg.normalization.obs_scales.lin_vel,
+                        self.base_ang_vel  * self.cfg.normalization.obs_scales.ang_vel,
+                        self.projected_gravity,
+                        q,
+                        dq,
+                        self.actions
+                        ),dim=-1)
         # add perceptive inputs if not blind
         # add noise if needed
         if self.add_noise:
