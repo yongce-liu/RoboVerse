@@ -26,10 +26,12 @@ class RslRlWrapper(VecEnv):
         super().__init__()
 
 
-        if SimType(scenario.sim) not in [SimType.ISAACGYM,SimType.ISAACLAB, SimType.GENESIS]:
-            raise NotImplementedError(
-                f"RslRlWrapper in Roboverse now only supports {SimType.ISAACGYM}, but got {scenario.sim}"
-            )
+        # if SimType(scenario.sim) not in [SimType.ISAACGYM,SimType.ISAACLAB, SimType.GENESIS]:
+        #     raise NotImplementedError(
+        #         f"RslRlWrapper in Roboverse now only supports {SimType.ISAACGYM}, but got {scenario.sim}"
+        #     )
+        if SimType(scenario.sim) in [SimType.MUJOCO]:
+            assert scenario.num_envs == 1, "RslRlWrapper only supports single env for MuJoCo, please set num_envs=1 in your scenario config!"
         self.device = torch.device("cuda" if torch.cuda.is_available else "cpu")
         log.info(f"using device {self.device}")
 

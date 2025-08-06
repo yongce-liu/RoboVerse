@@ -49,13 +49,22 @@ def play(args):
 
     obs = env.get_observations()
     # load policy
-    ppo_runner = OnPolicyRunner(
-        env=env,
-        train_cfg=env.train_cfg,
-        device=device,
-        log_dir=log_dir,
-        args=args,
-    )
+    try:
+        ppo_runner = OnPolicyRunner(
+            env=env,
+            train_cfg=env.train_cfg,
+            device=device,
+            log_dir=log_dir,
+            args=args,
+        )
+    except Exception as e:
+        ppo_runner = OnPolicyRunner(
+            env=env,
+            train_cfg=env.train_cfg,
+            device=device,
+            log_dir=log_dir,
+            # args=args,
+        )
     ppo_runner.load(load_path)
     policy = ppo_runner.get_inference_policy(device=env.device)
 
