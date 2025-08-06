@@ -9,7 +9,7 @@ from .base_robot_cfg import BaseActuatorCfg, BaseRobotCfg
 
 
 @configclass
-class G1Cfg(BaseRobotCfg):
+class G1Dex3Cfg(BaseRobotCfg):
     name: str = "g1"
     num_joints: int = 43
     usd_path: str = MISSING
