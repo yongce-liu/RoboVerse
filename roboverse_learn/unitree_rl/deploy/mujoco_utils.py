@@ -46,16 +46,22 @@ class IndependentMujocoController:
             cmd = np.array(config["cmd_init"], dtype=np.float32)
 
         self.episode_length_buf = torch.ones(1, dtype=torch.int32)
-        self.policy = torch.load(policy_path)
+        self.policy = torch.jit.load(policy_path)
         self.policy.to(self.device)
         self.physics = mujoco.MjModel.from_xml_path(xml_path)
         self.data = mujoco.MjData(self.physics)
+        mujoco.mj_resetDataKeyframe(self.physics, self.data, 0)
         joint_names = []
         for i in range(self.physics.nu):
             name = mujoco.mj_id2name(self.physics, mujoco.mjtObj.mjOBJ_ACTUATOR, i)
             joint_names.append(name)
         self.joint_names = joint_names
+        self.sorted_joint_names = self.joint_names.copy()
+        self.sorted_joint_names.sort()
         self.joint_name2idx = {name: idx for idx, name in enumerate(joint_names)}
+        self.joint_reindex_cache = [self.joint_names.index(jn) for jn in self.sorted_joint_names]
+        self.joint_reindex_cache_inverse = [self.sorted_joint_names.index(jn) for jn in self.joint_names]
+
 
         self.physics.opt.timestep = simulation_dt
         self._parse_cfg(scenario)
@@ -215,18 +221,19 @@ class IndependentMujocoController:
         cos_pos = torch.cos(2 * torch.pi * phase).unsqueeze(1)
         self.command_input = torch.cat((sin_pos, cos_pos, self.commands[:, :3] * self.commands_scale), dim=1)
         self.command_input_wo_clock = self.commands[:, :3] * self.commands_scale
-
-        q = (torch.from_numpy(self.data.qpos[7:]).to(self.device).unsqueeze(0) - self.cfg.default_joint_pd_target)# * self.cfg.normalization.obs_scales.dof_pos
+        reindex = self.joint_reindex_cache
+        inverse_index = self.joint_reindex_cache_inverse
+        q = (torch.from_numpy(self.data.qpos[7:]).to(self.device).unsqueeze(0)[:, reindex] - self.cfg.default_joint_pd_target)# * self.cfg.normalization.obs_scales.dof_pos
         dq = torch.from_numpy(self.data.qvel[6:]).to(self.device).unsqueeze(0)# * self.cfg.normalization.obs_scales.dof_vel
         ##TODO: add _update_odometry_tensors
         obs = torch.cat(
             (
-                self.command_input_wo_clock,  # 3
+                torch.zeros_like(self.command_input_wo_clock),  # 3
                 q,  # |A|
-                dq,  # |A|
-                self.actions,
-                self.base_ang_vel * self.cfg.normalization.obs_scales.ang_vel,  # 3
-                self.base_euler_xyz * self.cfg.normalization.obs_scales.quat,  # 3
+                torch.zeros_like(dq),  # |A|
+                torch.zeros_like(self.actions),
+                torch.zeros_like(self.base_ang_vel * self.cfg.normalization.obs_scales.ang_vel),  # 3
+                torch.zeros_like(self.base_euler_xyz * self.cfg.normalization.obs_scales.quat),  # 3
             ),
             dim=-1,
         ).to(torch.float32)
@@ -234,15 +241,18 @@ class IndependentMujocoController:
 
     def set_dof_targets(self, actions) -> None:
         self._actions_cache = actions
-
-
+        reverse_reindex = self.joint_reindex_cache_inverse
+        reindex = self.joint_reindex_cache
+        joint_targets = actions
         if self._manual_pd_on:
-            joint_targets = actions
 
             self._current_action = np.zeros(self._robot_num_dof)
             self._current_action = np.array(joint_targets)
-            efforts = self._compute_effort(actions)
-            self.data.ctrl = efforts
+            efforts = self._compute_effort(joint_targets)
+            for i, joint in enumerate(self.joint_names):
+                index = self.joint_name2idx[joint]
+                self.data.ctrl[index] = efforts[0, i]
+            # self.data.ctrl = efforts
             # for i in self._position_controlled_joints:
             #     joint_name = joint_names[i]
             #     if joint_name in joint_targets:
@@ -253,8 +263,7 @@ class IndependentMujocoController:
             # for joint_name, target_pos in joint_targets.items():
             #     actuator = self.physics.data.actuator(f"{self._mujoco_robot_name}{joint_name}")
             #     actuator.ctrl = target_pos
-            joint_targets = actions
-            self._current_action = np.array(joint_targets)
+            self._current_action = np.array(actions)
             self.data.ctrl = joint_targets
 
     def _compute_effort(self, actions):
@@ -270,7 +279,7 @@ class IndependentMujocoController:
             )
         else:
             effort = self._p_gains * (action_scaled - robot_dof_pos) - self._d_gains * robot_dof_vel
-
+        # effort *= 0.5
         effort = np.clip(effort, -self._torque_limits, self._torque_limits)
 
         return effort
@@ -278,7 +287,10 @@ class IndependentMujocoController:
     def step(self, counter):
         self.compute_observations()
         if counter % self.control_decimation == 0:
-            self.actions = self.policy(self.obs_buf).detach()
+            actions = self.policy(self.obs_buf).detach()
+            delay = torch.rand((self.num_envs, 1), device=self.device)
+            self.actions = (1 - delay) * actions + delay * self.actions
+            # self.actions = torch.zeros_like(self.actions)
             self.set_dof_targets(self.actions.cpu().detach().numpy())
         mujoco.mj_step(self.physics, self.data)
 
