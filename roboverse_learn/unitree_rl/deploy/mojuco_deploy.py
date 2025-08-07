@@ -58,7 +58,8 @@ if __name__ == "__main__":
     ]
 
     args = parse_arguments(custom_parameters=custom_parameters)
-    robot_names, robots = [make_robots(args)[0]]
+    _robots_name, _robots = make_robots(args)
+    robots_name, robots = [_robots_name[0]], [_robots[0]]
     config_wrapper = get_class(args.task, "Cfg")
     task = config_wrapper(robots=robots)
     scenario = ScenarioCfg(
