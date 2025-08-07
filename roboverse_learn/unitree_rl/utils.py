@@ -211,11 +211,11 @@ def get_load_root_dir(args: argparse.Namespace, scenario: ScenarioCfg) -> str:
     return load_root
 
 def make_robots(args):
-    robots_name = args.robot.replace(" ", "").replace("[", "").replace("]", "").replace("'", "").replace('"', '').split(",")
+    robot_names = args.robot.replace(" ", "").replace("[", "").replace("]", "").replace("'", "").replace('"', '').split(",")
     # print(robots_name)
     robots = []
-    for _name in robots_name:
+    for _name in robot_names:
         # print(_name)
         robot = get_robot(_name)
         robots.append(robot)
-    return robots
+    return robot_names, robots

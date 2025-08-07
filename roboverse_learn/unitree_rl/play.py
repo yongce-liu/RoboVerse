@@ -90,7 +90,6 @@ if __name__ == "__main__":
     EXPORT_POLICY = True
     args = get_args()
     args.task = "humanoid_walking"
-    args.sim = "mujoco"
     args.robot = "h1_wrist"
     args.load_run = "2025_0806_075858"
     args.checkpoint = 0
