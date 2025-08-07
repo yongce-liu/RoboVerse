@@ -22,13 +22,14 @@ from roboverse_learn.unitree_rl.utils import (
 
 
 def play(args):
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    robots = [make_robots(args)[0]]
+    # device = "cuda" if torch.cuda.is_available() else "cpu"
+    _robots_name, _robots = make_robots(args)
+    robots_name, robots = [_robots_name[0]], [_robots[0]]
     config_wrapper = get_class(args.task, "Cfg")
     task = config_wrapper(robots=robots)
     scenario = ScenarioCfg(
         task=task,
-        robots=[args.robot],
+        robots=robots,
         num_envs=args.num_envs,
         sim=args.sim,
         headless=args.headless,
@@ -53,7 +54,7 @@ def play(args):
         ppo_runner = OnPolicyRunner(
             env=env,
             train_cfg=env.train_cfg,
-            device=device,
+            device=env.device,
             log_dir=log_dir,
             args=args,
         )
@@ -61,7 +62,7 @@ def play(args):
         ppo_runner = OnPolicyRunner(
             env=env,
             train_cfg=env.train_cfg,
-            device=device,
+            device=env.device,
             log_dir=log_dir,
             # args=args,
         )
@@ -88,4 +89,9 @@ def play(args):
 if __name__ == "__main__":
     EXPORT_POLICY = True
     args = get_args()
+    args.task = "humanoid_walking"
+    args.sim = "mujoco"
+    args.robot = "h1_wrist"
+    args.load_run = "2025_0806_075858"
+    args.checkpoint = 0
     play(args)

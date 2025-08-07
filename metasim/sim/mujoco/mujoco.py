@@ -489,8 +489,9 @@ class MujocoHandler(BaseSimHandler):
 
         states_flat = [state["objects"] | state["robots"] for state in states]
         for obj_name, obj_state in states_flat[0].items():
-            self._set_root_state(obj_name, obj_state, zero_vel)
-            self._set_joint_state(obj_name, obj_state, zero_vel)
+            if obj_name in self.mj_objects:
+                self._set_root_state(obj_name, obj_state, zero_vel)
+                self._set_joint_state(obj_name, obj_state, zero_vel)
         self.physics.forward()
 
     def _disable_robotgravity(self):
@@ -536,13 +537,18 @@ class MujocoHandler(BaseSimHandler):
             actuator_id = self.physics.model.actuator(f"{self._mujoco_robot_name}{joint_name}").id
             self.physics.data.ctrl[actuator_id] = effort[i]
 
-    def set_dof_targets(self, obj_name: str, actions: list[Action]) -> None:
+    def set_dof_targets(self, obj_name: str, actions: list[Action] | torch.Tensor) -> None:
+        joint_names = self.get_joint_names(self.robot.name, sort=True)
+        if isinstance(actions, torch.Tensor):
+            tmp_arr = actions.detach().to(dtype=torch.float32, device="cpu").numpy()[0]
+            actions = [{obj_name: {"dof_pos_target": {_name:tmp_arr[i]} for i, _name in enumerate(joint_names)}}]
+
         self._actions_cache = actions
 
         # Extract velocity targets if present
         vel_targets = actions[0][obj_name].get("dof_vel_target", None)
         if vel_targets:
-            joint_names = self.get_joint_names(self.robot.name, sort=True)
+            # joint_names = self.get_joint_names(self.robot.name, sort=True)
             self._current_vel_target = np.zeros(self._robot_num_dof)
             for i, joint_name in enumerate(joint_names):
                 if joint_name in vel_targets:
@@ -552,7 +558,7 @@ class MujocoHandler(BaseSimHandler):
 
         if self._manual_pd_on:
             joint_targets = actions[0][obj_name]["dof_pos_target"]
-            joint_names = self.get_joint_names(self.robot.name, sort=True)
+            # joint_names = self.get_joint_names(self.robot.name, sort=True)
 
             self._current_action = np.zeros(self._robot_num_dof)
             for i, joint_name in enumerate(joint_names):

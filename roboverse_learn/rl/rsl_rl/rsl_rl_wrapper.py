@@ -30,10 +30,15 @@ class RslRlWrapper(VecEnv):
         #     raise NotImplementedError(
         #         f"RslRlWrapper in Roboverse now only supports {SimType.ISAACGYM}, but got {scenario.sim}"
         #     )
-        if SimType(scenario.sim) in [SimType.MUJOCO]:
-            assert scenario.num_envs == 1, "RslRlWrapper only supports single env for MuJoCo, please set num_envs=1 in your scenario config!"
-        self.device = torch.device("cuda" if torch.cuda.is_available else "cpu")
-        log.info(f"using device {self.device}")
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        if SimType(scenario.sim) in [SimType.ISAACGYM, SimType.ISAACLAB, SimType.GENESIS, SimType.MJX]:
+            log.info(f"RslRlWrapper uses {SimType(scenario.sim)} simulator.")
+        elif SimType(scenario.sim) in [SimType.MUJOCO]:
+            assert scenario.num_envs == 1, "MuJoCo only supports single environment in rsl_rl wrapper."
+            self.device = "cpu"
+            log.warning(f"Only for simulation, not for training, using {SimType(scenario.sim)} simulator.")
+        else:
+            raise NotImplementedError(f"RslRlWrapper in Roboverse now only supports {SimType.ISAACGYM}, but got {scenario.sim}")
 
         # TODO read camera config
         # self.env.cfg.sensor.camera
@@ -53,7 +58,7 @@ class RslRlWrapper(VecEnv):
         self.num_actions = scenario.task.num_actions
         self.num_privileged_obs = scenario.task.num_privileged_obs
         self.max_episode_length = scenario.task.max_episode_length
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        # self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.cfg = scenario.task
         from metasim.utils.dict import class_to_dict
         self.train_cfg = class_to_dict(scenario.task.ppo_cfg)
