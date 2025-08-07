@@ -415,6 +415,12 @@ class MujocoHandler(BaseSimHandler):
                 else None,
                 joint_effort_target=torch.from_numpy(self.physics.data.actuator_force[actuator_reindex]).unsqueeze(0),
             )
+            # FIXME a temporary solution for accessing net contact forces of robots, it will be moved to
+            self._contact_forces = self._get_contact_forces()
+            extra = {
+                "contact_forces": self._contact_forces.view(self.num_envs, -1, 3)[:, body_ids_reindex, :],
+            }
+            state.extra = extra
             robot_states[robot.name] = state
 
         camera_states = {}
@@ -671,7 +677,7 @@ class MujocoHandler(BaseSimHandler):
     def get_body_names(self, obj_name: str, sort: bool = True) -> list[str]:
         if isinstance(self.object_dict[obj_name], ArticulationObjCfg):
             names = [self.physics.model.body(i).name for i in range(self.physics.model.nbody)]
-            names = [name.split("/")[-1] for name in names if name.split("/")[0] == obj_name]
+            names = [name.split("/")[-1] for name in names if name.split("/")[0] == obj_name.split("_")[0]]
             names = [name for name in names if name != ""]
             if sort:
                 names.sort()
@@ -717,6 +723,28 @@ class MujocoHandler(BaseSimHandler):
             self._body_ids_reindex_cache[obj_name] = body_ids_reindex
         return self._body_ids_reindex_cache[obj_name]
 
+    def _get_contact_forces(self) -> torch.Tensor:
+        """
+        Compute net contact forces on each body.
+        Returns:
+            torch.Tensor: shape (n_body_h1, 3), contact forces for each h1 body in sorted order
+        """
+        nbody = self.physics.model.nbody
+        contact_forces = torch.zeros((nbody, 3))
+
+        for i in range(self.physics.data.ncon):
+            contact = self.physics.data.contact[i]
+            force = np.zeros(6, dtype=np.float64)
+            mujoco.mj_contactForce(self.physics.model.ptr, self.physics.data.ptr, i, force)
+            f_contact = force[:3]
+
+            body1 = self.physics.model.geom_bodyid[contact.geom1]
+            body2 = self.physics.model.geom_bodyid[contact.geom2]
+
+            contact_forces[body1] += f_contact
+            contact_forces[body2] -= f_contact
+
+        return contact_forces
     ############################################################
     ## Misc
     ############################################################
@@ -736,6 +764,9 @@ class MujocoHandler(BaseSimHandler):
     def device(self) -> torch.device:
         return torch.device("cpu")
 
+    @property
+    def robot_num_dof(self) -> int:
+        return self._robot_num_dof
 
 MujocoParallelHandler = ParallelSimWrapper(MujocoHandler)
 MujocoEnv: type[EnvWrapper[MujocoHandler]] = GymEnvWrapper(MujocoParallelHandler)

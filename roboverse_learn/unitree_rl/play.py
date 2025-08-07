@@ -93,4 +93,7 @@ if __name__ == "__main__":
     args.robot = "h1_wrist"
     args.load_run = "2025_0806_075858"
     args.checkpoint = 0
+    # args.sim = "mujoco"
+    if args.sim is None:
+        args.sim = "isaacgym"
     play(args)
