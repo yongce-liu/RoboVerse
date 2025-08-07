@@ -522,6 +522,11 @@ class IsaacgymHandler(BaseSimHandler):
             robot_handle = self.gym.create_actor(env, robot_asset, robot_pose, "robot", i, 2)
             assert self.robot.scale[0] == 1.0 and self.robot.scale[1] == 1.0 and self.robot.scale[2] == 1.0
             self._robot_handles.append(robot_handle)
+            ## set damping, friction and armature
+            for dof_idx in range(len(robot_dof_props["damping"])):
+                robot_dof_props["damping"][dof_idx] = 0.001
+                robot_dof_props["armature"][dof_idx] = 0.2
+                robot_dof_props["friction"][dof_idx] = 0.1
             # set dof properties
             self.gym.set_actor_dof_properties(env, robot_handle, robot_dof_props)
 
