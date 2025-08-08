@@ -219,3 +219,20 @@ def make_robots(args):
         robot = get_robot(_name)
         robots.append(robot)
     return robot_names, robots
+
+
+def find_unique_candidate(candidates: list[any], data_base: list[any]) -> int:
+    found_candidates = []
+    found_indices = []
+
+    for candidate in candidates:
+        if candidate in data_base:
+            found_candidates.append(candidate)
+            found_indices.append(data_base.index(candidate))
+
+    if len(found_candidates) == 0:
+        raise ValueError(f"None of the candidates {candidates} found in {data_base}")
+    elif len(found_candidates) > 1:
+        raise ValueError(f"Multiple candidates found: {found_candidates}. Only one naming convention should be used.")
+
+    return found_indices[0]

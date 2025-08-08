@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Callable
+from functools import partial
 import torch
 
 from metasim.cfg.scenario import ScenarioCfg
@@ -13,6 +14,7 @@ from metasim.utils.humanoid_robot_util import (
     ref_dof_pos_tensor,
 )
 
+from roboverse_learn.unitree_rl.utils import find_unique_candidate
 from roboverse_learn.unitree_rl.envs.base_humanoid import Humanoid
 from roboverse_learn.unitree_rl.envs.base_legged import LeggedRobot
 from roboverse_learn.unitree_rl.configs.base_humanoid import BaseHumanoidCfg, BaseHumanoidCfgPPO
@@ -175,34 +177,14 @@ class HumanoidWalkingTask(Humanoid):
     def _prepare_ref_indices(self):
         """get joint indices for reference pos computation."""
         joint_names = self.env.handler.get_joint_names(self.robot.name)
-        try:
-            self.left_hip_pitch_joint_idx = joint_names.index("left_hip_pitch")
-            self.left_knee_joint_idx = joint_names.index("left_knee")
-            self.right_hip_pitch_joint_idx = joint_names.index("right_hip_pitch")
-            self.right_knee_joint_idx = joint_names.index("right_knee")
-
-            if "h1" in self.robot.name:
-                self.left_ankle_joint_idx = joint_names.index("left_ankle")
-                self.right_ankle_joint_idx = joint_names.index("right_ankle")
-            elif "g1" in self.robot.name:
-                self.left_ankle_joint_idx = joint_names.index("left_ankle_pitch")
-                self.right_ankle_joint_idx = joint_names.index("right_ankle_pitch")
-            else:
-                raise ValueError(f"Unsupported robot: {self.robot.name} for walking task")
-        except:
-            self.left_hip_pitch_joint_idx = joint_names.index("left_hip_pitch_joint")
-            self.left_knee_joint_idx = joint_names.index("left_knee_joint")
-            self.right_hip_pitch_joint_idx = joint_names.index("right_hip_pitch_joint")
-            self.right_knee_joint_idx = joint_names.index("right_knee_joint")
-
-            if "h1" in self.robot.name:
-                self.left_ankle_joint_idx = joint_names.index("left_ankle_joint")
-                self.right_ankle_joint_idx = joint_names.index("right_ankle_joint")
-            elif "g1" in self.robot.name:
-                self.left_ankle_joint_idx = joint_names.index("left_ankle_pitch_joint")
-                self.right_ankle_joint_idx = joint_names.index("right_ankle_pitch_joint")
-            else:
-                raise ValueError(f"Unsupported robot: {self.robot.name} for walking task")
+        find_func = partial(find_unique_candidate, data_base=joint_names)
+        name_extend_func = lambda x: [x, f"{x}_joint"]
+        self.left_hip_pitch_joint_idx = find_func(candidates=name_extend_func("left_hip_pitch"))
+        self.left_knee_joint_idx = find_func(candidates=name_extend_func("left_knee"))
+        self.right_hip_pitch_joint_idx = find_func(candidates=name_extend_func("right_hip_pitch"))
+        self.right_knee_joint_idx = find_func(candidates=name_extend_func("right_knee"))
+        self.left_ankle_joint_idx = find_func(candidates=name_extend_func("left_ankle")+name_extend_func("left_ankle_pitch"))
+        self.right_ankle_joint_idx = find_func(candidates=name_extend_func("right_ankle")+name_extend_func("right_ankle_pitch"))
 
     def _compute_ref_state(self):
         """compute reference target position for walking task."""

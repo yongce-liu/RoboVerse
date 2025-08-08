@@ -51,33 +51,6 @@ class Humanoid(RslRlWrapper):
         self._prepare_reward_function(scenario.task)
         self._init_buffers()
 
-    def _get_init_states(self, scenario):
-        """ Get initial states from the scenario configuration."""
-
-        init_states_list = getattr(scenario.task, 'init_states', None)
-
-        # load the data from urdf file
-        for batch_item in init_states_list:
-            if self.robot.name in batch_item["robots"]:
-                batch_item["robots"][self.robot.name]['dof_pos'] = self.robot.default_joint_positions
-
-        if init_states_list is None:
-            raise AttributeError(f"'task cfg' has no attribute 'init_states', please add it in your scenario config!")
-
-        if len(init_states_list) < self.num_envs:
-            init_states_list = (
-                init_states_list * (self.num_envs // len(init_states_list))
-                + init_states_list[: self.num_envs % len(init_states_list)]
-            )
-        else:
-            init_states_list = init_states_list[: self.num_envs]
-
-        self.init_states = init_states_list
-
-        if scenario.sim == SimType.ISAACGYM:
-            #tensorize the initial states as TensorState, now we only support IsaacGym
-            self.init_states = list_state_to_tensor(self.env.handler, init_states_list, device=self.device)
-
     def reset(self, env_ids=None):
         """
         Reset state in the env and buffer in this wrapper

@@ -155,3 +155,10 @@ class G1Cfg(BaseRobotCfg):
     left_yaw_roll_joints = ["left_hip_yaw", "left_hip_roll"]
     right_yaw_roll_joints = ["right_hip_yaw", "right_hip_roll"]
     upper_body_joints = ["shoulder", "elbow", "torso"]
+
+    # From default joint damping in XML
+    dof_damping: float = 0.001
+    # From default joint friction in XML
+    dof_friction: float = 0.2
+    # From default joint armature in XML
+    dof_armature: float = 0.1
