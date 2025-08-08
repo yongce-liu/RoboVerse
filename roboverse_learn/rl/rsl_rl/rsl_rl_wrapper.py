@@ -25,11 +25,6 @@ class RslRlWrapper(VecEnv):
     def __init__(self, scenario: ScenarioCfg):
         super().__init__()
 
-
-        # if SimType(scenario.sim) not in [SimType.ISAACGYM,SimType.ISAACLAB, SimType.GENESIS]:
-        #     raise NotImplementedError(
-        #         f"RslRlWrapper in Roboverse now only supports {SimType.ISAACGYM}, but got {scenario.sim}"
-        #     )
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         if SimType(scenario.sim) in [SimType.ISAACGYM, SimType.ISAACLAB, SimType.GENESIS, SimType.MJX]:
             log.info(f"RslRlWrapper uses {SimType(scenario.sim)} simulator.")
@@ -53,23 +48,29 @@ class RslRlWrapper(VecEnv):
         # loading task-specific configuration
         self.scenario = scenario
         self.robot = scenario.robots[0]
+        self.robots = scenario.robots
         self.num_envs = scenario.num_envs
         self.num_obs = scenario.task.num_observations
         self.num_actions = scenario.task.num_actions
         self.num_privileged_obs = scenario.task.num_privileged_obs
-        self.max_episode_length = scenario.task.max_episode_length
+        # self.max_episode_length = scenario.task.max_episode_length
+        self.max_episode_length = scenario.task.episode_length
         # self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.cfg = scenario.task
         from metasim.utils.dict import class_to_dict
         self.train_cfg = class_to_dict(scenario.task.ppo_cfg)
-
+        self.object_names = sorted({obj.name for obj in scenario.objects})
+        self.robot_names = sorted({robot.name for robot in scenario.robots})
 
     def _get_init_states(self, scenario):
         """ Get initial states from the scenario configuration."""
-
         init_states_list = getattr(scenario.task, 'init_states', None)
         if init_states_list is None:
             raise AttributeError(f"'task cfg' has no attribute 'init_states', please add it in your scenario config!")
+        init_states_list = [{
+            "objects": {key: es["objects"][key] for key in es["objects"] if key in self.object_names},
+            "robots": {key: es["robots"][key] for key in es["robots"] if key in self.robot_names}}
+                            for es in init_states_list]
 
         if len(init_states_list) < self.num_envs:
             init_states_list = (
@@ -80,11 +81,9 @@ class RslRlWrapper(VecEnv):
             init_states_list = init_states_list[: self.num_envs]
 
         self.init_states = init_states_list
-
-        if scenario.sim == SimType.ISAACGYM:
-            #tensorize the initial states as TensorState, now we only support IsaacGym
-            self.init_states = list_state_to_tensor(self.env.handler, init_states_list, device=self.device)
-
+        # if SimType(scenario.sim) == SimType.ISAACGYM:
+        #     #tensorize the initial states as TensorState, now we only support IsaacGym
+        #     self.init_states = list_state_to_tensor(self.env.handler, init_states_list, device=self.device)
 
     def get_observations(self):
         """design from config"""

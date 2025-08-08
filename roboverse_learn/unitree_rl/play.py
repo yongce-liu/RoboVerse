@@ -29,6 +29,7 @@ def play(args):
     task = config_wrapper(robots=robots)
     scenario = ScenarioCfg(
         task=task,
+        decimation=task.decimation,
         robots=robots,
         num_envs=args.num_envs,
         sim=args.sim,

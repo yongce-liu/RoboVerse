@@ -55,7 +55,6 @@ from roboverse_learn.unitree_rl.configs.reward_funcs import (
 )
 
 
-
 @configclass
 class HumanoidWalkingCfgPPO(BaseHumanoidCfgPPO):
     seed: int = 0
@@ -76,10 +75,11 @@ class HumanoidWalkingCfg(BaseHumanoidCfg):
 
     ppo_cfg = HumanoidWalkingCfgPPO()
 
-    command_dim = 3
     frame_stack = 1
     c_frame_stack = 3
-    commands = BaseHumanoidCfg.CommandsConfig(num_commands=4, resampling_time=8.0)
+    commands = BaseHumanoidCfg.CommandsConfig(num_commands=4,
+                                              commands_dim=3,
+                                              resampling_time=8.0)
 
     reward_functions: list[Callable] = [
         reward_lin_vel_z,
@@ -158,9 +158,9 @@ class HumanoidWalkingCfg(BaseHumanoidCfg):
 
     def __post_init__(self):
         super().__post_init__()
-        self.num_single_obs: int = 3 * self.num_actions + 6 + self.command_dim  #
+        self.num_single_obs: int = self.commands.commands_dim + 9 + 3 * self.num_actions + 2
         self.num_observations: int = int(self.frame_stack * self.num_single_obs)
-        self.single_num_privileged_obs: int = 4 * self.num_actions + 25
+        self.single_num_privileged_obs: int = self.commands.commands_dim + 12 + 4 * self.num_actions + 14
         self.num_privileged_obs = int(self.c_frame_stack * self.single_num_privileged_obs)
 
 class HumanoidWalkingTask(Humanoid):
@@ -173,6 +173,10 @@ class HumanoidWalkingTask(Humanoid):
     def __init__(self, scenario: ScenarioCfg):
         super().__init__(scenario)
         self._prepare_ref_indices()
+
+    def _init_buffers(self):
+        super()._init_buffers()
+        self.noise_scale_vec = self._get_noise_scale_vec()
 
     def _prepare_ref_indices(self):
         """get joint indices for reference pos computation."""
@@ -221,19 +225,31 @@ class HumanoidWalkingTask(Humanoid):
         self._compute_ref_state()
         self._parse_ref_pos(envstate)
 
+    def _get_noise_scale_vec(self) -> torch.Tensor:
+        noise_vec = torch.zeros_like(self.obs_buf[0])
+        self.add_noise = self.cfg.noise.add_noise
+        noise_scales = self.cfg.noise.noise_scales
+        noise_level = self.cfg.noise.noise_level
+        noise_vec[0:3] = 0. # commands
+        noise_vec[3:6] = noise_scales.ang_vel * noise_level * self.cfg.normalization.obs_scales.ang_vel
+        noise_vec[6:9] = noise_scales.gravity * noise_level
+        noise_vec[9:9+self.num_actions] = noise_scales.dof_pos * noise_level * self.cfg.normalization.obs_scales.dof_pos
+        noise_vec[9+self.num_actions:9+2*self.num_actions] = noise_scales.dof_vel * noise_level * self.cfg.normalization.obs_scales.dof_vel
+        noise_vec[9+2*self.num_actions:9+3*self.num_actions] = 0. # previous actions
+        noise_vec[9+3*self.num_actions:9+3*self.num_actions+2] = 0. # sin/cos phase
+
+        return noise_vec
+
     def compute_observations(self, envstates):
         """compute observation and privileged observation."""
 
         phase = self._get_phase()
 
-        sin_pos = torch.sin(2 * torch.pi * phase).unsqueeze(1)
-        cos_pos = torch.cos(2 * torch.pi * phase).unsqueeze(1)
+        sin_phase = torch.sin(2 * torch.pi * phase).unsqueeze(1)
+        cos_phase = torch.cos(2 * torch.pi * phase).unsqueeze(1)
 
         stance_mask = self._get_gait_phase()
         contact_mask = contact_forces_tensor(envstates, self.robot.name)[:, self.feet_indices, 2] > 5
-
-        self.command_input = torch.cat((sin_pos, cos_pos, self.commands[:, :3] * self.commands_scale), dim=1)
-        self.command_input_wo_clock = self.commands[:, :3] * self.commands_scale
 
         q = (
             dof_pos_tensor(envstates, self.robot.name) - self.cfg.default_joint_pd_target
@@ -243,32 +259,38 @@ class HumanoidWalkingTask(Humanoid):
 
         self.privileged_obs_buf = torch.cat(
             (
-                self.command_input,  # 2 + 3
+                self.commands[:, :3] * self.commands_scale,  # 3
+                self.base_lin_vel * self.cfg.normalization.obs_scales.lin_vel,  # 3
+                self.base_ang_vel * self.cfg.normalization.obs_scales.ang_vel,  # 3
+                self.base_euler_xyz * self.cfg.normalization.obs_scales.quat,  # 3
+                self.projected_gravity,  # 3
                 q,  # |A|
                 dq,  # |A|
                 self.actions,  # |A|
                 diff,  # |A|
-                self.base_lin_vel * self.cfg.normalization.obs_scales.lin_vel,  # 3
-                self.base_ang_vel * self.cfg.normalization.obs_scales.ang_vel,  # 3
-                self.base_euler_xyz * self.cfg.normalization.obs_scales.quat,  # 3
-                self.rand_push_force[:, :2],  # 3
+                self.rand_push_force[:, :3],  # 3
                 self.rand_push_torque,  # 3
                 self.env_frictions,  # 1
                 self.body_mass / 30.0,  # 1
                 stance_mask,  # 2
                 contact_mask,  # 2
+                sin_phase, # 1
+                cos_phase, # 1
             ),
             dim=-1,
         )
 
         obs_buf = torch.cat(
             (
-                self.command_input_wo_clock,  # 3
+                self.commands[:, :3] * self.commands_scale,  # 3
+                self.base_ang_vel * self.cfg.normalization.obs_scales.ang_vel,  # 3
+                self.base_euler_xyz * self.cfg.normalization.obs_scales.quat,  # 3
+                self.projected_gravity, # 3
                 q,  # |A|
                 dq,  # |A|
                 self.actions,
-                self.base_ang_vel * self.cfg.normalization.obs_scales.ang_vel,  # 3
-                self.base_euler_xyz * self.cfg.normalization.obs_scales.quat,  # 3
+                sin_phase,
+                cos_phase,
             ),
             dim=-1,
         )
@@ -280,6 +302,6 @@ class HumanoidWalkingTask(Humanoid):
         self.obs_buf = obs_buf_all.reshape(self.num_envs, -1)
         self.privileged_obs_buf = torch.cat([self.critic_history[i] for i in range(self.cfg.c_frame_stack)], dim=1)
 
-        self.privileged_obs_buf = torch.clip(
-            self.privileged_obs_buf, -self.cfg.normalization.clip_observations, self.cfg.normalization.clip_observations
-        )
+        # add noise if needed
+        if self.add_noise:
+            self.obs_buf += (2 * torch.rand_like(self.obs_buf) - 1) * self.noise_scale_vec

@@ -13,10 +13,10 @@ from metasim.cfg.control import ControlCfg
 from metasim.cfg.randomization import FrictionRandomCfg, MassRandomCfg, RandomizationCfg
 from metasim.cfg.robots.base_robot_cfg import BaseRobotCfg
 from metasim.cfg.simulator_params import SimParamCfg
-from metasim.cfg.tasks.base_task_cfg import BaseRLTaskCfg
+from metasim.cfg.tasks.base_task_cfg import BaseTaskCfg
 from metasim.sim import BaseSimHandler
 from metasim.utils import configclass
-from metasim.utils.humanoid_robot_util import contact_forces_tensor
+from metasim.utils.humanoid_robot_util import contact_forces_tensor, robot_rotation_tensor, get_euler_xyz_tensor
 
 
 @configclass
@@ -161,7 +161,7 @@ class LeggedRobotDomainRandCfg(RandomizationCfg):
 
 
 @configclass
-class BaseLeggedTaskCfg(BaseRLTaskCfg):
+class BaseLeggedTaskCfg(BaseTaskCfg):
     """Base class for legged-gym style humanoid tasks.
 
     Attributes:
@@ -197,8 +197,6 @@ class BaseLeggedTaskCfg(BaseRLTaskCfg):
         soft_torque_limit: float = 0.001
         """soft torque limit"""
 
-    reward_cfg: RewardCfg = RewardCfg()
-
     @configclass
     class CommandsConfig:
         """Configuration for command generation.
@@ -211,6 +209,12 @@ class BaseLeggedTaskCfg(BaseRLTaskCfg):
             heading_command: whether to compute ang vel command from heading error.
             ranges: upperbound and lowerbound of sampling ranges.
         """
+        class Ranges:
+            """Command Ranges for random command sampling when training."""
+            lin_vel_x: list[float] = [-1.0, 1.0]
+            lin_vel_y: list[float] = [-1.0, 1.0]
+            ang_vel_yaw: list[float] = [-1.0, 1.0]
+            heading: list[float] = [-3.14, 3.14]
 
         curriculum: bool = False
         """whether to start curriculum training"""
@@ -218,10 +222,14 @@ class BaseLeggedTaskCfg(BaseRLTaskCfg):
         """maximum value of curriculum"""
         num_commands: int = 4
         """number of commands. linear x, linear y, angular velocity, heading"""
+        commands_dim: int = 3
+        "the used commands dimension, e.g., 3 for linear x, linear y, angular velocity"
         resampling_time: float = 10.0
         """time before command are changed[s]."""
         heading_command: bool = True
         """whether to compute ang vel command from heading error."""
+        ranges: Ranges = Ranges()
+        """upperbound and lowerbound of commands."""
 
     @configclass
     class BaseLeggedRobotChecker(BaseChecker):
@@ -233,22 +241,24 @@ class BaseLeggedTaskCfg(BaseRLTaskCfg):
             reset_buf = torch.any(
                 torch.norm(contact_forces[:, handler.task.termination_contact_indices, :], dim=-1) > 1.0, dim=1
             )
+            rpy = get_euler_xyz_tensor(robot_rotation_tensor(states, handler.robot.name))
+            reset_buf |= torch.logical_or(torch.abs(rpy[:,1])>1.0, torch.abs(rpy[:,0])>0.8)
             return reset_buf
 
     @configclass
     class Normalization:
         """Normalization constants for observations and actions."""
-
-        class obs_scales:
+        class ObsScales:
             lin_vel = 2.0
-            ang_vel = 1.0
+            ang_vel = 0.25
             dof_pos = 1.0
             dof_vel = 0.05
-            quat = 1.0
             height_measurements = 5.0
+            quat = 1.0
 
-        clip_observations = 18.0
-        clip_actions = 18.0
+        clip_observations = 100.0
+        clip_actions = 100.0
+        obs_scales = ObsScales()
 
     @configclass
     class Noise:
@@ -262,25 +272,14 @@ class BaseLeggedTaskCfg(BaseRLTaskCfg):
             gravity = 0.05
             height_measurements = 0.1
 
-    @configclass
-    class CommandRanges:
-        """Command Ranges for random command sampling when training."""
-
-        lin_vel_x: list[float] = [-1.0, 1.0]
-        lin_vel_y: list[float] = [-1.0, 1.0]
-        ang_vel_yaw: list[float] = [-1.0, 1.0]
-        heading: list[float] = [-3.14, 3.14]
-
+    reward_cfg: RewardCfg = RewardCfg()
     reward_functions: list[Callable] = MISSING
     reward_weights: dict[str, float] = MISSING
 
     robots: list[BaseRobotCfg] | None = None
     """List of robots in the environment."""
-    command_ranges: CommandRanges = CommandRanges()
-    """Command Ranges for random command sampling when training."""
     commands = CommandsConfig()
-    """Configuration for command generation."""
-
+    """Configuration for command generation with command ranges."""
     use_vision: bool = False
     """Whether to use vision observations."""
     ppo_cfg: LeggedRobotCfgPPO = LeggedRobotCfgPPO()
@@ -291,13 +290,11 @@ class BaseLeggedTaskCfg(BaseRLTaskCfg):
     """Normalization config."""
     noise = Noise()
     """Noise config."""
-    decimation: int = 10
-    """Decimation pd control loop."""
-    num_obs: int = 124
+    num_observations: int = None
     """Number of observations."""
     num_privileged_obs: int = None
     """Number of privileged observations. If not None a priviledge_obs_buf will be returned by step() (critic obs for assymetric training). None is returned """
-    num_actions: int = 12
+    num_actions: int = None
     """Number of actions."""
     env_spacing: float = 1.0
     """Environment spacing."""
@@ -312,18 +309,22 @@ class BaseLeggedTaskCfg(BaseRLTaskCfg):
     termination_contact_indices: torch.Tensor = MISSING
     """termination contact indices for reward computation"""
     sim_params = SimParamCfg(
-        dt=0.001,
-        contact_offset=0.01,
+        dt=0.005,
+        substeps=1,
+        num_threads=10,
+        solver_type=1,
         num_position_iterations=4,
         num_velocity_iterations=0,
+        contact_offset=0.01,
+        rest_offset = 0.0,
         bounce_threshold_velocity=0.5,
+        max_depenetration_velocity=1.0,
         replace_cylinder_with_capsule=True,
         friction_offset_threshold=0.04,
-        num_threads=10,
     )
     """Simulation parameters with physics engine settings."""
-    dt = decimation * sim_params.dt
-    """simulation time step in s"""
+    decimation : int = 4
+    """decimation factor for the control loop, e.g., 4 means every 4th step is a control step"""
     objects = []
     """objects in the environment"""
     traj_filepath = None
@@ -331,10 +332,10 @@ class BaseLeggedTaskCfg(BaseRLTaskCfg):
     # TODO read form max_episode_length_s and divide s
     max_episode_length_s: int = 24
     """maximum episode length in seconds"""
-    episode_length: int = 2400
-    """episode length in steps"""
-    max_episode_length: int = 2400
-    """episode length in steps"""
+    # episode_length: int = 2400
+    # """episode length in steps"""
+    # max_episode_length: int = 2400
+    # """episode length in steps"""
     control: ControlCfg = ControlCfg(action_scale=0.5, action_offset=True, torque_limit_scale=0.85)
     """Control config."""
     random: LeggedRobotDomainRandCfg = LeggedRobotDomainRandCfg()
@@ -365,3 +366,11 @@ class BaseLeggedTaskCfg(BaseRLTaskCfg):
         }
     ]
     """Initial states for the environment. Only used for legged robots, e.g., go2-12dof, g1-12dof, h1-12dof."""
+    def __post_init__(self):
+        super().__post_init__()
+        """simulation time step in s"""
+        self.dt = self.decimation * self.sim_params.dt
+        from math import ceil
+        # self.max_episode_length = ceil(self.max_episode_length_s / self.dt)
+        self.episode_length = ceil(self.max_episode_length_s / self.dt)
+        """maximum episode length in steps"""

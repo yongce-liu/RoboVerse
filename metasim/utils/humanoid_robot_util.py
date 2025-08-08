@@ -112,7 +112,7 @@ def robot_velocity(envstate, robot_name: str):
 
 
 def robot_root_state_tensor(envstate, robot_name: str):
-    """Returns the velocity of the robot."""
+    """Returns the root state of the robot."""
     return envstate.robots[robot_name].root_state
 
 

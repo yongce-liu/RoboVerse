@@ -164,14 +164,10 @@ def get_joint_reindexed_indices_from_substring(
     index = torch.tensor(matches, dtype=torch.int32, device=device)
     return index
 
+@torch.jit.script
 def torch_rand_float(lower: float, upper: float, shape: tuple[int, int], device: str) -> torch.Tensor:
     """Generate a tensor of random floats in the range [lower, upper]."""
     return (upper - lower) * torch.rand(*shape, device=device) + lower
-
-def wrap_to_pi(angles: torch.Tensor) -> torch.Tensor:
-    angles %= 2 * torch.pi
-    angles -= 2 * torch.pi * (angles > torch.pi)
-    return angles
 
 def export_policy_as_jit(actor_critic, path, filename=None):
     """Export the policy as a JIT model."""
@@ -219,7 +215,6 @@ def make_robots(args):
         robot = get_robot(_name)
         robots.append(robot)
     return robot_names, robots
-
 
 def find_unique_candidate(candidates: list[any], data_base: list[any]) -> int:
     found_candidates = []
