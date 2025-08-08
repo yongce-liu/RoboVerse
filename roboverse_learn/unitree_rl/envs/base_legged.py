@@ -6,11 +6,7 @@ from collections import deque
 from copy import deepcopy
 
 from roboverse_learn.rl.rsl_rl.rsl_rl_wrapper import RslRlWrapper
-from roboverse_learn.unitree_rl.utils import(
-    torch_rand_float,
-    get_body_reindexed_indices_from_substring,
-    get_joint_reindexed_indices_from_substring
-)
+from roboverse_learn.unitree_rl.utils import torch_rand_float, get_body_reindexed_indices_from_substring
 from roboverse_learn.unitree_rl.configs.base_legged import BaseLeggedTaskCfg
 
 import metasim.types as mstypes
@@ -18,17 +14,15 @@ from metasim.utils.state import TensorState
 from metasim.cfg.scenario import ScenarioCfg
 from metasim.utils.humanoid_robot_util import (
     contact_forces_tensor,
-    dof_pos_tensor,
     dof_vel_tensor,
-    ref_dof_pos_tensor,
     gait_phase_tensor,
     get_euler_xyz_tensor,
     robot_ang_velocity_tensor,
-    robot_root_state_tensor,
     robot_rotation_tensor,
     robot_velocity_tensor,
+    robot_position_tensor,
 )
-from metasim.utils.math import quat_apply, quat_rotate_inverse
+from metasim.utils.math import quat_apply, quat_rotate_inverse, wrap_to_pi
 
 
 class LeggedRobot(RslRlWrapper):
@@ -38,11 +32,10 @@ class LeggedRobot(RslRlWrapper):
     Note that Training only for Gym, Lab, Genesis
     Mujoco can be used fvaluation/render only.
     """
+    cfg: BaseLeggedTaskCfg
+
     def __init__(self, scenario: ScenarioCfg):
         super().__init__(scenario)
-        self.use_vision = scenario.task.use_vision
-        self.up_axis_idx = 2
-
         self._parse_cfg(scenario)
         self._parse_rigid_body_indices(scenario.robots[0])
         self._parse_joint_cfg(scenario)
@@ -72,11 +65,7 @@ class LeggedRobot(RslRlWrapper):
         self.last_dof_vel[env_ids] = 0.0
         self.episode_length_buf[env_ids] = 0
         self.feet_air_time[env_ids] = 0.0
-        self.base_quat[env_ids] = (
-            torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device, dtype=torch.float32)
-            .unsqueeze(0)
-            .repeat(len(env_ids), 1)
-        )
+        self.base_quat[env_ids] = torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device, dtype=torch.float32).unsqueeze(0).repeat(len(env_ids), 1)
         self.base_euler_xyz = get_euler_xyz_tensor(self.base_quat)
         self.projected_gravity[env_ids] = quat_rotate_inverse(self.base_quat[env_ids], self.gravity_vec[env_ids])
 
@@ -95,7 +84,6 @@ class LeggedRobot(RslRlWrapper):
             self.obs_history[i][env_ids] *= 0
         for i in range(self.critic_history.maxlen):
             self.critic_history[i][env_ids] *= 0
-
         return None, None
 
     def step(self, actions: torch.Tensor):
@@ -104,8 +92,8 @@ class LeggedRobot(RslRlWrapper):
         Args:
             actions (torch.Tensor): Tensor of shape (num_envs, num_actions_per_env)
         """
-        actions: torch.Tensor|list[mstypes.Action] = self._pre_physics_step(actions)
-        env_states = self._physics_step(actions)
+        self.actions: torch.Tensor | list[mstypes.Action] = self._pre_physics_step(actions)
+        env_states = self._physics_step(self.actions)
         obs, privileged_obs, reward = self._post_physics_step(env_states)
         ## clip observations
         return obs, privileged_obs, reward, self.reset_buf, self.extras
@@ -128,6 +116,7 @@ class LeggedRobot(RslRlWrapper):
         if self.cfg.reward_cfg.only_positive_rewards:
             self.rew_buf[:] = torch.clip(self.rew_buf[:], min=0.0)
 
+    """The necessary functions for the child class to implement"""
     def compute_observations(self, envstate: TensorState):
         """compute observations and priviledged observation"""
         raise NotImplementedError(
@@ -148,7 +137,7 @@ class LeggedRobot(RslRlWrapper):
         # should return actions_list, [List, Action:[str, RobotAction:[...]]]
         return actions
 
-    def _physics_step(self, actions: torch.Tensor|list[mstypes.Action]):
+    def _physics_step(self, actions: torch.Tensor | list[mstypes.Action]):
         """
         Task physics step
         """
@@ -191,21 +180,17 @@ class LeggedRobot(RslRlWrapper):
         """Callback called before computing terminations, rewards, and observations
         Default behaviour: Compute ang vel command based on target and heading, compute measured terrain heights and randomly push robots
         """
-        env_ids = (
-            (self.episode_length_buf % int(self.cfg.commands.resampling_time / self.dt) == 0)
-            .nonzero(as_tuple=False)
-            .flatten()
-        )
+        env_ids = (self.episode_length_buf % int(self.cfg.commands.resampling_time / self.dt) == 0).nonzero(as_tuple=False).flatten()
         if len(env_ids) > 0:
             self._resample_commands(env_ids)
 
         if self.cfg.commands.heading_command:
-            forward = quat_apply(self.base_quat, self.forward_vec)
+            forward = quat_apply(self.base_quat, self.forward_vec) # quat:[w, x, y, z], forward:[x, y, z]
             heading = torch.atan2(forward[:, 1], forward[:, 0])
             self.commands[:, 2] = torch.clip(0.5 * wrap_to_pi(self.commands[:, 3] - heading), -1.0, 1.0)
     # endregion
 
-    #region: Randomizations
+    # region: Randomizations
     def _push_robots(self):
         """Randomly set robot's root velocity to simulate a push."""
         max_vel = self.cfg.random.push.max_push_vel_xy
@@ -222,13 +207,14 @@ class LeggedRobot(RslRlWrapper):
     # region: Utilities
     def _update_odometry_tensors(self, env_states):
         """Update tensors from are refreshed tensors after physics step."""
+        self.base_pos[:] = robot_position_tensor(env_states, self.robot.name)
         self.base_quat[:] = robot_rotation_tensor(env_states, self.robot.name)
+        self.base_euler_xyz = get_euler_xyz_tensor(self.base_quat)
         self.base_lin_vel[:] = quat_rotate_inverse(self.base_quat, robot_velocity_tensor(env_states, self.robot.name))
         self.base_ang_vel[:] = quat_rotate_inverse(
             self.base_quat, robot_ang_velocity_tensor(env_states, self.robot.name)
         )
         self.projected_gravity[:] = quat_rotate_inverse(self.base_quat, self.gravity_vec)
-        self.base_euler_xyz = get_euler_xyz_tensor(self.base_quat)
 
     def _update_history(self, envstate):
         """update history buffer at the the of the frame, called after reset"""
@@ -237,7 +223,8 @@ class LeggedRobot(RslRlWrapper):
         self.last_last_actions[:] = torch.clone(self.last_actions[:])
         self.last_actions[:] = self.actions[:]
         self.last_dof_vel[:] = dof_vel_tensor(envstate, self.robot.name)[:]
-        self.last_root_vel[:] = robot_root_state_tensor(envstate, self.robot.name)[:, 7:13]
+        self.last_root_vel[:] = torch.cat((self.base_lin_vel, self.base_ang_vel), dim=1)
+        # robot_root_state_tensor(envstate, self.robot.name)[:, 7:13]
 
     def _resample_commands(self, env_ids):
         """Randommly select commands of some environments
@@ -280,7 +267,7 @@ class LeggedRobot(RslRlWrapper):
         phase = self._get_phase()
         sin_pos = torch.sin(2 * torch.pi * phase)
         # Add double support phase
-        stance_mask = torch.zeros((self.num_envs, 2), device=self.device)
+        stance_mask = torch.zeros((self.num_envs, len(self.feet_indices)), device=self.device)
         # left foot stance
         stance_mask[:, 0] = sin_pos >= 0
         # right foot stance
@@ -317,9 +304,10 @@ class LeggedRobot(RslRlWrapper):
     # region: Parse configs & Get the necessary parametres
     def _parse_cfg(self, scenario):
         super()._parse_cfg(scenario)
-        self.dt = scenario.decimation * scenario.sim_params.dt
-        self.command_ranges = scenario.task.command_ranges
-        self.num_commands = scenario.task.command_dim
+        self.dt = self.cfg.dt
+        self.command_ranges = self.cfg.commands.ranges
+        self.num_commands = self.cfg.commands.commands_dim
+        self.use_vision = self.cfg.use_vision
 
     def _parse_rigid_body_indices(self, robot):
         """
@@ -348,9 +336,9 @@ class LeggedRobot(RslRlWrapper):
         """
         parse default joint positions and torque limits from cfg.
         """
-
         torque_limits = scenario.robots[0].torque_limits
-        sorted_joint_names = sorted(torque_limits.keys())
+        # sorted_joint_names = sorted(torque_limits.keys())
+        sorted_joint_names = self.env.handler.get_joint_names(self.robot.name, sort=True)
         sorted_limits = [torque_limits[name] for name in sorted_joint_names]
         self.cfg.torque_limits = (
             torch.tensor(sorted_limits, device=self.device).unsqueeze(0).repeat(self.num_envs, 1)
@@ -367,6 +355,8 @@ class LeggedRobot(RslRlWrapper):
         """
         Init all buffer for reward computation
         """
+        self.up_axis_idx = 2
+        self.base_pos = torch.tensor([0.0, 0.0, 0.0], device=self.device).unsqueeze(0).repeat(self.num_envs, 1)
         self.base_quat = torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device).unsqueeze(0).repeat(self.num_envs, 1)
         self.base_euler_xyz = get_euler_xyz_tensor(self.base_quat)
 
@@ -523,7 +513,7 @@ class LeggedRobot(RslRlWrapper):
         envstate.robots[self.robot.name].extra["last_last_actions"] = self.last_last_actions
 
     def _parse_base_euler_xyz(self, envstate: TensorState):
-        self.base_euler_xyz = get_euler_xyz_tensor(envstate.robots[self.robot.name].root_state[:, 3:7])
+        # self.base_euler_xyz = get_euler_xyz_tensor(envstate.robots[self.robot.name].root_state[:, 3:7])
         envstate.robots[self.robot.name].extra["base_euler_xyz"] = self.base_euler_xyz
 
     def _parse_foot_all(self, envstate: TensorState):
@@ -536,7 +526,8 @@ class LeggedRobot(RslRlWrapper):
 
     def _parse_feet_air_time(self, envstate: TensorState):
         contact = contact_forces_tensor(envstate, self.robot.name)[:, self.feet_indices, 2] > 5.0
-        contact_filt = torch.logical_or(contact, self.last_contacts)
+        stance_mask = gait_phase_tensor(envstate, self.robot.name)
+        contact_filt = torch.logical_or(torch.logical_or(contact, stance_mask), self.last_contacts)
         self.last_contacts = contact
         first_contact = (self.feet_air_time > 0.0) * contact_filt
         self.feet_air_time += self.dt

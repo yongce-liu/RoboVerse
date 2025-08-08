@@ -374,3 +374,7 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
         # self.max_episode_length = ceil(self.max_episode_length_s / self.dt)
         self.episode_length = ceil(self.max_episode_length_s / self.dt)
         """maximum episode length in steps"""
+        # set the number of actions based on the robot's joints if available
+        if self.robots is not None:
+            self.num_actions = self.robots[0].num_joints
+        assert self.num_actions is not None, "num_actions must be set in the task config"

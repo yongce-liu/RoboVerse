@@ -123,27 +123,6 @@ class LeggedWalkingTask(LeggedRobot):
         super()._init_buffers()
         self.noise_scale_vec = self._get_noise_scale_vec(self.cfg)
 
-    def compute_observations(self, envstate: TensorState):
-        """compute observations and priviledged observation"""
-        q = (
-            dof_pos_tensor(envstate, self.robot.name) - self.cfg.default_joint_pd_target
-        ) * self.cfg.normalization.obs_scales.dof_pos
-        dq = dof_vel_tensor(envstate, self.robot.name) * self.cfg.normalization.obs_scales.dof_vel
-
-        self.obs_buf = torch.cat((
-                        self.commands[:, :3] * self.commands_scale,
-                        self.base_lin_vel * self.cfg.normalization.obs_scales.lin_vel,
-                        self.base_ang_vel  * self.cfg.normalization.obs_scales.ang_vel,
-                        self.projected_gravity,
-                        q,
-                        dq,
-                        self.actions
-                        ),dim=-1)
-        # add perceptive inputs if not blind
-        # add noise if needed
-        if self.add_noise:
-            self.obs_buf += (2 * torch.rand_like(self.obs_buf) - 1) * self.noise_scale_vec
-
     def _get_noise_scale_vec(self, cfg):
         """ Sets a vector used to scale the noise added to the observations.
             [NOTE]: Must be adapted when changing the observations structure
@@ -167,3 +146,24 @@ class LeggedWalkingTask(LeggedRobot):
         noise_vec[12+2*self.num_actions:] = 0. # previous actions
 
         return noise_vec
+
+    def compute_observations(self, envstate: TensorState):
+        """compute observations and priviledged observation"""
+        q = (
+            dof_pos_tensor(envstate, self.robot.name) - self.cfg.default_joint_pd_target
+        ) * self.cfg.normalization.obs_scales.dof_pos
+        dq = dof_vel_tensor(envstate, self.robot.name) * self.cfg.normalization.obs_scales.dof_vel
+
+        self.obs_buf = torch.cat((
+                        self.commands[:, :3] * self.commands_scale,
+                        self.base_lin_vel * self.cfg.normalization.obs_scales.lin_vel,
+                        self.base_ang_vel  * self.cfg.normalization.obs_scales.ang_vel,
+                        self.projected_gravity,
+                        q,
+                        dq,
+                        self.actions
+                        ),dim=-1)
+        # add perceptive inputs if not blind
+        # add noise if needed
+        if self.add_noise:
+            self.obs_buf += (2 * torch.rand_like(self.obs_buf) - 1) * self.noise_scale_vec

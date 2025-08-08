@@ -78,7 +78,7 @@ def play(args):
 
     for i in range(1000):
         # set fixed command
-        env.commands[:, 0] = 1.0
+        env.commands[:, 0] = 0.5
         env.commands[:, 1] = 0.0
         env.commands[:, 2] = 0.0
         env.commands[:, 3] = 0.0
@@ -90,11 +90,9 @@ def play(args):
 if __name__ == "__main__":
     EXPORT_POLICY = False
     args = get_args()
-    args.task = "humanoid_walking"
-    args.robot = "g1_dex3"
-    args.load_run = "2025_0808_084631"
-    args.checkpoint = 500
-    # args.sim = "mujoco"
-    if args.sim is None:
-        args.sim = "isaacgym"
+    args.task = "humanoid_walking" if args.task is None else args.task
+    args.robot = "g1_dex3" if args.task is None else args.robot
+    args.load_run = "2025_0808_084631" if args.load_run is None else args.load_run
+    args.checkpoint = 0 if args.checkpoint is None else args.checkpoint
+    args.sim = "isaacgym" if args.sim is None else args.sim
     play(args)
