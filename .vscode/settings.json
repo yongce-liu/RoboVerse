@@ -48,7 +48,7 @@
         "third_party/pyrep",
     ],
     // Python extra paths
-    "python.analysis.extraPaths": [
+    "cursorpyright.analysis.extraPaths": [
         /*** curobo ***/
         "${workspaceFolder}/third_party/curobo/src",
         /*** MetaSim + IssacGym Developer ***/
