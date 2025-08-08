@@ -13,7 +13,7 @@ class G1Dex3Cfg(BaseRobotCfg):
     name: str = "g1_dex3"
     num_joints: int = 43
     usd_path: str = MISSING
-    xml_path: str = "roboverse_data/robots/g1/urdf/g1_29dof_with_hand_rev_1_0.xml"
+    xml_path: str = "roboverse_data/robots/g1/xml/g1_29dof_with_hand_rev_1_0.xml"
     urdf_path: str = "roboverse_data/robots/g1/urdf/g1_29dof_with_hand_rev_1_0.urdf"
     mjcf_path = xml_path
     enabled_gravity: bool = True

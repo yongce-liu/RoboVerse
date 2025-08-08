@@ -88,12 +88,12 @@ def play(args):
 
 
 if __name__ == "__main__":
-    EXPORT_POLICY = True
+    EXPORT_POLICY = False
     args = get_args()
     args.task = "humanoid_walking"
-    args.robot = "h1_wrist"
-    args.load_run = "2025_0806_075858"
-    args.checkpoint = 0
+    args.robot = "g1_dex3"
+    args.load_run = "2025_0808_084631"
+    args.checkpoint = 500
     # args.sim = "mujoco"
     if args.sim is None:
         args.sim = "isaacgym"
