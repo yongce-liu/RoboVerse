@@ -37,9 +37,9 @@ class LeggedRobot(RslRlWrapper):
     def __init__(self, scenario: ScenarioCfg):
         super().__init__(scenario)
         self._parse_cfg(scenario)
-        self._parse_rigid_body_indices(scenario.robots[0])
-        self._parse_joint_cfg(scenario)
-        self._prepare_reward_function(scenario.task)
+        self._parse_rigid_body_indices(self.cfg.robots[0])
+        self._parse_joint_cfg(self.cfg)
+        self._prepare_reward_function(self.cfg)
         self._init_buffers()
 
     def reset(self, env_ids=None):
@@ -332,20 +332,24 @@ class LeggedRobot(RslRlWrapper):
         self.cfg.termination_contact_indices = self.termination_contact_indices
         self.cfg.penalised_contact_indices = self.penalised_contact_indices
 
-    def _parse_joint_cfg(self, scenario):
+    def _parse_joint_cfg(self, cfg: BaseLeggedTaskCfg):
         """
         parse default joint positions and torque limits from cfg.
         """
-        torque_limits = scenario.robots[0].torque_limits
+        torque_limits = cfg.robots[0].torque_limits
         # sorted_joint_names = sorted(torque_limits.keys())
         sorted_joint_names = self.env.handler.get_joint_names(self.robot.name, sort=True)
         sorted_limits = [torque_limits[name] for name in sorted_joint_names]
         self.cfg.torque_limits = (
             torch.tensor(sorted_limits, device=self.device).unsqueeze(0).repeat(self.num_envs, 1)
-            * scenario.control.torque_limit_scale
+            * self.cfg.control.torque_limit_scale
         )
 
-        default_joint_pos = scenario.robots[0].default_joint_positions
+        dof_pos_limits = cfg.robots[0].joint_limits
+        sorted_dof_pos_limits = [dof_pos_limits[joint] for joint in sorted_joint_names]
+        self.cfg.dof_pos_limits = torch.tensor(sorted_dof_pos_limits, device=self.device)  # [n_joints, 2]
+
+        default_joint_pos = cfg.robots[0].default_joint_positions
         sorted_joint_pos = [default_joint_pos[name] for name in sorted_joint_names]
         self.cfg.default_joint_pd_target = (
             torch.tensor(sorted_joint_pos, device=self.device).unsqueeze(0).repeat(self.num_envs, 1)
@@ -525,8 +529,10 @@ class LeggedRobot(RslRlWrapper):
         self._parse_feet_air_time(envstate)
 
     def _parse_feet_air_time(self, envstate: TensorState):
-        contact = contact_forces_tensor(envstate, self.robot.name)[:, self.feet_indices, 2] > 5.0
+        contact = contact_forces_tensor(envstate, self.robot.name)[:, self.feet_indices, 2] > 1.0
+        ################################################################
         stance_mask = gait_phase_tensor(envstate, self.robot.name)
+        ################################################################
         contact_filt = torch.logical_or(torch.logical_or(contact, stance_mask), self.last_contacts)
         self.last_contacts = contact
         first_contact = (self.feet_air_time > 0.0) * contact_filt

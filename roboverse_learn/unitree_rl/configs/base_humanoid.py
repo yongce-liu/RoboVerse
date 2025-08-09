@@ -6,21 +6,10 @@ from dataclasses import MISSING
 
 import torch
 
-from .base_legged import BaseLeggedTaskCfg, LeggedRobotCfgPPO
 from metasim.utils import configclass
+from metasim.cfg.control import ControlCfg
 
-
-@configclass
-class Algorithm(LeggedRobotCfgPPO.Algorithm):
-    pass
-
-
-# LeggedRobotCfgPPO.
-@configclass
-class BaseHumanoidCfgPPO(LeggedRobotCfgPPO):
-    algorithm: Algorithm = Algorithm(
-        entropy_coef=0.001, learning_rate=1e-5, num_learning_epochs=2, gamma=0.994, lam=0.9
-    )
+from .base_legged import BaseLeggedTaskCfg
 
 
 @configclass
@@ -47,7 +36,6 @@ class BaseHumanoidCfg(BaseLeggedTaskCfg):
     elbow_indices: indices of the elbows joints
     contact_indices: indices of the contact joints
     """
-
     task_name: str = "humanoid_task"
     human: HumanoidExtraCfg = HumanoidExtraCfg()
     elbow_indices: torch.Tensor = MISSING
@@ -55,6 +43,16 @@ class BaseHumanoidCfg(BaseLeggedTaskCfg):
     wrist_indices: torch.Tensor = MISSING
     torso_indices: torch.Tensor = MISSING
     contact_indices: torch.Tensor = MISSING
+    """revised params inherit from parent config"""
+    reward_cfg = BaseLeggedTaskCfg.RewardCfg(base_height_target=0.80,
+                                             tracking_sigma=5.0,
+                                             max_contact_force=700,
+                                             soft_torque_limit=0.001)
+    env_spacing: float = 1.0
+    max_episode_length_s: int = 24
+    control = ControlCfg(action_scale=0.5,
+                         action_offset=True,
+                         torque_limit_scale=0.85)
 
     init_states = [
         {

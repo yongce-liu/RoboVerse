@@ -18,7 +18,7 @@ from metasim.sim import BaseSimHandler
 from metasim.utils import configclass
 from metasim.utils.humanoid_robot_util import contact_forces_tensor, robot_rotation_tensor, get_euler_xyz_tensor
 
-
+# Training Config
 @configclass
 class LeggedRobotCfgPPO:
     """Configuration for PPO."""
@@ -75,11 +75,11 @@ class LeggedRobotCfgPPO:
         """Algorithm class name."""
         num_steps_per_env = 24
         """per iteration"""
-        max_iterations = 1500
+        max_iterations = 150001
         """max number of iterations"""
 
         # logging
-        save_interval = 1000
+        save_interval = 500
         """save interval for checkpoints"""
         experiment_name = "test"
         """experiment name"""
@@ -99,7 +99,7 @@ class LeggedRobotCfgPPO:
     algorithm: Algorithm = Algorithm()
     runner: Runner = Runner()
 
-
+# Randomization
 @configclass
 class LeggedRobotDomainRandCfg(RandomizationCfg):
     """Randomization config for legged robots."""
@@ -143,9 +143,9 @@ class LeggedRobotDomainRandCfg(RandomizationCfg):
 
         enabled: bool = False
         """Whether to enable random push forces."""
-        max_push_vel_xy: float = 0.2
+        max_push_vel_xy: float = 1.0
         """Maximum push velocity in xy plane."""
-        max_push_ang_vel: float = 0.4
+        max_push_ang_vel: float = 0.5
         """Maximum push angular velocity."""
         push_interval: int = 4
         """Interval in steps for applying random push forces and torques."""
@@ -159,10 +159,10 @@ class LeggedRobotDomainRandCfg(RandomizationCfg):
         )
         self.mass = MassRandomCfg(enabled=True, range=[-1.0, 1.0], dist_fn=self.sample_uniform)
 
-
+# Config
 @configclass
 class BaseLeggedTaskCfg(BaseTaskCfg):
-    """Base class for legged-gym style humanoid tasks.
+    """Base class for legged-gym style humanoid tasks. Deault values are designed for Unitree Go2.
 
     Attributes:
     robotname: name of the robot
@@ -174,7 +174,7 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
     class RewardCfg:
         """Constants for reward computation."""
 
-        base_height_target: float = 0.89
+        base_height_target: float = 0.25
         """target height of the base"""
         min_dist: float = 0.2
         """minimum distance between feet"""
@@ -190,12 +190,16 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
 
         only_positive_rewards: bool = True
         """whether to use only positive rewards"""
-        tracking_sigma: float = 5.0
+        tracking_sigma: float = 0.25
         """tracking reward = exp(error*sigma)"""
-        max_contact_force: float = 700.0
+        max_contact_force: float = 100.0
         """maximum contact force"""
-        soft_torque_limit: float = 0.001
+        soft_torque_limit: float = 1.0
         """soft torque limit"""
+
+    reward_cfg: RewardCfg = RewardCfg()
+    reward_functions: list[Callable] = MISSING
+    reward_weights: dict[str, float] = MISSING
 
     @configclass
     class CommandsConfig:
@@ -231,6 +235,9 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
         ranges: Ranges = Ranges()
         """upperbound and lowerbound of commands."""
 
+    commands = CommandsConfig()
+    """Configuration for command generation with command ranges."""
+
     @configclass
     class BaseLeggedRobotChecker(BaseChecker):
         def check(self, handler: BaseSimHandler):
@@ -244,6 +251,9 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
             rpy = get_euler_xyz_tensor(robot_rotation_tensor(states, handler.robot.name))
             reset_buf |= torch.logical_or(torch.abs(rpy[:,1])>1.0, torch.abs(rpy[:,0])>0.8)
             return reset_buf
+
+    checker: BaseLeggedRobotChecker = BaseLeggedRobotChecker()
+    """Checker for resetting the environment."""
 
     @configclass
     class Normalization:
@@ -260,11 +270,12 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
         clip_actions = 100.0
         obs_scales = ObsScales()
 
+    normalization = Normalization()
+    """Normalization config."""
+
     @configclass
     class Noise:
-        add_noise = True
-        noise_level = 1.0 # scales other values
-        class noise_scales:
+        class NoiseScales:
             dof_pos = 0.01
             dof_vel = 1.5
             lin_vel = 0.1
@@ -272,36 +283,33 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
             gravity = 0.05
             height_measurements = 0.1
 
-    reward_cfg: RewardCfg = RewardCfg()
-    reward_functions: list[Callable] = MISSING
-    reward_weights: dict[str, float] = MISSING
+        add_noise = True
+        noise_level = 1.0 # scales other values
+        noise_scales = NoiseScales()
+
+    noise = Noise()
+    """Noise config."""
 
     robots: list[BaseRobotCfg] | None = None
     """List of robots in the environment."""
-    commands = CommandsConfig()
-    """Configuration for command generation with command ranges."""
+    objects = []
+    """objects in the environment"""
     use_vision: bool = False
     """Whether to use vision observations."""
     ppo_cfg: LeggedRobotCfgPPO = LeggedRobotCfgPPO()
     """PPO config."""
-    checker: BaseLeggedRobotChecker = BaseLeggedRobotChecker()
-    """Checker for resetting the environment."""
-    normalization = Normalization()
-    """Normalization config."""
-    noise = Noise()
-    """Noise config."""
     num_observations: int = None
     """Number of observations."""
     num_privileged_obs: int = None
     """Number of privileged observations. If not None a priviledge_obs_buf will be returned by step() (critic obs for assymetric training). None is returned """
     num_actions: int = None
     """Number of actions."""
-    env_spacing: float = 1.0
+    env_spacing: float = 3.0
     """Environment spacing."""
     send_timeouts: bool = True
     """Whether to send time out information to the algorithm"""
-    episode_length_s: float = 20.0
-    """episode length in seconds"""
+    # episode_length_s: float = 20.0
+    # """episode length in seconds"""
     feet_indices: torch.Tensor = MISSING
     """feet indices"""
     penalised_contact_indices: torch.Tensor = MISSING
@@ -325,18 +333,16 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
     """Simulation parameters with physics engine settings."""
     decimation : int = 4
     """decimation factor for the control loop, e.g., 4 means every 4th step is a control step"""
-    objects = []
-    """objects in the environment"""
     traj_filepath = None
     """path to the trajectory file"""
     # TODO read form max_episode_length_s and divide s
-    max_episode_length_s: int = 24
+    max_episode_length_s: int = 20
     """maximum episode length in seconds"""
     # episode_length: int = 2400
     # """episode length in steps"""
     # max_episode_length: int = 2400
     # """episode length in steps"""
-    control: ControlCfg = ControlCfg(action_scale=0.5, action_offset=True, torque_limit_scale=0.85)
+    control: ControlCfg = ControlCfg(action_scale=0.25, action_offset=True, torque_limit_scale=0.85)
     """Control config."""
     random: LeggedRobotDomainRandCfg = LeggedRobotDomainRandCfg()
     """Randomization config."""
@@ -345,7 +351,7 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
             "objects": {},
             "robots": {
             "go2": {
-                "pos": torch.tensor([0.0, 0.0, 0.3]),
+                "pos": torch.tensor([0.0, 0.0, 0.42]),
                 "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
                 "dof_pos": {
                             'FL_hip_joint': 0.1,

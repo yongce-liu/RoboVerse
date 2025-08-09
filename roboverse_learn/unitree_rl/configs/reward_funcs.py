@@ -42,6 +42,8 @@ def reward_base_height(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> t
     ) / torch.sum(stance_mask, dim=1)
     base_height = states.robots[robot_name].root_state[:, 2] - (measured_heights - 0.05)
     return torch.exp(-torch.abs(base_height - cfg.reward_cfg.base_height_target) * 100)
+    # Penalize base height away from target
+    # return torch.square(base_height - cfg.reward_cfg.base_height_target)
 
 
 def reward_torques(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
