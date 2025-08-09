@@ -303,8 +303,18 @@ class MujocoHandler(BaseSimHandler):
             self._apply_scale_to_mjcf(robot_xml, self.robot.scale)
 
         robot_attached = mjcf_model.attach(robot_xml)
+        # move the free joint of the previous robot model to the new attactched model
+        # e.g., previous model: pelvis is free, new: robot_xml_name_model is free
+        # free_joints = [j for j in robot_attached.find_all('body') if j.get_attributes().get('type') == 'free']
         if not self.robot.fix_base_link:
+            # for joint in free_joints:
+                # joint.remove()
             robot_attached.add("freejoint")
+        if not hasattr(robot_attached, 'inertial') or robot_attached.inertial is None:
+            child_body = robot_attached.find_all('body')[0]
+            pos = child_body.inertial.pos
+            robot_attached.add('inertial', mass="1e-9", diaginertia="1e-9 1e-9 1e-9", pos=pos)
+
         self.robot_attached = robot_attached
         self.mj_objects[self.robot.name] = robot_xml
         self._mujoco_robot_name = robot_xml.full_identifier
@@ -416,9 +426,9 @@ class MujocoHandler(BaseSimHandler):
                 joint_effort_target=torch.from_numpy(self.physics.data.actuator_force[actuator_reindex]).unsqueeze(0),
             )
             # FIXME a temporary solution for accessing net contact forces of robots, it will be moved to
-            self._contact_forces = self._get_contact_forces()
+            self._contact_forces = self._get_contact_forces().view(self.num_envs, -1, 3)
             extra = {
-                "contact_forces": self._contact_forces.view(self.num_envs, -1, 3)[:, body_ids_reindex, :],
+                "contact_forces": self._contact_forces[:, body_ids_reindex, :],
             }
             state.extra = extra
             robot_states[robot.name] = state
@@ -677,7 +687,7 @@ class MujocoHandler(BaseSimHandler):
     def get_body_names(self, obj_name: str, sort: bool = True) -> list[str]:
         if isinstance(self.object_dict[obj_name], ArticulationObjCfg):
             names = [self.physics.model.body(i).name for i in range(self.physics.model.nbody)]
-            names = [name.split("/")[-1] for name in names if name.split("/")[0] == obj_name.split("_")[0]]
+            names = [name.split("/")[-1] for name in names if name.split("/")[0] == self.mj_objects[obj_name].model]
             names = [name for name in names if name != ""]
             if sort:
                 names.sort()
@@ -727,16 +737,16 @@ class MujocoHandler(BaseSimHandler):
         """
         Compute net contact forces on each body.
         Returns:
-            torch.Tensor: shape (n_body_h1, 3), contact forces for each h1 body in sorted order
+            torch.Tensor: shape (nbody, 3), contact forces for each body
         """
         nbody = self.physics.model.nbody
-        contact_forces = torch.zeros((nbody, 3))
+        contact_forces = torch.zeros((nbody, 3), device=self.device)
 
         for i in range(self.physics.data.ncon):
             contact = self.physics.data.contact[i]
             force = np.zeros(6, dtype=np.float64)
             mujoco.mj_contactForce(self.physics.model.ptr, self.physics.data.ptr, i, force)
-            f_contact = force[:3]
+            f_contact = torch.from_numpy(force[:3]).to(device=self.device)
 
             body1 = self.physics.model.geom_bodyid[contact.geom1]
             body2 = self.physics.model.geom_bodyid[contact.geom2]

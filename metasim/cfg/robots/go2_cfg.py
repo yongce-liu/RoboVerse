@@ -12,7 +12,7 @@ class Go2Cfg(BaseRobotCfg):
     name: str = "go2"
     num_joints: int = 12
     usd_path: str = MISSING
-    mjcf_path: str = "roboverse_data/robots/go2/mjcf/go2.xml"
+    mjcf_path: str = "roboverse_data/robots/go2/xml/go2.xml"
     urdf_path: str ="roboverse_data/robots/go2/urdf/go2.urdf"
     enabled_gravity: bool = True
     fix_base_link: bool = False
