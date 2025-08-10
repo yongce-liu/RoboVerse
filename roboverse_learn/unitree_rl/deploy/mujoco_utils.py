@@ -19,11 +19,10 @@ UNITREE_GYM_ROOT_DIR = os.path.join(PROJECT_ROOT_DIR, 'roboverse_learn', 'unitre
 class IndependentMujocoController:
     def __init__(self, args, scenario: ScenarioCfg):
         self.device = torch.device("cuda" if torch.cuda.is_available else "cpu")
-        config_file = args.config_file
+        config_file = args.robot + ".yaml"
         with open(f"{UNITREE_GYM_ROOT_DIR}/deploy/configs/mujoco/{config_file}", "r") as f:
             config = yaml.load(f, Loader=yaml.FullLoader)
             policy_path = config["policy_path"].replace("{PROJECT_ROOT_DIR}", PROJECT_ROOT_DIR)
-            xml_path = config["xml_path"].replace("{PROJECT_ROOT_DIR}", PROJECT_ROOT_DIR)
 
             simulation_duration = config["simulation_duration"]
             simulation_dt = config["simulation_dt"]
@@ -48,19 +47,8 @@ class IndependentMujocoController:
         self.episode_length_buf = torch.ones(1, dtype=torch.int32)
         self.policy = torch.jit.load(policy_path)
         self.policy.to(self.device)
-        self.physics = mujoco.MjModel.from_xml_path(xml_path)
-        self.data = mujoco.MjData(self.physics)
-        mujoco.mj_resetDataKeyframe(self.physics, self.data, 0)
-        joint_names = []
-        for i in range(self.physics.nu):
-            name = mujoco.mj_id2name(self.physics, mujoco.mjtObj.mjOBJ_ACTUATOR, i)
-            joint_names.append(name)
-        self.joint_names = joint_names
-        self.sorted_joint_names = self.joint_names.copy()
-        self.sorted_joint_names.sort()
-        self.joint_name2idx = {name: idx for idx, name in enumerate(joint_names)}
-        self.joint_reindex_cache = [self.joint_names.index(jn) for jn in self.sorted_joint_names]
-        self.joint_reindex_cache_inverse = [self.sorted_joint_names.index(jn) for jn in self.joint_names]
+        self._init_env(config)
+
 
 
         self.physics.opt.timestep = simulation_dt
@@ -78,6 +66,22 @@ class IndependentMujocoController:
         params = torch.where(zs == 1.0, value, zs)
         params[0] = x_value
         return params.tolist()
+
+    def _init_env(self, config):
+        xml_path = config["xml_path"].replace("{PROJECT_ROOT_DIR}", PROJECT_ROOT_DIR)
+        self.physics = mujoco.MjModel.from_xml_path(xml_path)
+        self.data = mujoco.MjData(self.physics)
+        mujoco.mj_resetDataKeyframe(self.physics, self.data, 0)
+        joint_names = []
+        for i in range(self.physics.nu):
+            name = mujoco.mj_id2name(self.physics, mujoco.mjtObj.mjOBJ_ACTUATOR, i)
+            joint_names.append(name)
+        self.joint_names = joint_names
+        self.sorted_joint_names = self.joint_names.copy()
+        self.sorted_joint_names.sort()
+        self.joint_name2idx = {name: idx for idx, name in enumerate(joint_names)}
+        self.joint_reindex_cache = [self.joint_names.index(jn) for jn in self.sorted_joint_names]
+        self.joint_reindex_cache_inverse = [self.sorted_joint_names.index(jn) for jn in self.joint_names]
 
     def _init_buffers(self):
         """
@@ -125,8 +129,8 @@ class IndependentMujocoController:
     def _parse_cfg(self, scenario: ScenarioCfg):
         # loading task-specific configuration
         self.dt = scenario.decimation * scenario.sim_params.dt
-        self.command_ranges = scenario.task.command_ranges
-        self.num_commands = scenario.task.command_dim
+        # self.command_ranges = scenario.task.command_ranges
+        # self.num_commands = scenario.task.command_dim
 
         self.scenario = scenario
         self.robot = scenario.robots[0]
@@ -134,7 +138,7 @@ class IndependentMujocoController:
         self.num_obs = scenario.task.num_observations
         self.num_actions = scenario.task.num_actions
         self.num_privileged_obs = scenario.task.num_privileged_obs
-        self.max_episode_length = scenario.task.max_episode_length
+        # self.max_episode_length = scenario.task.max_episode_length
         self._action_scale = scenario.control.action_scale
         self._action_offset = scenario.control.action_offset
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -243,7 +247,7 @@ class IndependentMujocoController:
         self._actions_cache = actions
         reverse_reindex = self.joint_reindex_cache_inverse
         reindex = self.joint_reindex_cache
-        joint_targets = actions
+        joint_targets = actions#[:, reverse_reindex]
         if self._manual_pd_on:
 
             self._current_action = np.zeros(self._robot_num_dof)

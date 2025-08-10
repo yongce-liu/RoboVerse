@@ -31,3 +31,4 @@ from .ur5e_2f85_cfg import Ur5E2F85Cfg
 from .walker_cfg import WalkerCfg
 from .go2_cfg import Go2Cfg
 from .g1dex3_cfg import G1Dex3Cfg
+from .g1dof12_cfg import G1Dof12Cfg

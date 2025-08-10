@@ -13,7 +13,7 @@ class G1Dex3Cfg(BaseRobotCfg):
     name: str = "g1_dex3"
     num_joints: int = 43
     usd_path: str = MISSING
-    xml_path: str = "roboverse_data/robots/g1/xml/g1_29dof_with_hand_rev_1_0.xml"
+    xml_path: str = "roboverse_data/robots/g1/urdf/g1_29dof_with_hand_rev_1_0.xml"
     urdf_path: str = "roboverse_data/robots/g1/urdf/g1_29dof_with_hand_rev_1_0.urdf"
     mjcf_path = xml_path
     enabled_gravity: bool = True
@@ -304,9 +304,5 @@ class G1Dex3Cfg(BaseRobotCfg):
     right_yaw_roll_joints = ["right_hip_yaw", "right_hip_roll"]
     upper_body_joints = ["shoulder", "elbow", "torso"]
 
-    # From default joint damping in XML
-    dof_damping: float = 0.001
-    # From default joint friction in XML
-    dof_friction: float = 0.2
     # From default joint armature in XML
     dof_armature: float = 0.1

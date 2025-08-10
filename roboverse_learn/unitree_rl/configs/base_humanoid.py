@@ -165,7 +165,26 @@ class BaseHumanoidCfg(BaseLeggedTaskCfg):
                         "right_hand_index_0_joint": 0.0,
                         "right_hand_index_1_joint": 0.0,
                         }
-                }
+                },
+                "g1_dof12": {
+                    "pos": torch.tensor([0.0, 0.0, 0.8]),
+                    "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
+                    "dof_pos": {
+                        # Hips & legs
+                        "left_hip_yaw_joint": 0.0,
+                        "left_hip_roll_joint": 0.0,
+                        "left_hip_pitch_joint": -0.1,
+                        "left_knee_joint": 0.3,
+                        "left_ankle_pitch_joint": -0.2,
+                        "left_ankle_roll_joint": 0.0,
+                        "right_hip_yaw_joint": 0.0,
+                        "right_hip_roll_joint": 0.0,
+                        "right_hip_pitch_joint": -0.1,
+                        "right_knee_joint": 0.3,
+                        "right_ankle_pitch_joint": -0.2,
+                        "right_ankle_roll_joint": 0.0,
+                    },
+                },
             },
         }
     ]

@@ -50,7 +50,7 @@ if __name__ == "__main__":
         {
             "name": "--robot",
             "type": str,
-            "default": "g1",
+            "default": "g1_dex3",
             "help": "Resume training or start testing from a checkpoint. Overrides config file if provided.",
         },
         {"name": "--headless", "action": "store_true", "default": True, "help": "Force display off at all times"},

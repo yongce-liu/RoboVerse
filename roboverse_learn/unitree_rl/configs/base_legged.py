@@ -30,17 +30,21 @@ class LeggedRobotCfgPPO:
     class Policy:
         """Network config class for PPO."""
 
-        init_noise_std = 1.0
+        # init_noise_std = 1.0
+        init_noise_std = 0.8
         """Initial noise std for actor network."""
-        actor_hidden_dims = [512, 256, 128]
+        # actor_hidden_dims = [512, 256, 128]
+        actor_hidden_dims = [32] # unitree parameter
         """Hidden dimensions for actor network."""
-        critic_hidden_dims = [768, 256, 128]
+        # critic_hidden_dims = [768, 256, 128]
+        # critic_hidden_dims = [1024, 512, 256]
+        critic_hidden_dims = [32] # unitree parameter
         """Hidden dimensions for critic network."""
         activation = 'elu' # can be elu, relu, selu, crelu, lrelu, tanh, sigmoid
         # only for 'ActorCriticRecurrent':
-        # rnn_type = 'lstm'
-        # rnn_hidden_size = 512
-        # rnn_num_layers = 1
+        rnn_type = 'lstm'
+        rnn_hidden_size = 64
+        rnn_num_layers = 1
 
     @configclass
     class Algorithm:
@@ -69,7 +73,7 @@ class LeggedRobotCfgPPO:
     class Runner:
         """Runner config class for PPO."""
 
-        policy_class_name = "ActorCritic"
+        policy_class_name = "ActorCriticRecurrent"
         """Policy class name."""
         algorithm_class_name = "PPO"
         """Algorithm class name."""

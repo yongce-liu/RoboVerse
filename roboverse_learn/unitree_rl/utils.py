@@ -231,3 +231,10 @@ def find_unique_candidate(candidates: list[any], data_base: list[any]) -> int:
         raise ValueError(f"Multiple candidates found: {found_candidates}. Only one naming convention should be used.")
 
     return found_indices[0]
+
+def modify_init_states(init_state: dict, robot_name: str):
+    """Modify the init state for the robot."""
+    if robot_name == "g1_dof12":
+        init_state[0]["robots"]["g1"] = init_state[0]["robots"]["g1_dof12"]
+    elif robot_name == "g1_dex3":
+        init_state[0]["robots"]["g1"] = init_state[0]["robots"]["g1_dex3"]

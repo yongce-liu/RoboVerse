@@ -1,6 +1,6 @@
 # 
 policy_path: "{PROJECT_ROOT_DIR}/outputs/unitree_rl/g1_humanoid_walking/2025_0802_213405/exported/model_exported_jit.pt"
-xml_path: "{PROJECT_ROOT_DIR}/roboverse_data/robots/g1/scene.xml"
+xml_path: "{PROJECT_ROOT_DIR}/roboverse_data/robots/g1/g1_scene.xml"
 
 # Total simulation time
 simulation_duration: 60.0

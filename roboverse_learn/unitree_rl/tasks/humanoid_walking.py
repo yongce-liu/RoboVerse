@@ -31,7 +31,7 @@ class HumanoidWalkingCfgPPO(LeggedRobotCfgPPO):
     )
     runner = LeggedRobotCfgPPO.Runner(num_steps_per_env = 60,
                                       max_iterations = 15001,
-                                      save_interval = 500,
+                                      save_interval = 100,
                                       experiment_name = "humanoid_walking")
 
 
@@ -269,5 +269,55 @@ class HumanoidWalkingTask(Humanoid):
         self.privileged_obs_buf = torch.cat([self.critic_history[i] for i in range(self.cfg.c_frame_stack)], dim=1)
 
         # add noise if needed
+        if self.add_noise:
+            self.obs_buf += (2 * torch.rand_like(self.obs_buf) - 1) * self.noise_scale_vec
+
+    def compute_observations_unitree(self, envstate):
+        """Compute observations using the simplified layout requested by the user.
+
+        Layout (concatenated in this exact order):
+            1. base_ang_vel (scaled)        - 3 dims
+            2. projected_gravity            - 3 dims
+            3. commands (first 3, scaled)   - 3 dims
+            4. dof_pos deviation (scaled)  - |A| dims
+            5. dof_vel (scaled)            - |A| dims
+            6. previous actions            - |A| dims
+            7. sin(phase)                  - 1 dim
+            8. cos(phase)                  - 1 dim
+        """
+        # --- Phase features
+        phase = self._get_phase()
+        sin_phase = torch.sin(2 * torch.pi * phase).unsqueeze(1)
+        cos_phase = torch.cos(2 * torch.pi * phase).unsqueeze(1)
+        # --- Joint position / velocity (normalised) in NATIVE simulator order
+        q = (
+            dof_pos_tensor(envstate, self.robot.name) - self.cfg.default_joint_pd_target
+        ) * self.cfg.normalization.obs_scales.dof_pos
+        dq = dof_vel_tensor(envstate, self.robot.name) * self.cfg.normalization.obs_scales.dof_vel
+
+        # --- Assemble observation buffer
+        self.obs_buf = torch.cat(
+            (
+                self.base_ang_vel * self.cfg.normalization.obs_scales.ang_vel,
+                self.projected_gravity,
+                self.commands[:, :3] * self.commands_scale,
+                q,
+                dq,
+                self.actions,
+                sin_phase,
+                cos_phase,
+            ),
+            dim=-1,
+        )
+
+        # Frame stacking (reuse existing obs_history)
+        obs_now = self.obs_buf.clone()
+        self.obs_history.append(obs_now)
+        self.obs_buf = (
+            torch.stack([self.obs_history[i] for i in range(self.obs_history.maxlen)], dim=1)
+            .reshape(self.num_envs, -1)
+        )
+
+        # Optional observation noise
         if self.add_noise:
             self.obs_buf += (2 * torch.rand_like(self.obs_buf) - 1) * self.noise_scale_vec
