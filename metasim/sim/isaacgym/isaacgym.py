@@ -118,7 +118,7 @@ class IsaacgymHandler(BaseSimHandler):
         # TODO move more params into sim_params cfg
         sim_params = gymapi.SimParams()
         sim_params.up_axis = gymapi.UP_AXIS_Z
-        sim_params.gravity = gymapi.Vec3(0.0, 0.0, -9.8)
+        sim_params.gravity = gymapi.Vec3(0.0, 0.0, -9.81)
         if self.scenario.sim_params.dt is not None:
             # IsaacGym has a different dt definition than IsaacLab, see https://isaac-sim.github.io/IsaacLab/main/source/migration/migrating_from_isaacgymenvs.html#simulation-config
             sim_params.dt = self.scenario.sim_params.dt
@@ -544,6 +544,7 @@ class IsaacgymHandler(BaseSimHandler):
             self.rand_rigid_body_fric(self.scenario.random.friction, i, robot_rigid_shape_props_asset)
             robot_body_props = self.gym.get_actor_rigid_body_properties(env, robot_handle)
             self.rand_rigid_body_mass(self.scenario.random.mass, i, robot_body_props)
+            # self.gym.set_actor_rigid_body_properties(env, robot_handle, robot_body_props, recomputeInertia=True)
 
         # GET initial state, copy for reset later
         self._initial_state = np.copy(self.gym.get_sim_rigid_body_states(self.sim, gymapi.STATE_ALL))

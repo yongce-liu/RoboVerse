@@ -380,3 +380,35 @@ def reward_action_smoothness(states: EnvState, robot_name: str, cfg: BaseTaskCfg
     )
     term_3 = 0.05 * torch.sum(torch.abs(states.robots[robot_name].extra["actions"]), dim=1)
     return term_1 + term_2 + term_3
+
+# BUG: haven't been implemented below
+def reward_contact(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+    res = torch.zeros(num_envs, dtype=torch.float, device=device)
+    for i in range(feet_num):
+        is_stance = leg_phase[:, i] < 0.55
+        contact = contact_forces[:, feet_indices[i], 2] > 1
+        res += ~(contact ^ is_stance)
+    return res
+
+
+def reward_feet_swing_height(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+    contact = torch.norm(contact_forces[:, feet_indices, :3], dim=2) > 1.
+    pos_error = torch.square(feet_pos[:, :, 2] - 0.08) * ~contact
+    return torch.sum(pos_error, dim=(1))
+
+
+def reward_alive(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+    # Reward for staying alive
+    return 1.0
+
+
+def reward_contact_no_vel(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+    # Penalize contact with no velocity
+    contact = torch.norm(contact_forces[:, feet_indices, :3], dim=2) > 1.
+    contact_feet_vel = feet_vel * contact.unsqueeze(-1)
+    penalize = torch.square(contact_feet_vel[:, :, :3])
+    return torch.sum(penalize, dim=(1,2))
+
+
+def reward_hip_pos(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+    return torch.sum(torch.square(dof_pos[:,[1,2,7,8]]), dim=1)

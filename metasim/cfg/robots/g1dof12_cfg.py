@@ -119,4 +119,4 @@ class G1Dof12Cfg(BaseRobotCfg):
     right_yaw_roll_joints = ["right_hip_yaw_joint", "right_hip_roll_joint"]
 
     # From default joint armature in XML
-    dof_armature: float = 0.1
+    dof_armature: float = 0.0

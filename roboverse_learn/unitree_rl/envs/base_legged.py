@@ -280,7 +280,7 @@ class LeggedRobot(RslRlWrapper):
         self,
     ):
         cycle_time = self.cfg.reward_cfg.cycle_time
-        phase = self.episode_length_buf * self.dt / cycle_time
+        phase = self.episode_length_buf * self.dt % cycle_time / cycle_time
         return phase
 
     @staticmethod

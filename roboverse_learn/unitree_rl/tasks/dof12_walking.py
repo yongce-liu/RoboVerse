@@ -21,22 +21,20 @@ from roboverse_learn.unitree_rl.configs import reward_funcs as rfs
 # Training Config
 @configclass
 class Dof12WalkingCfgPPO(LeggedRobotCfgPPO):
-    policy = LeggedRobotCfgPPO.Policy(init_noise_std = 0.8,
-                                      actor_hidden_dims = [32],
-                                      critic_hidden_dims = [32],
-                                      activation = 'elu',
-                                      rnn_type = 'lstm',
-                                      rnn_hidden_size = 64,
-                                      rnn_num_layers = 1)
-    algorithm = LeggedRobotCfgPPO.Algorithm(entropy_coef=0.001,
-                                            learning_rate=1e-5,
-                                            num_learning_epochs=2,
-                                            gamma=0.994, lam=0.9)
-    runner = LeggedRobotCfgPPO.Runner(experiment_name = "dof12_walking",
-                                      policy_class_name = "ActorCriticRecurrent",
-                                      num_steps_per_env = 60,
-                                      max_iterations = 15001,
-                                      save_interval = 100)
+    policy = LeggedRobotCfgPPO.Policy(
+        init_noise_std = 0.8,
+        actor_hidden_dims = [32],
+        critic_hidden_dims = [32],
+        activation = 'elu',
+        rnn_type = 'lstm',
+        rnn_hidden_size = 64,
+        rnn_num_layers = 1)
+    algorithm = LeggedRobotCfgPPO.Algorithm(entropy_coef=0.01)
+    runner = LeggedRobotCfgPPO.Runner(
+        experiment_name = "dof12_walking",
+        policy_class_name = "ActorCriticRecurrent",
+        max_iterations = 15001,
+        save_interval = 100)
 
 # Config
 @configclass
@@ -47,7 +45,14 @@ class Dof12WalkingCfg(BaseLeggedTaskCfg):
     ppo_cfg = Dof12WalkingCfgPPO()
 
     frame_stack = 1
-    c_frame_stack = 3
+    c_frame_stack = 1
+
+    reward_cfg = BaseLeggedTaskCfg.RewardCfg(
+        base_height_target=0.780,
+        tracking_sigma=5.0,
+        max_contact_force=700,
+        soft_torque_limit=0.001,
+        cycle_time = 0.8)
 
     reward_functions: list[Callable] = [
         rfs.reward_lin_vel_z,
@@ -77,25 +82,30 @@ class Dof12WalkingCfg(BaseLeggedTaskCfg):
         "tracking_ang_vel": 0.5,
         "lin_vel_z": -2.0,
         "ang_vel_xy": -0.05,
-        "orientation": -0.0,
+        "orientation": -1.0,
         "torques": -0.00001,
-        "dof_vel": -0.0,
+        "dof_vel": -1e-3,
         "dof_acc": -2.5e-7,
-        "base_height": -0.0,
-        "feet_air_time":  1.0,
-        "collision": -1.0,
+        "base_height": 1.0,
+        "feet_air_time":  0.0,
+        "collision": 0.0,
         "feet_stumble": -0.0,
         "action_rate": -0.01,
         "stand_still": -0.0,
         "torques": -0.0002,
-        "dof_pos_limits": -10.0
+        "dof_pos_limits": -5.0,
+        # "alive": 0.15,
+        # "hip_pos": -1.0,
+        # "contact_no_vel":-0.2,
+        # "feet_swing_height": -20.0,
+        # "contact": 0.18
     }
 
     def __post_init__(self):
         super().__post_init__()
-        self.num_single_obs: int = self.commands.commands_dim + 9  + 3 * self.num_actions #
+        self.num_single_obs: int = 6 + self.commands.commands_dim + 3 * self.num_actions + 2
         self.num_observations: int = int(self.frame_stack * self.num_single_obs)
-        self.single_num_privileged_obs: int = 0
+        self.single_num_privileged_obs: int = 9 + self.commands.commands_dim + 3 * self.num_actions + 2
         self.num_privileged_obs = int(self.c_frame_stack * self.single_num_privileged_obs)
 
 
@@ -122,16 +132,16 @@ class Dof12WalkingTask(LeggedRobot):
             [torch.Tensor]: Vector of scales used to multiply a uniform distribution in [-1, 1]
         """
         noise_vec = torch.zeros_like(self.obs_buf[0])
-        self.add_noise = cfg.noise.add_noise
-        noise_scales = cfg.noise.noise_scales
-        noise_level = cfg.noise.noise_level
-        noise_vec[0:3] = 0. # commands
-        noise_vec[3:6] = noise_scales.lin_vel * noise_level * cfg.normalization.obs_scales.lin_vel
-        noise_vec[6:9] = noise_scales.ang_vel * noise_level * cfg.normalization.obs_scales.ang_vel
-        noise_vec[9:12] = noise_scales.gravity * noise_level
-        noise_vec[12:12+self.num_actions] = noise_scales.dof_pos * noise_level * cfg.normalization.obs_scales.dof_pos
-        noise_vec[12+self.num_actions:12+2*self.num_actions] = noise_scales.dof_vel * noise_level * cfg.normalization.obs_scales.dof_vel
-        noise_vec[12+2*self.num_actions:] = 0. # previous actions
+        self.add_noise = self.cfg.noise.add_noise
+        noise_scales = self.cfg.noise.noise_scales
+        noise_level = self.cfg.noise.noise_level
+        noise_vec[:3] = noise_scales.ang_vel * noise_level * self.cfg.normalization.obs_scales.ang_vel
+        noise_vec[3:6] = noise_scales.gravity * noise_level
+        noise_vec[6:9] = 0. # commands
+        noise_vec[9:9+self.num_actions] = noise_scales.dof_pos * noise_level * self.cfg.normalization.obs_scales.dof_pos
+        noise_vec[9+self.num_actions:9+2*self.num_actions] = noise_scales.dof_vel * noise_level * self.cfg.normalization.obs_scales.dof_vel
+        noise_vec[9+2*self.num_actions:9+3*self.num_actions] = 0. # previous actions
+        noise_vec[9+3*self.num_actions:9+3*self.num_actions+2] = 0. # sin/cos phase
 
         return noise_vec
 
@@ -159,28 +169,35 @@ class Dof12WalkingTask(LeggedRobot):
         dq = dof_vel_tensor(envstate, self.robot.name) * self.cfg.normalization.obs_scales.dof_vel
 
         # --- Assemble observation buffer
-        self.obs_buf = torch.cat(
-            (
-                self.base_ang_vel * self.cfg.normalization.obs_scales.ang_vel,
-                self.projected_gravity,
-                self.commands[:, :3] * self.commands_scale,
-                q,
-                dq,
-                self.actions,
-                sin_phase,
-                cos_phase,
-            ),
-            dim=-1,
-        )
+        self.privileged_obs_buf = torch.cat((self.base_lin_vel * self.cfg.normalization.obs_scales.lin_vel,
+                                            self.base_ang_vel  * self.cfg.normalization.obs_scales.ang_vel,
+                                            self.projected_gravity,
+                                            self.commands[:, :3] * self.commands_scale,
+                                            q,
+                                            dq,
+                                            self.actions,
+                                            sin_phase,
+                                            cos_phase
+                                            ),dim=-1)
 
+        obs_buf = torch.cat((self.base_ang_vel * self.cfg.normalization.obs_scales.ang_vel, # 3
+                            self.projected_gravity, # 3
+                            self.commands[:, :3] * self.commands_scale, # 3
+                            q, # num_actions
+                            dq, # num_actions
+                            self.actions, # num_actions
+                            sin_phase, # 1
+                            cos_phase, # 1
+                        ), dim=-1,)
+        # print(self.cfg.default_joint_pd_target), input()
         # Frame stacking (reuse existing obs_history)
-        obs_now = self.obs_buf.clone()
+        obs_now = obs_buf.clone()
         self.obs_history.append(obs_now)
-        self.obs_buf = (
-            torch.stack([self.obs_history[i] for i in range(self.obs_history.maxlen)], dim=1)
-            .reshape(self.num_envs, -1)
-        )
+        self.critic_history.append(self.privileged_obs_buf)
+        obs_buf_all = torch.stack([self.obs_history[i] for i in range(self.obs_history.maxlen)], dim=1)
+        self.obs_buf = obs_buf_all.reshape(self.num_envs, -1)
+        self.privileged_obs_buf = torch.cat([self.critic_history[i] for i in range(self.cfg.c_frame_stack)], dim=1)
 
-        # Optional observation noise
+        # add noise if needed
         if self.add_noise:
             self.obs_buf += (2 * torch.rand_like(self.obs_buf) - 1) * self.noise_scale_vec

@@ -38,9 +38,9 @@ class LeggedRobotCfgPPO:
         """Hidden dimensions for critic network."""
         activation = 'elu' # can be elu, relu, selu, crelu, lrelu, tanh, sigmoid
         # only for 'ActorCriticRecurrent':
-        # rnn_type = 'lstm'
-        # rnn_hidden_size = 512
-        # rnn_num_layers = 1
+        rnn_type = None
+        rnn_hidden_size = None
+        rnn_num_layers = None
 
     @configclass
     class Algorithm:
@@ -327,6 +327,7 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
         rest_offset = 0.0,
         bounce_threshold_velocity=0.5,
         max_depenetration_velocity=1.0,
+        default_buffer_size_multiplier=5,
         replace_cylinder_with_capsule=True,
         friction_offset_threshold=0.04,
     )
@@ -368,7 +369,25 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
                             'RR_calf_joint': -1.5,
                 },
             },
-        }
+            "g1_dof12": {
+                    "pos": torch.tensor([0.0, 0.0, 0.8]),
+                    "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
+                    "dof_pos": {
+                        # Hips & legs
+                        "left_hip_yaw_joint": 0.0,
+                        "left_hip_roll_joint": 0.0,
+                        "left_hip_pitch_joint": -0.1,
+                        "left_knee_joint": 0.3,
+                        "left_ankle_pitch_joint": -0.2,
+                        "left_ankle_roll_joint": 0.0,
+                        "right_hip_yaw_joint": 0.0,
+                        "right_hip_roll_joint": 0.0,
+                        "right_hip_pitch_joint": -0.1,
+                        "right_knee_joint": 0.3,
+                        "right_ankle_pitch_joint": -0.2,
+                        "right_ankle_roll_joint": 0.0,}
+                },
+            }
         }
     ]
     """Initial states for the environment. Only used for legged robots, e.g., go2-12dof, g1-12dof, h1-12dof."""
