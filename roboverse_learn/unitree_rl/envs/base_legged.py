@@ -336,7 +336,11 @@ class LeggedRobot(RslRlWrapper):
         """
         parse default joint positions and torque limits from cfg.
         """
-        torque_limits = cfg.robots[0].torque_limits
+        torque_limits = (
+            cfg.robots[0].torque_limits
+            if hasattr(cfg.robots[0], "torque_limits")
+            else {name: actuator_cfg.torque_limit for name, actuator_cfg in cfg.robots[0].actuators.items()}
+        )
         # sorted_joint_names = sorted(torque_limits.keys())
         sorted_joint_names = self.env.handler.get_joint_names(self.robot.name, sort=True)
         sorted_limits = [torque_limits[name] for name in sorted_joint_names]

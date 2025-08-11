@@ -23,19 +23,19 @@ class G1Dof12Cfg(BaseRobotCfg):
     collapse_fixed_joints: bool = True
 
     actuators: dict[str, BaseActuatorCfg] = {
-        "left_hip_pitch_joint": BaseActuatorCfg(stiffness=100, damping=2),
-        "left_hip_roll_joint": BaseActuatorCfg(stiffness=100, damping=2),
-        "left_hip_yaw_joint": BaseActuatorCfg(stiffness=100, damping=2),
-        "left_knee_joint": BaseActuatorCfg(stiffness=150, damping=4),
-        "left_ankle_pitch_joint": BaseActuatorCfg(stiffness=40, damping=2),
-        "left_ankle_roll_joint": BaseActuatorCfg(stiffness=40, damping=2),
+        "left_hip_pitch_joint": BaseActuatorCfg(stiffness=100, damping=2, torque_limit=88),
+        "left_hip_roll_joint": BaseActuatorCfg(stiffness=100, damping=2, torque_limit=139),
+        "left_hip_yaw_joint": BaseActuatorCfg(stiffness=100, damping=2, torque_limit=88),
+        "left_knee_joint": BaseActuatorCfg(stiffness=150, damping=4, torque_limit=139),
+        "left_ankle_pitch_joint": BaseActuatorCfg(stiffness=40, damping=2, torque_limit=35),
+        "left_ankle_roll_joint": BaseActuatorCfg(stiffness=40, damping=2, torque_limit=35),
 
-        "right_hip_pitch_joint": BaseActuatorCfg(stiffness=100, damping=2),
-        "right_hip_roll_joint": BaseActuatorCfg(stiffness=100, damping=2),
-        "right_hip_yaw_joint": BaseActuatorCfg(stiffness=100, damping=2),
-        "right_knee_joint": BaseActuatorCfg(stiffness=150, damping=4),
-        "right_ankle_pitch_joint": BaseActuatorCfg(stiffness=40, damping=2),
-        "right_ankle_roll_joint": BaseActuatorCfg(stiffness=40, damping=2),
+        "right_hip_pitch_joint": BaseActuatorCfg(stiffness=100, damping=2, torque_limit=88),
+        "right_hip_roll_joint": BaseActuatorCfg(stiffness=100, damping=2, torque_limit=139),
+        "right_hip_yaw_joint": BaseActuatorCfg(stiffness=100, damping=2, torque_limit=88),
+        "right_knee_joint": BaseActuatorCfg(stiffness=150, damping=4, torque_limit=139),
+        "right_ankle_pitch_joint": BaseActuatorCfg(stiffness=40, damping=2, torque_limit=35),
+        "right_ankle_roll_joint": BaseActuatorCfg(stiffness=40, damping=2, torque_limit=35),
 
     }
 

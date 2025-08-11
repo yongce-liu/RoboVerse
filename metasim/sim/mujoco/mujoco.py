@@ -43,7 +43,7 @@ class MujocoHandler(BaseSimHandler):
         self._episode_length_buf = 0
 
         # FIXME: hard code decimation for now
-        if self.task is not None and self.task.task_type == TaskType.LOCOMOTION:
+        if self.task is not None:
             self.decimation = self.scenario.decimation
         else:
             log.warning("Warning: hard coding decimation to 25 for replaying trajectories")
@@ -313,6 +313,9 @@ class MujocoHandler(BaseSimHandler):
         if not hasattr(robot_attached, 'inertial') or robot_attached.inertial is None:
             child_body = robot_attached.find_all('body')[0]
             pos = child_body.inertial.pos
+            robot_attached.pos = child_body.pos
+            child_body.pos = "0 0 0"  # Reset child body position to origin with respect to the attached robot
+            robot_attached.quat = child_body.quat if child_body.quat is not None else "1 0 0 0"
             robot_attached.add('inertial', mass="1e-9", diaginertia="1e-9 1e-9 1e-9", pos=pos)
 
         self.robot_attached = robot_attached
@@ -557,7 +560,7 @@ class MujocoHandler(BaseSimHandler):
         joint_names = self.get_joint_names(self.robot.name, sort=True)
         if isinstance(actions, torch.Tensor):
             tmp_arr = actions.detach().to(dtype=torch.float32, device="cpu").numpy()[0]
-            actions = [{obj_name: {"dof_pos_target": {_name:tmp_arr[i]} for i, _name in enumerate(joint_names)}}]
+            actions = [{obj_name: {"dof_pos_target": {_name:tmp_arr[i] for i, _name in enumerate(joint_names)}}}]
 
         self._actions_cache = actions
 

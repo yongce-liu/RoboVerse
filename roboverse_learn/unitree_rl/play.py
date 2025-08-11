@@ -27,6 +27,10 @@ def play(args):
     robots_name, robots = [_robots_name[0]], [_robots[0]]
     config_wrapper = get_class(args.task, "Cfg")
     task = config_wrapper(robots=robots)
+    if args.sim == "mujoco":
+        task.sim_params.dt = 0.002
+        task.decimation = 10
+        task.__post_init__()
     scenario = ScenarioCfg(
         task=task,
         sim_params=task.sim_params,
@@ -35,6 +39,7 @@ def play(args):
         num_envs=args.num_envs,
         sim=args.sim,
         headless=args.headless,
+        try_add_table=True, # add a ground plane
         cameras=[],
     )
     scenario.num_envs = 1
@@ -110,7 +115,7 @@ if __name__ == "__main__":
     args.robot = "g1_dof12"
     args.load_run = "pretrain"
     args.checkpoint = 0
-    args.sim = "isaacgym"
+    args.sim = "mujoco"
     args.jit_load = True
     args.reindex_actions = True
     play(args)
