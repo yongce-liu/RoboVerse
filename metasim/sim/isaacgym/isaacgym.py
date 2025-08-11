@@ -268,7 +268,7 @@ class IsaacgymHandler(BaseSimHandler):
         asset_root = "."
         robot_asset_file = self.robot.mjcf_path if self.robot.isaacgym_read_mjcf else self.robot.urdf_path
         asset_options = gymapi.AssetOptions()
-        asset_options.armature = 0.01
+        asset_options.armature = getattr(self.robot, "dof_armature", 0.01)
         asset_options.fix_base_link = self.robot.fix_base_link
         asset_options.disable_gravity = not self.robot.enabled_gravity
         asset_options.flip_visual_attachments = self.robot.isaacgym_flip_visual_attachments
@@ -308,6 +308,9 @@ class IsaacgymHandler(BaseSimHandler):
         for i, dof_name in enumerate(dof_names):
             # get config
             i_actuator_cfg = self.robot.actuators[dof_name]
+            # FIXME: check whether add the attribute in the class "BaseActuatorCfg"
+            i_actuator_cfg.armature = i_actuator_cfg.armature if hasattr(i_actuator_cfg, "armature") and i_actuator_cfg.armature is not None else getattr(self.robot, "dof_armature", 0.01)
+            # FIXME: check whether add the attribute in the class "BaseActuatorCfg"
             i_control_mode = self.robot.control_type[dof_name] if dof_name in self.robot.control_type else "position"
 
             # task default position from cfg if exist, otherwise use 0.3*(uppper + lower) as default
@@ -335,6 +338,7 @@ class IsaacgymHandler(BaseSimHandler):
                 robot_dof_props["driveMode"][i] = gymapi.DOF_MODE_EFFORT
                 robot_dof_props["stiffness"][i] = 0.0
                 robot_dof_props["damping"][i] = 0.0
+                robot_dof_props["armature"][i] = i_actuator_cfg.armature
 
             # built-in position mode
             elif i_control_mode == "position":
@@ -343,6 +347,8 @@ class IsaacgymHandler(BaseSimHandler):
                     robot_dof_props["stiffness"][i] = i_actuator_cfg.stiffness
                 if i_actuator_cfg.damping is not None:
                     robot_dof_props["damping"][i] = i_actuator_cfg.damping
+                if i_actuator_cfg.armature is not None:
+                    robot_dof_props["armature"][i] = i_actuator_cfg.armature
                 self._pos_ctrl_dof_dix.append(i + self._obj_num_dof)
             else:
                 log.error(f"Unknown actuator control mode: {i_control_mode}, only support effort and position")
@@ -523,9 +529,6 @@ class IsaacgymHandler(BaseSimHandler):
             assert self.robot.scale[0] == 1.0 and self.robot.scale[1] == 1.0 and self.robot.scale[2] == 1.0
             self._robot_handles.append(robot_handle)
             # set dof properties
-            dof_armature = self.robots[0].dof_armature
-            for dof_idx in range(len(robot_dof_props["damping"])):
-                robot_dof_props["armature"][dof_idx] = dof_armature
             self.gym.set_actor_dof_properties(env, robot_handle, robot_dof_props)
 
             robot_rigid_body_indices = {}
@@ -656,9 +659,13 @@ class IsaacgymHandler(BaseSimHandler):
         self._actions_cache = actions
         action_input = torch.zeros_like(self._dof_states[:, 0])
         if isinstance(actions, torch.Tensor):
-            # Actions already follow the simulator's native joint order – store directly.
-            self._actions_cache = actions
-            action_array_all = actions
+            # reverse sorted joint indices
+            reverse_reindex = self.get_joint_reindex(obj_name, inverse=True)
+            self._actions_cache = actions[:, reverse_reindex]
+            # judge the correctness
+            # action_array_all = actions
+            action_array_all = actions[:, reverse_reindex]
+            # judge the correctness
         else:
             action_array_all = self._get_action_array_all(actions)
 

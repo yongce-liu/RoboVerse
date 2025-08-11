@@ -18,7 +18,6 @@ from roboverse_learn.unitree_rl.utils import (
     get_log_dir,
     get_class,
     make_robots,
-    modify_init_states,
 )
 
 
@@ -28,7 +27,6 @@ def play(args):
     robots_name, robots = [_robots_name[0]], [_robots[0]]
     config_wrapper = get_class(args.task, "Cfg")
     task = config_wrapper(robots=robots)
-    modify_init_states(task.init_states, args.robot)
     scenario = ScenarioCfg(
         task=task,
         decimation=task.decimation,
@@ -85,7 +83,7 @@ def play(args):
         env.commands[:, 2] = 0.0
         env.commands[:, 3] = 0.0
 
-        actions = policy(obs.detach()) * 5
+        actions = policy(obs.detach())
         obs, _, _, _, _ = env.step(actions.detach())
 
 

@@ -10,10 +10,10 @@ from .base_robot_cfg import BaseActuatorCfg, BaseRobotCfg
 
 @configclass
 class G1Dof12Cfg(BaseRobotCfg):
-    name: str = "g1"
+    name: str = "g1_dof12"
     num_joints: int = 12
     usd_path: str = MISSING
-    xml_path: str = "roboverse_data/robots/g1/urdf/g1_12dof.xml"
+    xml_path: str = "roboverse_data/robots/g1/xml/g1_12dof.xml"
     urdf_path: str = "roboverse_data/robots/g1/urdf/g1_12dof.urdf"
     mjcf_path = xml_path
     enabled_gravity: bool = True
@@ -117,7 +117,6 @@ class G1Dof12Cfg(BaseRobotCfg):
 
     left_yaw_roll_joints = ["left_hip_yaw_joint", "left_hip_roll_joint"]
     right_yaw_roll_joints = ["right_hip_yaw_joint", "right_hip_roll_joint"]
-    upper_body_joints = []
 
     # From default joint armature in XML
     dof_armature: float = 0.1
