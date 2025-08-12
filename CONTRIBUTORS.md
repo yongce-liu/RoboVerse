@@ -29,6 +29,7 @@ Guidelines for modifications:
 * Haozhe Chen
 * Haozhe Lou
 * Jiangran Lyu
+* Mingyuan Sun
 * Peihao Li
 * Ran Gong
 * Siheng Zhao
@@ -37,6 +38,7 @@ Guidelines for modifications:
 * Yuran Wang
 * Yutong Liang
 * Yuyang Li
+* Yongce Liu
 * Zhigen Zhao
 
 ## Acknowledgements
