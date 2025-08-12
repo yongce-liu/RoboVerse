@@ -9,14 +9,15 @@ except ImportError:
 
 import torch
 from rsl_rl.runners.on_policy_runner import OnPolicyRunner
+
 from metasim.cfg.scenario import ScenarioCfg
 from roboverse_learn.unitree_rl.utils import (
     export_policy_as_jit,
     get_args,
+    get_class,
     get_export_jit_path,
     get_load_path,
     get_log_dir,
-    get_class,
     make_robots,
 )
 
@@ -39,7 +40,7 @@ def play(args):
         num_envs=args.num_envs,
         sim=args.sim,
         headless=args.headless,
-        try_add_table=True, # add a ground plane
+        try_add_table=True,  # add a ground plane
         cameras=[],
     )
     scenario.num_envs = 1
@@ -103,9 +104,13 @@ def play(args):
             actions = actions[:, reindex_actions_idx]
         obs, _, _, _, _ = env.step(actions)
         if args.reindex_actions:
-            obs[:, 9:9+num_actions] = obs[:, 9:9+num_actions][:, reverse_reindex_actions_idx]
-            obs[:, 9+num_actions:9+num_actions*2] = obs[:, 9+num_actions:9+num_actions*2][:, reverse_reindex_actions_idx]
-            obs[:, 9+num_actions*2:9+num_actions*3] = obs[:, 9+num_actions*2:9+num_actions*3][:, reverse_reindex_actions_idx]
+            obs[:, 9 : 9 + num_actions] = obs[:, 9 : 9 + num_actions][:, reverse_reindex_actions_idx]
+            obs[:, 9 + num_actions : 9 + num_actions * 2] = obs[:, 9 + num_actions : 9 + num_actions * 2][
+                :, reverse_reindex_actions_idx
+            ]
+            obs[:, 9 + num_actions * 2 : 9 + num_actions * 3] = obs[:, 9 + num_actions * 2 : 9 + num_actions * 3][
+                :, reverse_reindex_actions_idx
+            ]
 
 
 if __name__ == "__main__":

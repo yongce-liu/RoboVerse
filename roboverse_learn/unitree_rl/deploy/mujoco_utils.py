@@ -1,26 +1,29 @@
 from __future__ import annotations
+
 import os
-import torch
-from loguru import logger as log
+
 import mujoco
 import mujoco.viewer
-from metasim.cfg.scenario import ScenarioCfg
-import yaml
 import numpy as np
-from metasim.utils.state import list_state_to_tensor
 import rootutils
+import torch
+import yaml
+from loguru import logger as log
+
+from metasim.cfg.scenario import ScenarioCfg
 from metasim.utils.humanoid_robot_util import (
     get_euler_xyz_tensor,
 )
 
 PROJECT_ROOT_DIR = str(rootutils.setup_root(__file__, pythonpath=True))
-UNITREE_GYM_ROOT_DIR = os.path.join(PROJECT_ROOT_DIR, 'roboverse_learn', 'unitree_rl')
+UNITREE_GYM_ROOT_DIR = os.path.join(PROJECT_ROOT_DIR, "roboverse_learn", "unitree_rl")
+
 
 class IndependentMujocoController:
     def __init__(self, args, scenario: ScenarioCfg):
         self.device = torch.device("cuda" if torch.cuda.is_available else "cpu")
         config_file = args.robot + ".yaml"
-        with open(f"{UNITREE_GYM_ROOT_DIR}/deploy/configs/mujoco/{config_file}", "r") as f:
+        with open(f"{UNITREE_GYM_ROOT_DIR}/deploy/configs/mujoco/{config_file}") as f:
             config = yaml.load(f, Loader=yaml.FullLoader)
             policy_path = config["policy_path"].replace("{PROJECT_ROOT_DIR}", PROJECT_ROOT_DIR)
 
@@ -48,8 +51,6 @@ class IndependentMujocoController:
         self.policy = torch.jit.load(policy_path)
         self.policy.to(self.device)
         self._init_env(config)
-
-
 
         self.physics.opt.timestep = simulation_dt
         self._parse_cfg(scenario)
@@ -144,6 +145,7 @@ class IndependentMujocoController:
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.cfg = scenario.task
         from metasim.utils.dict import class_to_dict
+
         self.train_cfg = class_to_dict(scenario.task.ppo_cfg)
 
     def _parse_joint_cfg(self, scenario):
@@ -227,8 +229,13 @@ class IndependentMujocoController:
         self.command_input_wo_clock = self.commands[:, :3] * self.commands_scale
         reindex = self.joint_reindex_cache
         inverse_index = self.joint_reindex_cache_inverse
-        q = (torch.from_numpy(self.data.qpos[7:]).to(self.device).unsqueeze(0)[:, reindex] - self.cfg.default_joint_pd_target)# * self.cfg.normalization.obs_scales.dof_pos
-        dq = torch.from_numpy(self.data.qvel[6:]).to(self.device).unsqueeze(0)# * self.cfg.normalization.obs_scales.dof_vel
+        q = (
+            torch.from_numpy(self.data.qpos[7:]).to(self.device).unsqueeze(0)[:, reindex]
+            - self.cfg.default_joint_pd_target
+        )  # * self.cfg.normalization.obs_scales.dof_pos
+        dq = (
+            torch.from_numpy(self.data.qvel[6:]).to(self.device).unsqueeze(0)
+        )  # * self.cfg.normalization.obs_scales.dof_vel
         ##TODO: add _update_odometry_tensors
         obs = torch.cat(
             (
@@ -247,9 +254,8 @@ class IndependentMujocoController:
         self._actions_cache = actions
         reverse_reindex = self.joint_reindex_cache_inverse
         reindex = self.joint_reindex_cache
-        joint_targets = actions#[:, reverse_reindex]
+        joint_targets = actions  # [:, reverse_reindex]
         if self._manual_pd_on:
-
             self._current_action = np.zeros(self._robot_num_dof)
             self._current_action = np.array(joint_targets)
             efforts = self._compute_effort(joint_targets)
@@ -278,8 +284,8 @@ class IndependentMujocoController:
 
         if self._action_offset:
             effort = (
-                    self._p_gains * (action_scaled + self._robot_default_dof_pos - robot_dof_pos)
-                    - self._d_gains * robot_dof_vel
+                self._p_gains * (action_scaled + self._robot_default_dof_pos - robot_dof_pos)
+                - self._d_gains * robot_dof_vel
             )
         else:
             effort = self._p_gains * (action_scaled - robot_dof_pos) - self._d_gains * robot_dof_vel

@@ -182,11 +182,6 @@ def default_dof_pos_tensor(envstates, robot_name: str):
     return envstates.robots[robot_name].extra["default_pos"]
 
 
-def ref_dof_pos_tensor(envstates, robot_name: str):
-    """Return the default ref dof pos."""
-    return envstates.robots[robot_name].extra["ref_dof_pos"]
-
-
 def get_euler_xyz_tensor(quat):
     """Convert quaternion to Euler angles (roll, pitch, yaw) in radians for a batch of quaternions.
 

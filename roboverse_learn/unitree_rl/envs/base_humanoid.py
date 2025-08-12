@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import torch
 
-from roboverse_learn.unitree_rl.configs.base_humanoid import BaseHumanoidCfg
-from roboverse_learn.unitree_rl.envs.base_legged import LeggedRobot
-from roboverse_learn.unitree_rl.utils import get_body_reindexed_indices_from_substring, get_joint_reindexed_indices_from_substring
-
-from metasim.utils.state import TensorState
 from metasim.cfg.scenario import ScenarioCfg
 from metasim.utils.humanoid_robot_util import contact_forces_tensor
+from metasim.utils.state import TensorState
+from roboverse_learn.unitree_rl.configs.base_humanoid import BaseHumanoidCfg
+from roboverse_learn.unitree_rl.envs.base_legged import LeggedRobot
+from roboverse_learn.unitree_rl.utils import (
+    get_body_reindexed_indices_from_substring,
+    get_joint_reindexed_indices_from_substring,
+)
 
 
 class Humanoid(LeggedRobot):
@@ -16,11 +18,12 @@ class Humanoid(LeggedRobot):
     Inherit from LeggedRobot to implement a humanoid robot environment.
     The main difference is the additional joints and rigid bodies specific to humanoid robots, e.g., knees, elbows, wrists, and torso.
     """
+
     cfg: BaseHumanoidCfg
 
     def __init__(self, scenario: ScenarioCfg):
         super().__init__(scenario)
-        self._parse_joint_indices(scenario.robots[0]) # new funcs for utilies
+        self._parse_joint_indices(scenario.robots[0])  # new funcs for utilies
 
     # region: Parse configs & Get the necessary parametres
     def _parse_rigid_body_indices(self, robot):
@@ -70,6 +73,7 @@ class Humanoid(LeggedRobot):
         self.cfg.upper_body_joint_indices = get_joint_reindexed_indices_from_substring(
             self.env.handler, robot.name, upper_body_names, device=self.device
         )
+
     # endregion
 
     # region: Parse states for reward computation
@@ -103,4 +107,5 @@ class Humanoid(LeggedRobot):
         rew_pos = torch.sum(rew_pos * swing_mask, dim=1)
         self.feet_height *= ~contact
         envstate.robots[self.robot.name].extra["feet_clearance"] = rew_pos
+
     # endregion

@@ -1,4 +1,4 @@
-# 
+#
 policy_path: "{PROJECT_ROOT_DIR}/outputs/unitree_rl/g1_humanoid_walking/2025_0802_213405/exported/model_exported_jit.pt"
 xml_path: "{PROJECT_ROOT_DIR}/roboverse_data/robots/g1/g1_scene.xml"
 
@@ -12,7 +12,7 @@ control_decimation: 10
 kps: [100, 100, 100, 150, 40, 40, 100, 100, 100, 150, 40, 40]
 kds: [2, 2, 2, 4, 2, 2, 2, 2, 2, 4, 2, 2]
 
-default_angles: [-0.1,  0.0,  0.0,  0.3, -0.2, 0.0, 
+default_angles: [-0.1,  0.0,  0.0,  0.3, -0.2, 0.0,
                   -0.1,  0.0,  0.0,  0.3, -0.2, 0.0]
 
 ang_vel_scale: 0.25

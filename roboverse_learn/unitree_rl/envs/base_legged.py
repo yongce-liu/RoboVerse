@@ -1,16 +1,12 @@
 from __future__ import annotations
 
-import torch
-from typing import Callable
 from collections import deque
 from copy import deepcopy
+from typing import Callable
 
-from roboverse_learn.rl.rsl_rl.rsl_rl_wrapper import RslRlWrapper
-from roboverse_learn.unitree_rl.utils import torch_rand_float, get_body_reindexed_indices_from_substring
-from roboverse_learn.unitree_rl.configs.base_legged import BaseLeggedTaskCfg
+import torch
 
 import metasim.types as mstypes
-from metasim.utils.state import TensorState
 from metasim.cfg.scenario import ScenarioCfg
 from metasim.utils.humanoid_robot_util import (
     contact_forces_tensor,
@@ -18,11 +14,15 @@ from metasim.utils.humanoid_robot_util import (
     gait_phase_tensor,
     get_euler_xyz_tensor,
     robot_ang_velocity_tensor,
+    robot_position_tensor,
     robot_rotation_tensor,
     robot_velocity_tensor,
-    robot_position_tensor,
 )
 from metasim.utils.math import quat_apply, quat_rotate_inverse, wrap_to_pi
+from metasim.utils.state import TensorState
+from roboverse_learn.rl.rsl_rl.rsl_rl_wrapper import RslRlWrapper
+from roboverse_learn.unitree_rl.configs.base_legged import BaseLeggedTaskCfg
+from roboverse_learn.unitree_rl.utils import get_body_reindexed_indices_from_substring, torch_rand_float
 
 
 class LeggedRobot(RslRlWrapper):
@@ -32,6 +32,7 @@ class LeggedRobot(RslRlWrapper):
     Note that Training only for Gym, Lab, Genesis
     Mujoco can be used fvaluation/render only.
     """
+
     cfg: BaseLeggedTaskCfg
 
     def __init__(self, scenario: ScenarioCfg):
@@ -65,7 +66,11 @@ class LeggedRobot(RslRlWrapper):
         self.last_dof_vel[env_ids] = 0.0
         self.episode_length_buf[env_ids] = 0
         self.feet_air_time[env_ids] = 0.0
-        self.base_quat[env_ids] = torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device, dtype=torch.float32).unsqueeze(0).repeat(len(env_ids), 1)
+        self.base_quat[env_ids] = (
+            torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device, dtype=torch.float32)
+            .unsqueeze(0)
+            .repeat(len(env_ids), 1)
+        )
         self.base_euler_xyz = get_euler_xyz_tensor(self.base_quat)
         self.projected_gravity[env_ids] = quat_rotate_inverse(self.base_quat[env_ids], self.gravity_vec[env_ids])
 
@@ -87,7 +92,7 @@ class LeggedRobot(RslRlWrapper):
         return None, None
 
     def step(self, actions: torch.Tensor):
-        """ Apply actions, simulate, call self.post_physics_step()
+        """Apply actions, simulate, call self.post_physics_step()
 
         Args:
             actions (torch.Tensor): Tensor of shape (num_envs, num_actions_per_env)
@@ -117,6 +122,7 @@ class LeggedRobot(RslRlWrapper):
             self.rew_buf[:] = torch.clip(self.rew_buf[:], min=0.0)
 
     """The necessary functions for the child class to implement"""
+
     def compute_observations(self, envstate: TensorState):
         """compute observations and priviledged observation"""
         raise NotImplementedError(
@@ -125,7 +131,7 @@ class LeggedRobot(RslRlWrapper):
         )
 
     # region: For step function
-    def _pre_physics_step(self, actions:torch.Tensor):
+    def _pre_physics_step(self, actions: torch.Tensor):
         """Apply action smoothing and wrap actions as dict before physics step."""
         # low frequency action smoothing
         delay = torch.rand((self.num_envs, 1), device=self.device)
@@ -163,7 +169,7 @@ class LeggedRobot(RslRlWrapper):
         self.reset(reset_env_idx)
         # simulate the push operation
         if self.cfg.random.push.enabled and self.common_step_counter % self.cfg.random.push.push_interval == 0:
-          self._push_robots()
+            self._push_robots()
         # compute obs for actor,  privileged_obs for critic network
         self.compute_observations(env_states)
         # clip the observations
@@ -180,14 +186,19 @@ class LeggedRobot(RslRlWrapper):
         """Callback called before computing terminations, rewards, and observations
         Default behaviour: Compute ang vel command based on target and heading, compute measured terrain heights and randomly push robots
         """
-        env_ids = (self.episode_length_buf % int(self.cfg.commands.resampling_time / self.dt) == 0).nonzero(as_tuple=False).flatten()
+        env_ids = (
+            (self.episode_length_buf % int(self.cfg.commands.resampling_time / self.dt) == 0)
+            .nonzero(as_tuple=False)
+            .flatten()
+        )
         if len(env_ids) > 0:
             self._resample_commands(env_ids)
 
         if self.cfg.commands.heading_command:
-            forward = quat_apply(self.base_quat, self.forward_vec) # quat:[w, x, y, z], forward:[x, y, z]
+            forward = quat_apply(self.base_quat, self.forward_vec)  # quat:[w, x, y, z], forward:[x, y, z]
             heading = torch.atan2(forward[:, 1], forward[:, 0])
             self.commands[:, 2] = torch.clip(0.5 * wrap_to_pi(self.commands[:, 3] - heading), -1.0, 1.0)
+
     # endregion
 
     # region: Randomizations
@@ -202,6 +213,7 @@ class LeggedRobot(RslRlWrapper):
             -max_push_angular, max_push_angular, (self.num_envs, 3), device=self.device
         )
         env_states.robots[self.robot.name].root_state[:, 10:13] = self.rand_push_torque
+
     # endregion
 
     # region: Utilities
@@ -299,6 +311,7 @@ class LeggedRobot(RslRlWrapper):
         params = torch.where(zs == 1.0, value, zs)
         params[0] = x_value
         return params.tolist()
+
     # endregion
 
     # region: Parse configs & Get the necessary parametres
@@ -464,6 +477,7 @@ class LeggedRobot(RslRlWrapper):
 
         self.env_frictions = torch.zeros(self.num_envs, 1, dtype=torch.float32, device=self.device)  # TODO now set 0
         self.body_mass = torch.zeros(self.num_envs, 1, dtype=torch.float32, device=self.device, requires_grad=False)
+
     # endregion
 
     # region: Parse states for reward computation
@@ -557,4 +571,5 @@ class LeggedRobot(RslRlWrapper):
         """Add local base velocity into states"""
         envstate.robots[self.robot.name].extra["base_lin_vel"] = self.base_lin_vel
         envstate.robots[self.robot.name].extra["base_ang_vel"] = self.base_ang_vel
+
     # endregion

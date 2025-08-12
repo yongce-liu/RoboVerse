@@ -16,7 +16,8 @@ from metasim.cfg.simulator_params import SimParamCfg
 from metasim.cfg.tasks.base_task_cfg import BaseTaskCfg
 from metasim.sim import BaseSimHandler
 from metasim.utils import configclass
-from metasim.utils.humanoid_robot_util import contact_forces_tensor, robot_rotation_tensor, get_euler_xyz_tensor
+from metasim.utils.humanoid_robot_util import contact_forces_tensor, get_euler_xyz_tensor, robot_rotation_tensor
+
 
 # Training Config
 @configclass
@@ -36,7 +37,7 @@ class LeggedRobotCfgPPO:
         """Hidden dimensions for actor network."""
         critic_hidden_dims = [768, 256, 128]
         """Hidden dimensions for critic network."""
-        activation = 'elu' # can be elu, relu, selu, crelu, lrelu, tanh, sigmoid
+        activation = "elu"  # can be elu, relu, selu, crelu, lrelu, tanh, sigmoid
         # only for 'ActorCriticRecurrent':
         rnn_type = None
         rnn_hidden_size = None
@@ -99,6 +100,7 @@ class LeggedRobotCfgPPO:
     algorithm: Algorithm = Algorithm()
     runner: Runner = Runner()
 
+
 # Randomization
 @configclass
 class LeggedRobotDomainRandCfg(RandomizationCfg):
@@ -159,6 +161,7 @@ class LeggedRobotDomainRandCfg(RandomizationCfg):
         )
         self.mass = MassRandomCfg(enabled=True, range=[-1.0, 1.0], dist_fn=self.sample_uniform)
 
+
 # Config
 @configclass
 class BaseLeggedTaskCfg(BaseTaskCfg):
@@ -213,8 +216,10 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
             heading_command: whether to compute ang vel command from heading error.
             ranges: upperbound and lowerbound of sampling ranges.
         """
+
         class Ranges:
             """Command Ranges for random command sampling when training."""
+
             lin_vel_x: list[float] = [-1.0, 1.0]
             lin_vel_y: list[float] = [-1.0, 1.0]
             ang_vel_yaw: list[float] = [-1.0, 1.0]
@@ -249,7 +254,7 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
                 torch.norm(contact_forces[:, handler.task.termination_contact_indices, :], dim=-1) > 1.0, dim=1
             )
             rpy = get_euler_xyz_tensor(robot_rotation_tensor(states, handler.robot.name))
-            reset_buf |= torch.logical_or(torch.abs(rpy[:,1])>1.0, torch.abs(rpy[:,0])>0.8)
+            reset_buf |= torch.logical_or(torch.abs(rpy[:, 1]) > 1.0, torch.abs(rpy[:, 0]) > 0.8)
             return reset_buf
 
     checker: BaseLeggedRobotChecker = BaseLeggedRobotChecker()
@@ -258,6 +263,7 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
     @configclass
     class Normalization:
         """Normalization constants for observations and actions."""
+
         class ObsScales:
             lin_vel = 2.0
             ang_vel = 0.25
@@ -284,7 +290,7 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
             height_measurements = 0.1
 
         add_noise = True
-        noise_level = 1.0 # scales other values
+        noise_level = 1.0  # scales other values
         noise_scales = NoiseScales()
 
     noise = Noise()
@@ -324,7 +330,7 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
         num_position_iterations=4,
         num_velocity_iterations=0,
         contact_offset=0.01,
-        rest_offset = 0.0,
+        rest_offset=0.0,
         bounce_threshold_velocity=0.5,
         max_depenetration_velocity=1.0,
         default_buffer_size_multiplier=5,
@@ -332,7 +338,7 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
         friction_offset_threshold=0.04,
     )
     """Simulation parameters with physics engine settings."""
-    decimation : int = 4
+    decimation: int = 4
     """decimation factor for the control loop, e.g., 4 means every 4th step is a control step"""
     traj_filepath = None
     """path to the trajectory file"""
@@ -351,25 +357,25 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
         {
             "objects": {},
             "robots": {
-            "go2": {
-                "pos": torch.tensor([0.0, 0.0, 0.42]),
-                "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
-                "dof_pos": {
-                            'FL_hip_joint': 0.1,
-                            'RL_hip_joint': 0.1,
-                            'FR_hip_joint': -0.1,
-                            'RR_hip_joint': -0.1,
-                            'FL_thigh_joint': 0.8,
-                            'RL_thigh_joint': 1.0,
-                            'FR_thigh_joint': 0.8,
-                            'RR_thigh_joint': 1.0,
-                            'FL_calf_joint': -1.5,
-                            'RL_calf_joint': -1.5,
-                            'FR_calf_joint': -1.5,
-                            'RR_calf_joint': -1.5,
+                "go2": {
+                    "pos": torch.tensor([0.0, 0.0, 0.42]),
+                    "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
+                    "dof_pos": {
+                        "FL_hip_joint": 0.1,
+                        "RL_hip_joint": 0.1,
+                        "FR_hip_joint": -0.1,
+                        "RR_hip_joint": -0.1,
+                        "FL_thigh_joint": 0.8,
+                        "RL_thigh_joint": 1.0,
+                        "FR_thigh_joint": 0.8,
+                        "RR_thigh_joint": 1.0,
+                        "FL_calf_joint": -1.5,
+                        "RL_calf_joint": -1.5,
+                        "FR_calf_joint": -1.5,
+                        "RR_calf_joint": -1.5,
+                    },
                 },
-            },
-            "g1_dof12": {
+                "g1_dof12": {
                     "pos": torch.tensor([0.0, 0.0, 0.8]),
                     "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
                     "dof_pos": {
@@ -385,17 +391,20 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
                         "right_hip_pitch_joint": -0.1,
                         "right_knee_joint": 0.3,
                         "right_ankle_pitch_joint": -0.2,
-                        "right_ankle_roll_joint": 0.0,}
+                        "right_ankle_roll_joint": 0.0,
+                    },
                 },
-            }
+            },
         }
     ]
     """Initial states for the environment. Only used for legged robots, e.g., go2-12dof, g1-12dof, h1-12dof."""
+
     def __post_init__(self):
         super().__post_init__()
         """simulation time step in s"""
         self.dt = self.decimation * self.sim_params.dt
         from math import ceil
+
         # self.max_episode_length = ceil(self.max_episode_length_s / self.dt)
         self.episode_length = ceil(self.max_episode_length_s / self.dt)
         """maximum episode length in steps"""

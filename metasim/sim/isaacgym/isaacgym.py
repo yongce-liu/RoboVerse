@@ -309,7 +309,11 @@ class IsaacgymHandler(BaseSimHandler):
             # get config
             i_actuator_cfg = self.robot.actuators[dof_name]
             # FIXME: check whether add the attribute in the class "BaseActuatorCfg"
-            i_actuator_cfg.armature = i_actuator_cfg.armature if hasattr(i_actuator_cfg, "armature") and i_actuator_cfg.armature is not None else getattr(self.robot, "dof_armature", 0.01)
+            i_actuator_cfg.armature = (
+                i_actuator_cfg.armature
+                if hasattr(i_actuator_cfg, "armature") and i_actuator_cfg.armature is not None
+                else getattr(self.robot, "dof_armature", 0.01)
+            )
             # FIXME: check whether add the attribute in the class "BaseActuatorCfg"
             i_control_mode = self.robot.control_type[dof_name] if dof_name in self.robot.control_type else "position"
 

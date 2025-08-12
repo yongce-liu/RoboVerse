@@ -1,45 +1,46 @@
 from __future__ import annotations
 
 from typing import Callable
+
 import torch
 
 from metasim.cfg.scenario import ScenarioCfg
-from metasim.utils.state import TensorState
 from metasim.utils import configclass
 from metasim.utils.humanoid_robot_util import (
-    contact_forces_tensor,
     dof_pos_tensor,
     dof_vel_tensor,
-    ref_dof_pos_tensor,
 )
-
-from roboverse_learn.unitree_rl.envs.base_legged import LeggedRobot
-from roboverse_learn.unitree_rl.configs.base_legged import BaseLeggedTaskCfg, LeggedRobotCfgPPO
 from roboverse_learn.unitree_rl.configs import reward_funcs as rfs
+from roboverse_learn.unitree_rl.configs.base_legged import BaseLeggedTaskCfg, LeggedRobotCfgPPO
+from roboverse_learn.unitree_rl.envs.base_legged import LeggedRobot
 
 
 # Training Config
 @configclass
 class Dof12WalkingCfgPPO(LeggedRobotCfgPPO):
     policy = LeggedRobotCfgPPO.Policy(
-        init_noise_std = 0.8,
-        actor_hidden_dims = [32],
-        critic_hidden_dims = [32],
-        activation = 'elu',
-        rnn_type = 'lstm',
-        rnn_hidden_size = 64,
-        rnn_num_layers = 1)
+        init_noise_std=0.8,
+        actor_hidden_dims=[32],
+        critic_hidden_dims=[32],
+        activation="elu",
+        rnn_type="lstm",
+        rnn_hidden_size=64,
+        rnn_num_layers=1,
+    )
     algorithm = LeggedRobotCfgPPO.Algorithm(entropy_coef=0.01)
     runner = LeggedRobotCfgPPO.Runner(
-        experiment_name = "dof12_walking",
-        policy_class_name = "ActorCriticRecurrent",
-        max_iterations = 15001,
-        save_interval = 100)
+        experiment_name="dof12_walking",
+        policy_class_name="ActorCriticRecurrent",
+        max_iterations=15001,
+        save_interval=100,
+    )
+
 
 # Config
 @configclass
 class Dof12WalkingCfg(BaseLeggedTaskCfg):
     """Configuration for the walking task."""
+
     task_name = "dof12_walking"
 
     ppo_cfg = Dof12WalkingCfgPPO()
@@ -48,11 +49,8 @@ class Dof12WalkingCfg(BaseLeggedTaskCfg):
     c_frame_stack = 1
 
     reward_cfg = BaseLeggedTaskCfg.RewardCfg(
-        base_height_target=0.780,
-        tracking_sigma=5.0,
-        max_contact_force=700,
-        soft_torque_limit=0.001,
-        cycle_time = 0.8)
+        base_height_target=0.780, tracking_sigma=5.0, max_contact_force=700, soft_torque_limit=0.001, cycle_time=0.8
+    )
 
     reward_functions: list[Callable] = [
         rfs.reward_lin_vel_z,
@@ -83,11 +81,10 @@ class Dof12WalkingCfg(BaseLeggedTaskCfg):
         "lin_vel_z": -2.0,
         "ang_vel_xy": -0.05,
         "orientation": -1.0,
-        "torques": -0.00001,
         "dof_vel": -1e-3,
         "dof_acc": -2.5e-7,
         "base_height": 1.0,
-        "feet_air_time":  0.0,
+        "feet_air_time": 0.0,
         "collision": 0.0,
         "feet_stumble": -0.0,
         "action_rate": -0.01,
@@ -114,6 +111,7 @@ class Dof12WalkingTask(LeggedRobot):
     """
     Wrapper for walking task for legged robots.
     """
+
     def __init__(self, scenario: ScenarioCfg):
         super().__init__(scenario)
 
@@ -122,7 +120,7 @@ class Dof12WalkingTask(LeggedRobot):
         self.noise_scale_vec = self._get_noise_scale_vec(self.cfg)
 
     def _get_noise_scale_vec(self, cfg: BaseLeggedTaskCfg):
-        """ Sets a vector used to scale the noise added to the observations.
+        """Sets a vector used to scale the noise added to the observations.
             [NOTE]: Must be adapted when changing the observations structure
 
         Args:
@@ -137,11 +135,15 @@ class Dof12WalkingTask(LeggedRobot):
         noise_level = self.cfg.noise.noise_level
         noise_vec[:3] = noise_scales.ang_vel * noise_level * self.cfg.normalization.obs_scales.ang_vel
         noise_vec[3:6] = noise_scales.gravity * noise_level
-        noise_vec[6:9] = 0. # commands
-        noise_vec[9:9+self.num_actions] = noise_scales.dof_pos * noise_level * self.cfg.normalization.obs_scales.dof_pos
-        noise_vec[9+self.num_actions:9+2*self.num_actions] = noise_scales.dof_vel * noise_level * self.cfg.normalization.obs_scales.dof_vel
-        noise_vec[9+2*self.num_actions:9+3*self.num_actions] = 0. # previous actions
-        noise_vec[9+3*self.num_actions:9+3*self.num_actions+2] = 0. # sin/cos phase
+        noise_vec[6:9] = 0.0  # commands
+        noise_vec[9 : 9 + self.num_actions] = (
+            noise_scales.dof_pos * noise_level * self.cfg.normalization.obs_scales.dof_pos
+        )
+        noise_vec[9 + self.num_actions : 9 + 2 * self.num_actions] = (
+            noise_scales.dof_vel * noise_level * self.cfg.normalization.obs_scales.dof_vel
+        )
+        noise_vec[9 + 2 * self.num_actions : 9 + 3 * self.num_actions] = 0.0  # previous actions
+        noise_vec[9 + 3 * self.num_actions : 9 + 3 * self.num_actions + 2] = 0.0  # sin/cos phase
 
         return noise_vec
 
@@ -169,26 +171,34 @@ class Dof12WalkingTask(LeggedRobot):
         dq = dof_vel_tensor(envstate, self.robot.name) * self.cfg.normalization.obs_scales.dof_vel
 
         # --- Assemble observation buffer
-        self.privileged_obs_buf = torch.cat((self.base_lin_vel * self.cfg.normalization.obs_scales.lin_vel,
-                                            self.base_ang_vel  * self.cfg.normalization.obs_scales.ang_vel,
-                                            self.projected_gravity,
-                                            self.commands[:, :3] * self.commands_scale,
-                                            q,
-                                            dq,
-                                            self.actions,
-                                            sin_phase,
-                                            cos_phase
-                                            ),dim=-1)
+        self.privileged_obs_buf = torch.cat(
+            (
+                self.base_lin_vel * self.cfg.normalization.obs_scales.lin_vel,
+                self.base_ang_vel * self.cfg.normalization.obs_scales.ang_vel,
+                self.projected_gravity,
+                self.commands[:, :3] * self.commands_scale,
+                q,
+                dq,
+                self.actions,
+                sin_phase,
+                cos_phase,
+            ),
+            dim=-1,
+        )
 
-        obs_buf = torch.cat((self.base_ang_vel * self.cfg.normalization.obs_scales.ang_vel, # 3
-                            self.projected_gravity, # 3
-                            self.commands[:, :3] * self.commands_scale, # 3
-                            q, # num_actions
-                            dq, # num_actions
-                            self.actions, # num_actions
-                            sin_phase, # 1
-                            cos_phase, # 1
-                        ), dim=-1,)
+        obs_buf = torch.cat(
+            (
+                self.base_ang_vel * self.cfg.normalization.obs_scales.ang_vel,  # 3
+                self.projected_gravity,  # 3
+                self.commands[:, :3] * self.commands_scale,  # 3
+                q,  # num_actions
+                dq,  # num_actions
+                self.actions,  # num_actions
+                sin_phase,  # 1
+                cos_phase,  # 1
+            ),
+            dim=-1,
+        )
         # print(self.cfg.default_joint_pd_target), input()
         # Frame stacking (reuse existing obs_history)
         obs_now = obs_buf.clone()

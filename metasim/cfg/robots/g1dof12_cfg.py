@@ -29,14 +29,12 @@ class G1Dof12Cfg(BaseRobotCfg):
         "left_knee_joint": BaseActuatorCfg(stiffness=150, damping=4, torque_limit=139),
         "left_ankle_pitch_joint": BaseActuatorCfg(stiffness=40, damping=2, torque_limit=35),
         "left_ankle_roll_joint": BaseActuatorCfg(stiffness=40, damping=2, torque_limit=35),
-
         "right_hip_pitch_joint": BaseActuatorCfg(stiffness=100, damping=2, torque_limit=88),
         "right_hip_roll_joint": BaseActuatorCfg(stiffness=100, damping=2, torque_limit=139),
         "right_hip_yaw_joint": BaseActuatorCfg(stiffness=100, damping=2, torque_limit=88),
         "right_knee_joint": BaseActuatorCfg(stiffness=150, damping=4, torque_limit=139),
         "right_ankle_pitch_joint": BaseActuatorCfg(stiffness=40, damping=2, torque_limit=35),
         "right_ankle_roll_joint": BaseActuatorCfg(stiffness=40, damping=2, torque_limit=35),
-
     }
 
     joint_limits: dict[str, tuple[float, float]] = {
@@ -95,7 +93,6 @@ class G1Dof12Cfg(BaseRobotCfg):
         "left_knee_joint": "effort",
         "left_ankle_pitch_joint": "effort",
         "left_ankle_roll_joint": "effort",
-
         "right_hip_pitch_joint": "effort",
         "right_hip_roll_joint": "effort",
         "right_hip_yaw_joint": "effort",

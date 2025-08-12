@@ -43,6 +43,7 @@ def parse_arguments(description="humanoid rl task arguments", custom_parameters=
 
     return parser.parse_args()
 
+
 def get_args(test=False):
     """Get the command line arguments."""
 
@@ -100,10 +101,16 @@ def get_args(test=False):
         {"name": "--use_wandb", "action": "store_true", "default": True, "help": "Use wandb for logging"},
         {"name": "--wandb", "type": str, "default": "g1_walking", "help": "Wandb project name"},
         {"name": "--jit_load", "type": bool, "default": False, "help": "Whether to load the JIT model"},
-        {"name": "--reindex_actions", "type": bool, "default": False, "help": "Whether to reindex actions from the default order sequence to a sorted (ascending) order"},
+        {
+            "name": "--reindex_actions",
+            "type": bool,
+            "default": False,
+            "help": "Whether to reindex actions from the default order sequence to a sorted (ascending) order",
+        },
     ]
     args = parse_arguments(custom_parameters=custom_parameters)
     return args
+
 
 def get_log_dir(args: argparse.Namespace, scenario: ScenarioCfg, now=None) -> str:
     """Get the log directory."""
@@ -119,6 +126,7 @@ def get_log_dir(args: argparse.Namespace, scenario: ScenarioCfg, now=None) -> st
     log.info("Log directory: {}", log_dir)
     return log_dir
 
+
 def get_class(name: str, suffix: str, library="roboverse_learn.unitree_rl"):
     """Get the class wrappers.
     Example:
@@ -133,6 +141,7 @@ def get_class(name: str, suffix: str, library="roboverse_learn.unitree_rl"):
     wrapper_module = importlib.import_module(library)
     wrapper_cls = getattr(wrapper_module, f"{task_name_camel}{suffix}")
     return wrapper_cls
+
 
 def get_body_reindexed_indices_from_substring(
     sim_handler: BaseSimHandler, obj_name: str, body_names: list[str], device
@@ -150,6 +159,7 @@ def get_body_reindexed_indices_from_substring(
     index = torch.tensor(matches, dtype=torch.int32, device=device)
     return index
 
+
 def get_joint_reindexed_indices_from_substring(
     sim_handler: BaseSimHandler, obj_name: str, joint_names: list[str], device: str
 ):
@@ -166,10 +176,12 @@ def get_joint_reindexed_indices_from_substring(
     index = torch.tensor(matches, dtype=torch.int32, device=device)
     return index
 
+
 @torch.jit.script
 def torch_rand_float(lower: float, upper: float, shape: tuple[int, int], device: str) -> torch.Tensor:
     """Generate a tensor of random floats in the range [lower, upper]."""
     return (upper - lower) * torch.rand(*shape, device=device) + lower
+
 
 def export_policy_as_jit(actor_critic, path, filename=None):
     """Export the policy as a JIT model."""
@@ -177,12 +189,14 @@ def export_policy_as_jit(actor_critic, path, filename=None):
     traced_script_module = torch.jit.script(model)
     traced_script_module.save(path)
 
+
 def get_export_jit_path(args: argparse.Namespace, scenario: ScenarioCfg) -> str:
     """Get the path to export the JIT model."""
     load_root = get_load_root_dir(args, scenario)
     exported_root_dir = f"{load_root}/exported"
     os.makedirs(exported_root_dir, exist_ok=True)
     return f"{load_root}/exported/model_exported_jit.pt"
+
 
 def get_load_path(args: argparse.Namespace, scenario: ScenarioCfg) -> str:
     """Get the path to load the model from."""
@@ -197,6 +211,7 @@ def get_load_path(args: argparse.Namespace, scenario: ScenarioCfg) -> str:
         load_path = f"{load_root}/model_{args.checkpoint}.pt"
     return load_path
 
+
 def get_load_root_dir(args: argparse.Namespace, scenario: ScenarioCfg) -> str:
     """Get the root directory to load the model from."""
 
@@ -208,8 +223,11 @@ def get_load_root_dir(args: argparse.Namespace, scenario: ScenarioCfg) -> str:
     load_root = f"./outputs/unitree_rl/{task_name}/{args.load_run}"
     return load_root
 
+
 def make_robots(args):
-    robot_names = args.robot.replace(" ", "").replace("[", "").replace("]", "").replace("'", "").replace('"', '').split(",")
+    robot_names = (
+        args.robot.replace(" ", "").replace("[", "").replace("]", "").replace("'", "").replace('"', "").split(",")
+    )
     # print(robots_name)
     robots = []
     for _name in robot_names:
@@ -217,6 +235,7 @@ def make_robots(args):
         robot = get_robot(_name)
         robots.append(robot)
     return robot_names, robots
+
 
 def find_unique_candidate(candidates: list[any], data_base: list[any]) -> int:
     found_candidates = []

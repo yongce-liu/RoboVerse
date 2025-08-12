@@ -15,7 +15,6 @@ from metasim.cfg.robots import BaseRobotCfg
 if TYPE_CHECKING:
     from metasim.cfg.scenario import ScenarioCfg
 
-from metasim.constants import TaskType
 from metasim.queries.base import BaseQueryType
 from metasim.sim import BaseSimHandler, EnvWrapper, GymEnvWrapper
 from metasim.sim.parallel import ParallelSimWrapper
@@ -308,15 +307,15 @@ class MujocoHandler(BaseSimHandler):
         # free_joints = [j for j in robot_attached.find_all('body') if j.get_attributes().get('type') == 'free']
         if not self.robot.fix_base_link:
             # for joint in free_joints:
-                # joint.remove()
+            # joint.remove()
             robot_attached.add("freejoint")
-        if not hasattr(robot_attached, 'inertial') or robot_attached.inertial is None:
-            child_body = robot_attached.find_all('body')[0]
+        if not hasattr(robot_attached, "inertial") or robot_attached.inertial is None:
+            child_body = robot_attached.find_all("body")[0]
             pos = child_body.inertial.pos
             robot_attached.pos = child_body.pos
             child_body.pos = "0 0 0"  # Reset child body position to origin with respect to the attached robot
             robot_attached.quat = child_body.quat if child_body.quat is not None else "1 0 0 0"
-            robot_attached.add('inertial', mass="1e-9", diaginertia="1e-9 1e-9 1e-9", pos=pos)
+            robot_attached.add("inertial", mass="1e-9", diaginertia="1e-9 1e-9 1e-9", pos=pos)
 
         self.robot_attached = robot_attached
         self.mj_objects[self.robot.name] = robot_xml
@@ -560,7 +559,7 @@ class MujocoHandler(BaseSimHandler):
         joint_names = self.get_joint_names(self.robot.name, sort=True)
         if isinstance(actions, torch.Tensor):
             tmp_arr = actions.detach().to(dtype=torch.float32, device="cpu").numpy()[0]
-            actions = [{obj_name: {"dof_pos_target": {_name:tmp_arr[i] for i, _name in enumerate(joint_names)}}}]
+            actions = [{obj_name: {"dof_pos_target": {_name: tmp_arr[i] for i, _name in enumerate(joint_names)}}}]
 
         self._actions_cache = actions
 
@@ -758,6 +757,7 @@ class MujocoHandler(BaseSimHandler):
             contact_forces[body2] -= f_contact
 
         return contact_forces
+
     ############################################################
     ## Misc
     ############################################################
@@ -780,6 +780,7 @@ class MujocoHandler(BaseSimHandler):
     @property
     def robot_num_dof(self) -> int:
         return self._robot_num_dof
+
 
 MujocoParallelHandler = ParallelSimWrapper(MujocoHandler)
 MujocoEnv: type[EnvWrapper[MujocoHandler]] = GymEnvWrapper(MujocoParallelHandler)

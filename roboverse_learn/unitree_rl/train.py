@@ -11,7 +11,6 @@ except ImportError:
     pass
 
 import rootutils
-import torch
 
 rootutils.setup_root(__file__, pythonpath=True)
 
@@ -19,7 +18,7 @@ import wandb
 from rsl_rl.runners.on_policy_runner import OnPolicyRunner
 
 from metasim.cfg.scenario import ScenarioCfg
-from roboverse_learn.unitree_rl.utils import get_args, get_log_dir, get_class, make_robots
+from roboverse_learn.unitree_rl.utils import get_args, get_class, get_log_dir, make_robots
 
 
 def train(args):
@@ -36,7 +35,7 @@ def train(args):
         num_envs=args.num_envs,
         sim=args.sim,
         headless=args.headless,
-        cameras=[]
+        cameras=[],
     )
 
     use_wandb = args.use_wandb
@@ -69,12 +68,12 @@ def train(args):
         )
     except Exception as e:
         ppo_runner = OnPolicyRunner(
-        env=env,
-        train_cfg=env.train_cfg,
-        device=env.device,
-        log_dir=log_dir,
-        # wandb=use_wandb,
-        # args=args,
+            env=env,
+            train_cfg=env.train_cfg,
+            device=env.device,
+            log_dir=log_dir,
+            # wandb=use_wandb,
+            # args=args,
         )
     if args.load_run:
         ppo_runner.load(args.load_run)

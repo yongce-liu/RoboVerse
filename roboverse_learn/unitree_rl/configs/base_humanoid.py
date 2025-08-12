@@ -6,8 +6,8 @@ from dataclasses import MISSING
 
 import torch
 
-from metasim.utils import configclass
 from metasim.cfg.control import ControlCfg
+from metasim.utils import configclass
 
 from .base_legged import BaseLeggedTaskCfg
 
@@ -36,6 +36,7 @@ class BaseHumanoidCfg(BaseLeggedTaskCfg):
     elbow_indices: indices of the elbows joints
     contact_indices: indices of the contact joints
     """
+
     task_name: str = "humanoid_task"
     human: HumanoidExtraCfg = HumanoidExtraCfg()
     elbow_indices: torch.Tensor = MISSING
@@ -44,15 +45,12 @@ class BaseHumanoidCfg(BaseLeggedTaskCfg):
     torso_indices: torch.Tensor = MISSING
     contact_indices: torch.Tensor = MISSING
     """revised params inherit from parent config"""
-    reward_cfg = BaseLeggedTaskCfg.RewardCfg(base_height_target=0.80,
-                                             tracking_sigma=5.0,
-                                             max_contact_force=700,
-                                             soft_torque_limit=0.001)
+    reward_cfg = BaseLeggedTaskCfg.RewardCfg(
+        base_height_target=0.80, tracking_sigma=5.0, max_contact_force=700, soft_torque_limit=0.001
+    )
     env_spacing: float = 1.0
     max_episode_length_s: int = 24
-    control = ControlCfg(action_scale=0.5,
-                         action_offset=True,
-                         torque_limit_scale=0.85)
+    control = ControlCfg(action_scale=0.5, action_offset=True, torque_limit_scale=0.85)
 
     init_states = [
         {
@@ -110,10 +108,10 @@ class BaseHumanoidCfg(BaseLeggedTaskCfg):
                         "right_elbow": 0.0,
                     },
                 },
-                "g1_dex3":{
+                "g1_dex3": {
                     "pos": torch.tensor([0.0, 0.0, 0.735]),
                     "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
-                    "dof_pos":{
+                    "dof_pos": {
                         # Hips & legs
                         "left_hip_pitch_joint": -0.4,
                         "left_hip_roll_joint": 0.0,
@@ -127,12 +125,10 @@ class BaseHumanoidCfg(BaseLeggedTaskCfg):
                         "right_knee_joint": 0.8,
                         "right_ankle_pitch_joint": -0.4,
                         "right_ankle_roll_joint": 0.0,
-
                         # Waist
                         "waist_yaw_joint": 0.0,
                         "waist_roll_joint": 0.0,
                         "waist_pitch_joint": 0.0,
-
                         # Shoulders & arms
                         "left_shoulder_pitch_joint": 0.0,
                         "left_shoulder_roll_joint": 0.0,
@@ -148,7 +144,6 @@ class BaseHumanoidCfg(BaseLeggedTaskCfg):
                         "right_wrist_roll_joint": 0.0,
                         "right_wrist_pitch_joint": 0.0,
                         "right_wrist_yaw_joint": 0.0,
-
                         # Hands
                         "left_hand_thumb_0_joint": 0.0,
                         "left_hand_thumb_1_joint": 0.0,
@@ -164,7 +159,7 @@ class BaseHumanoidCfg(BaseLeggedTaskCfg):
                         "right_hand_middle_1_joint": 0.0,
                         "right_hand_index_0_joint": 0.0,
                         "right_hand_index_1_joint": 0.0,
-                        }
+                    },
                 },
             },
         }

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from typing import Callable
 from functools import partial
+from typing import Callable
+
 import torch
 
 from metasim.cfg.scenario import ScenarioCfg
-from metasim.utils.state import TensorState
 from metasim.utils import configclass
 from metasim.utils.humanoid_robot_util import (
     contact_forces_tensor,
@@ -13,13 +13,11 @@ from metasim.utils.humanoid_robot_util import (
     dof_vel_tensor,
     ref_dof_pos_tensor,
 )
-
-from roboverse_learn.unitree_rl.utils import find_unique_candidate
-from roboverse_learn.unitree_rl.envs.base_humanoid import Humanoid
-from roboverse_learn.unitree_rl.envs.base_legged import LeggedRobot
-from roboverse_learn.unitree_rl.configs.base_legged import BaseLeggedTaskCfg, LeggedRobotCfgPPO
-from roboverse_learn.unitree_rl.configs.base_humanoid import BaseHumanoidCfg
 from roboverse_learn.unitree_rl.configs import reward_funcs as rfs
+from roboverse_learn.unitree_rl.configs.base_humanoid import BaseHumanoidCfg
+from roboverse_learn.unitree_rl.configs.base_legged import LeggedRobotCfgPPO
+from roboverse_learn.unitree_rl.envs.base_humanoid import Humanoid
+from roboverse_learn.unitree_rl.utils import find_unique_candidate
 
 
 @configclass
@@ -29,15 +27,15 @@ class HumanoidWalkingCfgPPO(LeggedRobotCfgPPO):
     algorithm = LeggedRobotCfgPPO.Algorithm(
         entropy_coef=0.001, learning_rate=1e-5, num_learning_epochs=2, gamma=0.994, lam=0.9
     )
-    runner = LeggedRobotCfgPPO.Runner(num_steps_per_env = 60,
-                                      max_iterations = 15001,
-                                      save_interval = 100,
-                                      experiment_name = "humanoid_walking")
+    runner = LeggedRobotCfgPPO.Runner(
+        num_steps_per_env=60, max_iterations=15001, save_interval=100, experiment_name="humanoid_walking"
+    )
 
 
 @configclass
 class HumanoidWalkingCfg(BaseHumanoidCfg):
     """Configuration for the walking task."""
+
     task_name = "humanoid_walking"
 
     ppo_cfg = HumanoidWalkingCfgPPO()
@@ -148,13 +146,20 @@ class HumanoidWalkingTask(Humanoid):
         """get joint indices for reference pos computation."""
         joint_names = self.env.handler.get_joint_names(self.robot.name)
         find_func = partial(find_unique_candidate, data_base=joint_names)
-        name_extend_func = lambda x: [x, f"{x}_joint"]
+
+        def name_extend_func(x):
+            return [x, f"{x}_joint"]
+
         self.left_hip_pitch_joint_idx = find_func(candidates=name_extend_func("left_hip_pitch"))
         self.left_knee_joint_idx = find_func(candidates=name_extend_func("left_knee"))
         self.right_hip_pitch_joint_idx = find_func(candidates=name_extend_func("right_hip_pitch"))
         self.right_knee_joint_idx = find_func(candidates=name_extend_func("right_knee"))
-        self.left_ankle_joint_idx = find_func(candidates=name_extend_func("left_ankle")+name_extend_func("left_ankle_pitch"))
-        self.right_ankle_joint_idx = find_func(candidates=name_extend_func("right_ankle")+name_extend_func("right_ankle_pitch"))
+        self.left_ankle_joint_idx = find_func(
+            candidates=name_extend_func("left_ankle") + name_extend_func("left_ankle_pitch")
+        )
+        self.right_ankle_joint_idx = find_func(
+            candidates=name_extend_func("right_ankle") + name_extend_func("right_ankle_pitch")
+        )
 
     def _compute_ref_state(self):
         """compute reference target position for walking task."""
@@ -196,13 +201,17 @@ class HumanoidWalkingTask(Humanoid):
         self.add_noise = self.cfg.noise.add_noise
         noise_scales = self.cfg.noise.noise_scales
         noise_level = self.cfg.noise.noise_level
-        noise_vec[0:3] = 0. # commands
+        noise_vec[0:3] = 0.0  # commands
         noise_vec[3:6] = noise_scales.ang_vel * noise_level * self.cfg.normalization.obs_scales.ang_vel
         noise_vec[6:9] = noise_scales.gravity * noise_level
-        noise_vec[9:9+self.num_actions] = noise_scales.dof_pos * noise_level * self.cfg.normalization.obs_scales.dof_pos
-        noise_vec[9+self.num_actions:9+2*self.num_actions] = noise_scales.dof_vel * noise_level * self.cfg.normalization.obs_scales.dof_vel
-        noise_vec[9+2*self.num_actions:9+3*self.num_actions] = 0. # previous actions
-        noise_vec[9+3*self.num_actions:9+3*self.num_actions+2] = 0. # sin/cos phase
+        noise_vec[9 : 9 + self.num_actions] = (
+            noise_scales.dof_pos * noise_level * self.cfg.normalization.obs_scales.dof_pos
+        )
+        noise_vec[9 + self.num_actions : 9 + 2 * self.num_actions] = (
+            noise_scales.dof_vel * noise_level * self.cfg.normalization.obs_scales.dof_vel
+        )
+        noise_vec[9 + 2 * self.num_actions : 9 + 3 * self.num_actions] = 0.0  # previous actions
+        noise_vec[9 + 3 * self.num_actions : 9 + 3 * self.num_actions + 2] = 0.0  # sin/cos phase
 
         return noise_vec
 
@@ -240,8 +249,8 @@ class HumanoidWalkingTask(Humanoid):
                 self.body_mass / 30.0,  # 1
                 stance_mask,  # 2
                 contact_mask,  # 2
-                sin_phase, # 1
-                cos_phase, # 1
+                sin_phase,  # 1
+                cos_phase,  # 1
             ),
             dim=-1,
         )
@@ -251,7 +260,7 @@ class HumanoidWalkingTask(Humanoid):
                 self.commands[:, :3] * self.commands_scale,  # 3
                 self.base_ang_vel * self.cfg.normalization.obs_scales.ang_vel,  # 3
                 self.base_euler_xyz * self.cfg.normalization.obs_scales.quat,  # 3
-                self.projected_gravity, # 3
+                self.projected_gravity,  # 3
                 q,  # |A|
                 dq,  # |A|
                 self.actions,

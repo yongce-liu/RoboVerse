@@ -1,18 +1,19 @@
 import os
-import rootutils
-PROJECT_ROOT_DIR = str(rootutils.setup_root(__file__, pythonpath=True))
-UNITREE_GYM_ROOT_DIR = os.path.join(PROJECT_ROOT_DIR, 'roboverse_learn', 'unitree_rl')
 
-from roboverse_learn.unitree_rl.deploy.mujoco_utils import IndependentMujocoController
+import rootutils
+
+PROJECT_ROOT_DIR = str(rootutils.setup_root(__file__, pythonpath=True))
+UNITREE_GYM_ROOT_DIR = os.path.join(PROJECT_ROOT_DIR, "roboverse_learn", "unitree_rl")
+
+import numpy as np
+
 from metasim.cfg.scenario import ScenarioCfg
+from roboverse_learn.unitree_rl.deploy.mujoco_utils import IndependentMujocoController
 from roboverse_learn.unitree_rl.utils import (
     get_class,
     make_robots,
+    parse_arguments,
 )
-
-from roboverse_learn.unitree_rl.utils import parse_arguments
-import numpy as np
-
 
 
 def get_gravity_orientation(quaternion):
@@ -54,7 +55,7 @@ if __name__ == "__main__":
             "help": "Resume training or start testing from a checkpoint. Overrides config file if provided.",
         },
         {"name": "--headless", "action": "store_true", "default": True, "help": "Force display off at all times"},
-        {"name": "--config_file", "type": str, "default": "g1.yaml", "help": "config file name in the config folder"}
+        {"name": "--config_file", "type": str, "default": "g1.yaml", "help": "config file name in the config folder"},
     ]
 
     args = parse_arguments(custom_parameters=custom_parameters)
