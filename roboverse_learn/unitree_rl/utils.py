@@ -99,6 +99,8 @@ def get_args(test=False):
         {"name": "--headless", "action": "store_true", "default": True, "help": "Force display off at all times"},
         {"name": "--use_wandb", "action": "store_true", "default": True, "help": "Use wandb for logging"},
         {"name": "--wandb", "type": str, "default": "g1_walking", "help": "Wandb project name"},
+        {"name": "--jit_load", "type": bool, "default": False, "help": "Whether to load the JIT model"},
+        {"name": "--reindex_actions", "type": bool, "default": False, "help": "Whether to reindex actions from the default order sequence to a sorted (ascending) order"},
     ]
     args = parse_arguments(custom_parameters=custom_parameters)
     return args

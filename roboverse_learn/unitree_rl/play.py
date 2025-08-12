@@ -111,11 +111,11 @@ def play(args):
 if __name__ == "__main__":
     EXPORT_POLICY = False
     args = get_args()
-    args.task = "dof12_walking"
-    args.robot = "g1_dof12"
-    args.load_run = "pretrain"
-    args.checkpoint = 0
-    args.sim = "mujoco"
-    args.jit_load = True
-    args.reindex_actions = True
+    args.task = "dof12_walking" if args.task is None else args.task
+    args.robot = "g1_dof12" if args.robot is None else args.robot
+    args.load_run = "pretrain" if args.load_run is None else args.load_run
+    args.checkpoint = 0 if args.checkpoint is None else args.checkpoint
+    args.sim = "mujoco" if args.sim is None else args.sim
+    args.jit_load = False if args.jit_load is None else args.jit_load
+    args.reindex_actions = False if args.reindex_actions is None else args.reindex_actions
     play(args)
