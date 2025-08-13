@@ -11,7 +11,6 @@ from metasim.cfg.scenario import ScenarioCfg
 from metasim.utils.humanoid_robot_util import (
     contact_forces_tensor,
     dof_vel_tensor,
-    gait_phase_tensor,
     get_euler_xyz_tensor,
     robot_ang_velocity_tensor,
     robot_position_tensor,
@@ -274,27 +273,6 @@ class LeggedRobot(RslRlWrapper):
         # set small commands to zero
         self.commands[env_ids, :2] *= (torch.norm(self.commands[env_ids, :2], dim=1) > 0.2).unsqueeze(1)
 
-    def _get_gait_phase(self):
-        """Add phase into states"""
-        phase = self._get_phase()
-        sin_pos = torch.sin(2 * torch.pi * phase)
-        # Add double support phase
-        stance_mask = torch.zeros((self.num_envs, len(self.feet_indices)), device=self.device)
-        # left foot stance
-        stance_mask[:, 0] = sin_pos >= 0
-        # right foot stance
-        stance_mask[:, 1] = sin_pos < 0
-        # Double support phase
-        stance_mask[torch.abs(sin_pos) < 0.1] = 1
-        return stance_mask
-
-    def _get_phase(
-        self,
-    ):
-        cycle_time = self.cfg.reward_cfg.cycle_time
-        phase = self.episode_length_buf * self.dt % cycle_time / cycle_time
-        return phase
-
     @staticmethod
     def get_reward_fn(target: str, reward_functions: list[Callable]) -> Callable:
         fn = next((f for f in reward_functions if f.__name__ == target), None)
@@ -512,7 +490,6 @@ class LeggedRobot(RslRlWrapper):
         """
         Parse all the states to prepare for reward computation, legged_robot level reward computation.
         """
-        self._parse_gait_phase(envstate)
         self._parse_action(envstate)
         self._parse_history_state(envstate)
         self._parse_base_euler_xyz(envstate)
@@ -520,9 +497,6 @@ class LeggedRobot(RslRlWrapper):
         self._parse_command(envstate)
         self._parse_projected_gravity(envstate)
         self._parse_local_base_vel(envstate)
-
-    def _parse_gait_phase(self, envstate: TensorState):
-        envstate.robots[self.robot.name].extra["gait_phase"] = self._get_gait_phase()
 
     def _parse_action(self, envstate: TensorState):
         envstate.robots[self.robot.name].extra["actions"] = self.actions
@@ -548,10 +522,7 @@ class LeggedRobot(RslRlWrapper):
 
     def _parse_feet_air_time(self, envstate: TensorState):
         contact = contact_forces_tensor(envstate, self.robot.name)[:, self.feet_indices, 2] > 1.0
-        ################################################################
-        stance_mask = gait_phase_tensor(envstate, self.robot.name)
-        ################################################################
-        contact_filt = torch.logical_or(torch.logical_or(contact, stance_mask), self.last_contacts)
+        contact_filt = torch.logical_or(contact, self.last_contacts)
         self.last_contacts = contact
         first_contact = (self.feet_air_time > 0.0) * contact_filt
         self.feet_air_time += self.dt

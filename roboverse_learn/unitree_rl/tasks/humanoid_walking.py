@@ -14,8 +14,9 @@ from metasim.utils.humanoid_robot_util import (
     ref_dof_pos_tensor,
 )
 from roboverse_learn.unitree_rl.configs import reward_funcs as rfs
-from roboverse_learn.unitree_rl.configs.base_humanoid import BaseHumanoidCfg
-from roboverse_learn.unitree_rl.configs.base_legged import LeggedRobotCfgPPO
+
+# from roboverse_learn.unitree_rl.configs.base_humanoid import BaseHumanoidCfg
+from roboverse_learn.unitree_rl.configs.base_legged import BaseLeggedTaskCfg, ControlCfg, LeggedRobotCfgPPO
 from roboverse_learn.unitree_rl.envs.base_humanoid import Humanoid
 from roboverse_learn.unitree_rl.utils import find_unique_candidate
 
@@ -33,15 +34,135 @@ class HumanoidWalkingCfgPPO(LeggedRobotCfgPPO):
 
 
 @configclass
-class HumanoidWalkingCfg(BaseHumanoidCfg):
+class HumanoidWalkingCfg(BaseLeggedTaskCfg):
     """Configuration for the walking task."""
 
     task_name = "humanoid_walking"
+    env_spacing: float = 1.0
+    max_episode_length_s: int = 24
+    control = ControlCfg(action_scale=0.5, action_offset=True, torque_limit_scale=0.85)
+
+    init_states = [
+        {
+            "objects": {},
+            "robots": {
+                "h1_wrist": {
+                    "pos": torch.tensor([0.0, 0.0, 1.0]),
+                    "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
+                    "dof_pos": {
+                        "left_hip_yaw": 0.0,
+                        "left_hip_roll": 0.0,
+                        "left_hip_pitch": -0.4,
+                        "left_knee": 0.8,
+                        "left_ankle": -0.4,
+                        "right_hip_yaw": 0.0,
+                        "right_hip_roll": 0.0,
+                        "right_hip_pitch": -0.4,
+                        "right_knee": 0.8,
+                        "right_ankle": -0.4,
+                        "torso": 0.0,
+                        "left_shoulder_pitch": 0.0,
+                        "left_shoulder_roll": 0.0,
+                        "left_shoulder_yaw": 0.0,
+                        "left_elbow": 0.0,
+                        "right_shoulder_pitch": 0.0,
+                        "right_shoulder_roll": 0.0,
+                        "right_shoulder_yaw": 0.0,
+                        "right_elbow": 0.0,
+                    },
+                },
+                "g1": {
+                    "pos": torch.tensor([0.0, 0.0, 0.735]),
+                    "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
+                    "dof_pos": {
+                        "left_hip_pitch": -0.4,
+                        "left_hip_roll": 0,
+                        "left_hip_yaw": 0.0,
+                        "left_knee": 0.8,
+                        "left_ankle_pitch": -0.4,
+                        "left_ankle_roll": 0,
+                        "right_hip_pitch": -0.4,
+                        "right_hip_roll": 0,
+                        "right_hip_yaw": 0.0,
+                        "right_knee": 0.8,
+                        "right_ankle_pitch": -0.4,
+                        "right_ankle_roll": 0,
+                        "waist_yaw": 0.0,
+                        "left_shoulder_pitch": 0.0,
+                        "left_shoulder_roll": 0.0,
+                        "left_shoulder_yaw": 0.0,
+                        "left_elbow": 0.0,
+                        "right_shoulder_pitch": 0.0,
+                        "right_shoulder_roll": 0.0,
+                        "right_shoulder_yaw": 0.0,
+                        "right_elbow": 0.0,
+                    },
+                },
+                "g1_dex3": {
+                    "pos": torch.tensor([0.0, 0.0, 0.735]),
+                    "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
+                    "dof_pos": {
+                        # Hips & legs
+                        "left_hip_pitch_joint": -0.4,
+                        "left_hip_roll_joint": 0.0,
+                        "left_hip_yaw_joint": 0.0,
+                        "left_knee_joint": 0.8,
+                        "left_ankle_pitch_joint": -0.4,
+                        "left_ankle_roll_joint": 0.0,
+                        "right_hip_pitch_joint": -0.4,
+                        "right_hip_roll_joint": 0.0,
+                        "right_hip_yaw_joint": 0.0,
+                        "right_knee_joint": 0.8,
+                        "right_ankle_pitch_joint": -0.4,
+                        "right_ankle_roll_joint": 0.0,
+                        # Waist
+                        "waist_yaw_joint": 0.0,
+                        "waist_roll_joint": 0.0,
+                        "waist_pitch_joint": 0.0,
+                        # Shoulders & arms
+                        "left_shoulder_pitch_joint": 0.0,
+                        "left_shoulder_roll_joint": 0.0,
+                        "left_shoulder_yaw_joint": 0.0,
+                        "left_elbow_joint": 0.0,
+                        "left_wrist_roll_joint": 0.0,
+                        "left_wrist_pitch_joint": 0.0,
+                        "left_wrist_yaw_joint": 0.0,
+                        "right_shoulder_pitch_joint": 0.0,
+                        "right_shoulder_roll_joint": 0.0,
+                        "right_shoulder_yaw_joint": 0.0,
+                        "right_elbow_joint": 0.0,
+                        "right_wrist_roll_joint": 0.0,
+                        "right_wrist_pitch_joint": 0.0,
+                        "right_wrist_yaw_joint": 0.0,
+                        # Hands
+                        "left_hand_thumb_0_joint": 0.0,
+                        "left_hand_thumb_1_joint": 0.0,
+                        "left_hand_thumb_2_joint": 0.0,
+                        "left_hand_middle_0_joint": 0.0,
+                        "left_hand_middle_1_joint": 0.0,
+                        "left_hand_index_0_joint": 0.0,
+                        "left_hand_index_1_joint": 0.0,
+                        "right_hand_thumb_0_joint": 0.0,
+                        "right_hand_thumb_1_joint": 0.0,
+                        "right_hand_thumb_2_joint": 0.0,
+                        "right_hand_middle_0_joint": 0.0,
+                        "right_hand_middle_1_joint": 0.0,
+                        "right_hand_index_0_joint": 0.0,
+                        "right_hand_index_1_joint": 0.0,
+                    },
+                },
+            },
+        }
+    ]
 
     ppo_cfg = HumanoidWalkingCfgPPO()
 
     frame_stack = 1
     c_frame_stack = 3
+
+    reward_cfg = BaseLeggedTaskCfg.RewardCfg(
+        base_height_target=0.80, tracking_sigma=5.0, max_contact_force=700, soft_torque_limit=0.001
+    )
 
     reward_functions: list[Callable] = [
         rfs.reward_lin_vel_z,

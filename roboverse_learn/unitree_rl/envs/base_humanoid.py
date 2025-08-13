@@ -3,9 +3,9 @@ from __future__ import annotations
 import torch
 
 from metasim.cfg.scenario import ScenarioCfg
-from metasim.utils.humanoid_robot_util import contact_forces_tensor
+from metasim.utils.humanoid_robot_util import contact_forces_tensor, gait_phase_tensor
 from metasim.utils.state import TensorState
-from roboverse_learn.unitree_rl.configs.base_humanoid import BaseHumanoidCfg
+from roboverse_learn.unitree_rl.configs.base_legged import BaseLeggedTaskCfg
 from roboverse_learn.unitree_rl.envs.base_legged import LeggedRobot
 from roboverse_learn.unitree_rl.utils import (
     get_body_reindexed_indices_from_substring,
@@ -19,7 +19,7 @@ class Humanoid(LeggedRobot):
     The main difference is the additional joints and rigid bodies specific to humanoid robots, e.g., knees, elbows, wrists, and torso.
     """
 
-    cfg: BaseHumanoidCfg
+    cfg: BaseLeggedTaskCfg
 
     def __init__(self, scenario: ScenarioCfg):
         super().__init__(scenario)
@@ -76,7 +76,38 @@ class Humanoid(LeggedRobot):
 
     # endregion
 
+    # region: Utility functions
+    def _get_gait_phase(self):
+        """Add phase into states"""
+        phase = self._get_phase()
+        sin_pos = torch.sin(2 * torch.pi * phase)
+        # Add double support phase
+        stance_mask = torch.zeros((self.num_envs, len(self.feet_indices)), device=self.device)
+        # left foot stance
+        stance_mask[:, 0] = sin_pos >= 0
+        # right foot stance
+        stance_mask[:, 1] = sin_pos < 0
+        # Double support phase
+        stance_mask[torch.abs(sin_pos) < 0.1] = 1
+        return stance_mask
+
+    def _get_phase(
+        self,
+    ):
+        cycle_time = self.cfg.reward_cfg.cycle_time
+        phase = self.episode_length_buf * self.dt % cycle_time / cycle_time
+        return phase
+
+    # endregion
+
     # region: Parse states for reward computation
+    def _parse_state_for_reward(self, envstate: TensorState):
+        """
+        Parse all the states to prepare for reward computation, legged_robot level reward computation.
+        """
+        self._parse_gait_phase(envstate)
+        super()._parse_state_for_reward(envstate)
+
     def _parse_foot_all(self, envstate: TensorState):
         """
         Run all the parse foot function sequentially. foot pos update must run first.
@@ -107,5 +138,19 @@ class Humanoid(LeggedRobot):
         rew_pos = torch.sum(rew_pos * swing_mask, dim=1)
         self.feet_height *= ~contact
         envstate.robots[self.robot.name].extra["feet_clearance"] = rew_pos
+
+    def _parse_gait_phase(self, envstate: TensorState):
+        envstate.robots[self.robot.name].extra["gait_phase"] = self._get_gait_phase()
+
+    def _parse_feet_air_time(self, envstate: TensorState):
+        contact = contact_forces_tensor(envstate, self.robot.name)[:, self.feet_indices, 2] > 1.0
+        stance_mask = gait_phase_tensor(envstate, self.robot.name)
+        contact_filt = torch.logical_or(torch.logical_or(contact, stance_mask), self.last_contacts)
+        self.last_contacts = contact
+        first_contact = (self.feet_air_time > 0.0) * contact_filt
+        self.feet_air_time += self.dt
+        air_time = self.feet_air_time.clamp(0, 0.5) * first_contact
+        self.feet_air_time *= ~contact_filt
+        envstate.robots[self.robot.name].extra["feet_air_time"] = air_time
 
     # endregion

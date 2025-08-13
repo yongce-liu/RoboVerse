@@ -42,8 +42,12 @@ def reward_base_height(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> t
     ) / torch.sum(stance_mask, dim=1)
     base_height = states.robots[robot_name].root_state[:, 2] - (measured_heights - 0.05)
     return torch.exp(-torch.abs(base_height - cfg.reward_cfg.base_height_target) * 100)
+
+
+def reward_base_height_sq(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     # Penalize base height away from target
-    # return torch.square(base_height - cfg.reward_cfg.base_height_target)
+    base_height = states.robots[robot_name].root_state[:, 2]
+    return torch.square(base_height - cfg.reward_cfg.base_height_target)
 
 
 def reward_torques(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
@@ -390,7 +394,14 @@ def reward_contact(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch
         is_stance = leg_phase[:, i] < 0.55
         contact = contact_forces[:, feet_indices[i], 2] > 1
         res += ~(contact ^ is_stance)
+
+    contact = states.robots[robot_name].extra["contact_forces"][:, cfg.feet_indices, 2] > 5.0
+    stance_mask = states.robots[robot_name].extra["gait_phase"]
+    reward = torch.where(contact == stance_mask, 1.0, -0.3)
+    return torch.mean(reward, dim=1)
+
     return res
+
 
 
 def reward_feet_swing_height(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
