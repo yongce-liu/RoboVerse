@@ -30,6 +30,13 @@ def reward_orientation(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> t
     return (quat_mismatch + orientation) / 2.0
 
 
+def reward_orientation_sq(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+    """
+    Penalize deviation from flat base orientation.
+    """
+    return torch.sum(torch.square(states.robots[robot_name].extra["projected_gravity"][:, :2]), dim=1)
+
+
 def reward_base_height(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     # TODO check this reward formulation. It dose not match what is described in legged_gym
     """
@@ -210,6 +217,37 @@ def reward_feet_contact_forces(states: EnvState, robot_name: str, cfg: BaseTaskC
     )
 
 
+def reward_contact(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+    pass
+
+
+def reward_feet_swing_height(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+    contact = torch.norm(states.robots[robot_name].extra["contact_forces"][:, cfg.feet_indices, :3], dim=2) > 1.0
+    pos_error = torch.square(states.robots[robot_name].body_state[:, cfg.feet_indices, 2] - 0.08) * ~contact
+    return torch.sum(pos_error, dim=(1))
+
+
+def reward_alive(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+    # Reward for staying alive
+    return 1.0
+
+
+def reward_contact_no_vel(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+    # Penalize contact with no velocity
+    contact = torch.norm(states.robots[robot_name].extra["contact_forces"][:, cfg.feet_indices, :3], dim=2) > 1.0
+    feet_vel = states.robots[robot_name].body_state[:, cfg.feet_indices, 7:10]
+    contact_feet_vel = feet_vel * contact.unsqueeze(-1)
+    penalize = torch.square(contact_feet_vel[:, :, :3])
+    return torch.sum(penalize, dim=(1, 2))
+
+
+def reward_hip_pos(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+    dof_pos = states.robots[robot_name].joint_pos
+    indices = torch.concat([cfg.left_yaw_roll_joint_indices, cfg.right_yaw_roll_joint_indices])
+    dof_pos_hip = dof_pos[:, indices]
+    return torch.sum(torch.square(dof_pos_hip), dim=1)
+
+
 # ==========================h1 walking========================
 def reward_joint_pos(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     """
@@ -384,45 +422,3 @@ def reward_action_smoothness(states: EnvState, robot_name: str, cfg: BaseTaskCfg
     )
     term_3 = 0.05 * torch.sum(torch.abs(states.robots[robot_name].extra["actions"]), dim=1)
     return term_1 + term_2 + term_3
-
-
-# BUG: haven't been implemented below
-"""
-def reward_contact(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
-    res = torch.zeros(num_envs, dtype=torch.float, device=device)
-    for i in range(feet_num):
-        is_stance = leg_phase[:, i] < 0.55
-        contact = contact_forces[:, feet_indices[i], 2] > 1
-        res += ~(contact ^ is_stance)
-
-    contact = states.robots[robot_name].extra["contact_forces"][:, cfg.feet_indices, 2] > 5.0
-    stance_mask = states.robots[robot_name].extra["gait_phase"]
-    reward = torch.where(contact == stance_mask, 1.0, -0.3)
-    return torch.mean(reward, dim=1)
-
-    return res
-
-
-
-def reward_feet_swing_height(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
-    contact = torch.norm(contact_forces[:, feet_indices, :3], dim=2) > 1.0
-    pos_error = torch.square(feet_pos[:, :, 2] - 0.08) * ~contact
-    return torch.sum(pos_error, dim=(1))
-
-
-def reward_alive(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
-    # Reward for staying alive
-    return 1.0
-
-
-def reward_contact_no_vel(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
-    # Penalize contact with no velocity
-    contact = torch.norm(contact_forces[:, feet_indices, :3], dim=2) > 1.0
-    contact_feet_vel = feet_vel * contact.unsqueeze(-1)
-    penalize = torch.square(contact_feet_vel[:, :, :3])
-    return torch.sum(penalize, dim=(1, 2))
-
-
-def reward_hip_pos(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
-    return torch.sum(torch.square(dof_pos[:, [1, 2, 7, 8]]), dim=1)
-"""

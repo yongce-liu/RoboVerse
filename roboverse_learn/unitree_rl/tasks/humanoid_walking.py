@@ -161,7 +161,7 @@ class HumanoidWalkingCfg(BaseLeggedTaskCfg):
     c_frame_stack = 3
 
     reward_cfg = BaseLeggedTaskCfg.RewardCfg(
-        base_height_target=0.80, tracking_sigma=5.0, max_contact_force=700, soft_torque_limit=0.001
+        base_height_target=0.80, tracking_sigma=1 / 0.2, max_contact_force=700, soft_torque_limit=0.001
     )
 
     reward_functions: list[Callable] = [

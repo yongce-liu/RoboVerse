@@ -190,12 +190,12 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
         """target feet height"""
         cycle_time: float = 0.64
         """cycle time"""
-        offset: float = 0.5
-        """offset for the leg phase"""
+        # offset: float = 0.5
+        # """offset for the leg phase"""
 
         only_positive_rewards: bool = True
         """whether to use only positive rewards"""
-        tracking_sigma: float = 0.25
+        tracking_sigma: float = 1 / 0.25
         """tracking reward = exp(error*sigma)"""
         max_contact_force: float = 100.0
         """maximum contact force"""

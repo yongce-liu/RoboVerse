@@ -12,7 +12,7 @@ from metasim.utils.humanoid_robot_util import (
 )
 from roboverse_learn.unitree_rl.configs import reward_funcs as rfs
 from roboverse_learn.unitree_rl.configs.base_legged import BaseLeggedTaskCfg, LeggedRobotCfgPPO
-from roboverse_learn.unitree_rl.envs.base_legged import LeggedRobot
+from roboverse_learn.unitree_rl.envs.base_humanoid import Humanoid
 
 
 # Training Config
@@ -32,7 +32,7 @@ class Dof12WalkingCfgPPO(LeggedRobotCfgPPO):
         experiment_name="dof12_walking",
         policy_class_name="ActorCriticRecurrent",
         max_iterations=15001,
-        save_interval=100,
+        save_interval=500,
     )
 
 
@@ -49,53 +49,59 @@ class Dof12WalkingCfg(BaseLeggedTaskCfg):
     c_frame_stack = 1
 
     reward_cfg = BaseLeggedTaskCfg.RewardCfg(
-        base_height_target=0.780, tracking_sigma=5.0, max_contact_force=700, soft_torque_limit=0.001, cycle_time=0.8
+        base_height_target=0.780,
+        tracking_sigma=1 / 0.25,
+        max_contact_force=100,
+        soft_torque_limit=1.0,
+        cycle_time=0.8,
+        # offset=0.5
     )
 
     reward_functions: list[Callable] = [
+        rfs.reward_tracking_lin_vel,
+        rfs.reward_tracking_ang_vel,
         rfs.reward_lin_vel_z,
         rfs.reward_ang_vel_xy,
         rfs.reward_orientation,
+        rfs.reward_orientation_sq,
         rfs.reward_base_height,
-        rfs.reward_torques,
-        rfs.reward_dof_vel,
+        rfs.reward_base_height_sq,
         rfs.reward_dof_acc,
-        rfs.reward_action_rate,
-        rfs.reward_collision,
-        rfs.reward_termination,
-        rfs.reward_dof_pos_limits,
-        rfs.reward_tracking_lin_vel,
-        rfs.reward_tracking_ang_vel,
+        rfs.reward_dof_vel,
         rfs.reward_feet_air_time,
-        rfs.reward_stumble,
-        rfs.reward_stand_still,
-        # reward_dof_vel_limits,
-        # reward_torque_limits,
-        # reward_feet_contact_forces,
+        rfs.reward_collision,
+        rfs.reward_action_rate,
+        rfs.reward_dof_pos_limits,
+        rfs.reward_hip_pos,
+        rfs.reward_contact_no_vel,
+        rfs.reward_feet_clearance,
+        rfs.reward_feet_contact_number,
+        rfs.reward_alive,
+        rfs.reward_feet_swing_height,
     ]
 
     reward_weights: dict[str, float] = {
-        "termination": -0.0,
         "tracking_lin_vel": 1.0,
         "tracking_ang_vel": 0.5,
         "lin_vel_z": -2.0,
         "ang_vel_xy": -0.05,
-        "orientation": -1.0,
-        "dof_vel": -1e-3,
+        # "orientation": -1.0,
+        "orientation_sq": -1.0,
+        # "base_height": 5.0,
+        "base_height_sq": -10.0,
         "dof_acc": -2.5e-7,
-        "base_height": 1.0,
+        "dof_vel": -1e-3,
         "feet_air_time": 0.0,
         "collision": 0.0,
-        "feet_stumble": -0.0,
         "action_rate": -0.01,
-        "stand_still": -0.0,
-        "torques": -0.0002,
         "dof_pos_limits": -5.0,
-        # "alive": 0.15,
-        # "hip_pos": -1.0,
-        # "contact_no_vel":-0.2,
-        # "feet_swing_height": -20.0,
-        # "contact": 0.18
+        "alive": 0.15,
+        "hip_pos": -1.0,
+        "contact_no_vel": -0.2,
+        # "feet_clearance": -20.0,
+        "feet_swing_height": -20.0,
+        # "contact": 0.18,
+        "feet_contact_number": 0.5,
     }
 
     def __post_init__(self):
@@ -107,7 +113,7 @@ class Dof12WalkingCfg(BaseLeggedTaskCfg):
 
 
 # Environment
-class Dof12WalkingTask(LeggedRobot):
+class Dof12WalkingTask(Humanoid):
     """
     Wrapper for walking task for legged robots.
     """
@@ -117,9 +123,9 @@ class Dof12WalkingTask(LeggedRobot):
 
     def _init_buffers(self):
         super()._init_buffers()
-        self.noise_scale_vec = self._get_noise_scale_vec(self.cfg)
+        self.noise_scale_vec = self._get_noise_scale_vec()
 
-    def _get_noise_scale_vec(self, cfg: BaseLeggedTaskCfg):
+    def _get_noise_scale_vec(self):
         """Sets a vector used to scale the noise added to the observations.
             [NOTE]: Must be adapted when changing the observations structure
 
