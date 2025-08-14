@@ -493,10 +493,11 @@ class LeggedRobot(RslRlWrapper):
         self._parse_action(envstate)
         self._parse_history_state(envstate)
         self._parse_base_euler_xyz(envstate)
-        self._parse_foot_all(envstate)
         self._parse_command(envstate)
         self._parse_projected_gravity(envstate)
         self._parse_local_base_vel(envstate)
+        # self._parse_foot_all(envstate)
+        self._parse_feet_air_time(envstate)
 
     def _parse_action(self, envstate: TensorState):
         envstate.robots[self.robot.name].extra["actions"] = self.actions
@@ -512,24 +513,6 @@ class LeggedRobot(RslRlWrapper):
         # self.base_euler_xyz = get_euler_xyz_tensor(envstate.robots[self.robot.name].root_state[:, 3:7])
         envstate.robots[self.robot.name].extra["base_euler_xyz"] = self.base_euler_xyz
 
-    def _parse_foot_all(self, envstate: TensorState):
-        """
-        Run all the parse foot function sequentially. foot pos update must run first.
-
-        Note that orders matters here, since some of the foot states are computed based on the previous foot states.
-        """
-        self._parse_feet_air_time(envstate)
-
-    def _parse_feet_air_time(self, envstate: TensorState):
-        contact = contact_forces_tensor(envstate, self.robot.name)[:, self.feet_indices, 2] > 1.0
-        contact_filt = torch.logical_or(contact, self.last_contacts)
-        self.last_contacts = contact
-        first_contact = (self.feet_air_time > 0.0) * contact_filt
-        self.feet_air_time += self.dt
-        air_time = self.feet_air_time.clamp(0, 0.5) * first_contact
-        self.feet_air_time *= ~contact_filt
-        envstate.robots[self.robot.name].extra["feet_air_time"] = air_time
-
     def _parse_command(self, envstate: TensorState):
         """Adds the current velocity and heading command to state."""
         envstate.robots[self.robot.name].extra["command"] = self.commands
@@ -542,5 +525,15 @@ class LeggedRobot(RslRlWrapper):
         """Add local base velocity into states"""
         envstate.robots[self.robot.name].extra["base_lin_vel"] = self.base_lin_vel
         envstate.robots[self.robot.name].extra["base_ang_vel"] = self.base_ang_vel
+
+    def _parse_feet_air_time(self, envstate: TensorState):
+        contact = contact_forces_tensor(envstate, self.robot.name)[:, self.feet_indices, 2] > 1.0
+        contact_filt = torch.logical_or(contact, self.last_contacts)
+        self.last_contacts = contact
+        first_contact = (self.feet_air_time > 0.0) * contact_filt
+        self.feet_air_time += self.dt
+        air_time = self.feet_air_time.clamp(0, 0.5) * first_contact
+        self.feet_air_time *= ~contact_filt
+        envstate.robots[self.robot.name].extra["feet_air_time"] = air_time
 
     # endregion

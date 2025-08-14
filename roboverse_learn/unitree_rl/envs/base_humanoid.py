@@ -76,46 +76,37 @@ class Humanoid(LeggedRobot):
 
     # endregion
 
-    # region: Utility functions
-    def _get_gait_phase(self):
-        """Add phase into states"""
-        phase = self._get_phase()
-        sin_pos = torch.sin(2 * torch.pi * phase)
-        # Add double support phase
-        stance_mask = torch.zeros((self.num_envs, len(self.feet_indices)), device=self.device)
-        # left foot stance
-        stance_mask[:, 0] = sin_pos >= 0
-        # right foot stance
-        stance_mask[:, 1] = sin_pos < 0
-        # Double support phase
-        stance_mask[torch.abs(sin_pos) < 0.1] = 1
-        return stance_mask
-
-    def _get_phase(
-        self,
-    ):
-        cycle_time = self.cfg.reward_cfg.cycle_time
-        phase = self.episode_length_buf * self.dt % cycle_time / cycle_time
-        return phase
-
-    # endregion
-
     # region: Parse states for reward computation
     def _parse_state_for_reward(self, envstate: TensorState):
         """
         Parse all the states to prepare for reward computation, legged_robot level reward computation.
         """
         self._parse_gait_phase(envstate)
+        self._parse_feet_clearance(envstate)
         super()._parse_state_for_reward(envstate)
 
-    def _parse_foot_all(self, envstate: TensorState):
-        """
-        Run all the parse foot function sequentially. foot pos update must run first.
+    def _parse_gait_phase(self, envstate: TensorState):
+        # phase = self._get_phase()
+        # phase_left = phase
+        # offset = 0.5
+        # phase_right = (phase + offset) % 1
+        # envstate.robots[self.robot.name].extra["leg_phase"] = torch.cat([phase_left.unsqueeze(1), phase_right.unsqueeze(1)], dim=-1)
+        envstate.robots[self.robot.name].extra["gait_phase"] = self._get_gait_phase()
 
-        Note that orders matters here, since some of the foot states are computed based on the previous foot states.
-        """
-        super()._parse_foot_all(envstate)
-        self._parse_feet_clearance(envstate)
+    # NOTE: A Rewritten Function
+    def _parse_feet_air_time(self, envstate: TensorState):
+        contact = contact_forces_tensor(envstate, self.robot.name)[:, self.feet_indices, 2] > 1.0
+        stance_mask = gait_phase_tensor(envstate, self.robot.name)
+        contact_filt = torch.logical_or(torch.logical_or(contact, stance_mask), self.last_contacts)
+        self.last_contacts = contact
+        first_contact = (self.feet_air_time > 0.0) * contact_filt
+        self.feet_air_time += self.dt
+        # rew_airTime = torch.sum((self.feet_air_time - 0.5) * first_contact, dim=1)
+        # rew_airTime *= torch.norm(self.commands[:, :2], dim=1) > 0.1
+        air_time = self.feet_air_time.clamp(0, 0.5) * first_contact
+        self.feet_air_time *= ~contact_filt
+        envstate.robots[self.robot.name].extra["feet_air_time"] = air_time
+        # envstate.robots[self.robot.name].extra["req_airTime"] = rew_airTime
 
     def _parse_feet_clearance(self, envstate: TensorState):
         """Calculates reward based on the clearance of the swing leg from the ground during movement.
@@ -139,18 +130,26 @@ class Humanoid(LeggedRobot):
         self.feet_height *= ~contact
         envstate.robots[self.robot.name].extra["feet_clearance"] = rew_pos
 
-    def _parse_gait_phase(self, envstate: TensorState):
-        envstate.robots[self.robot.name].extra["gait_phase"] = self._get_gait_phase()
+    # endregion
 
-    def _parse_feet_air_time(self, envstate: TensorState):
-        contact = contact_forces_tensor(envstate, self.robot.name)[:, self.feet_indices, 2] > 1.0
-        stance_mask = gait_phase_tensor(envstate, self.robot.name)
-        contact_filt = torch.logical_or(torch.logical_or(contact, stance_mask), self.last_contacts)
-        self.last_contacts = contact
-        first_contact = (self.feet_air_time > 0.0) * contact_filt
-        self.feet_air_time += self.dt
-        air_time = self.feet_air_time.clamp(0, 0.5) * first_contact
-        self.feet_air_time *= ~contact_filt
-        envstate.robots[self.robot.name].extra["feet_air_time"] = air_time
+    # region: Utility functions
+    def _get_gait_phase(self):
+        """Add phase into states"""
+        phase = self._get_phase()
+        sin_pos = torch.sin(2 * torch.pi * phase)
+        # Add double support phase
+        stance_mask = torch.zeros((self.num_envs, len(self.feet_indices)), dtype=torch.int16, device=self.device)
+        # left foot stance
+        stance_mask[:, 0] = sin_pos >= 0
+        # right foot stance
+        stance_mask[:, 1] = sin_pos < 0
+        # Double support phase
+        stance_mask[torch.abs(sin_pos) < 0.1] = 1
+        return stance_mask
+
+    def _get_phase(self):
+        cycle_time = self.cfg.reward_cfg.cycle_time
+        phase = self.episode_length_buf * self.dt % cycle_time / cycle_time
+        return phase
 
     # endregion

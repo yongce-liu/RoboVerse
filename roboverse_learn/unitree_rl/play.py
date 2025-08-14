@@ -6,12 +6,12 @@ try:
 except ImportError:
     pass
 
-
 import torch
 from rsl_rl.runners.on_policy_runner import OnPolicyRunner
 
 from metasim.cfg.scenario import ScenarioCfg
 from roboverse_learn.unitree_rl.utils import (
+    PolicyExporterLSTM,
     export_policy_as_jit,
     get_args,
     get_class,
@@ -84,14 +84,21 @@ def play(args):
     # export policy as a jit module (used to run it from C++)
     if EXPORT_POLICY:
         export_jit_path = get_export_jit_path(args, scenario)
-        export_policy_as_jit(ppo_runner.alg.actor_critic, export_jit_path)
+        actor_critic = ppo_runner.alg.actor_critic
+        if hasattr(actor_critic, "memory_a"):
+            exporter = PolicyExporterLSTM(actor_critic)
+            exporter.export(export_jit_path)
+        else:
+            export_policy_as_jit(actor_critic.actor, export_jit_path)
         print("Exported policy as jit script to: ", export_jit_path)
 
-    if args.reindex_actions:
-        num_actions = env.num_actions
-        reindex_actions_idx = env.env.handler.get_joint_reindex(obj_name=env.robot.name, inverse=False)
-        reverse_reindex_actions_idx = env.env.handler.get_joint_reindex(obj_name=env.robot.name, inverse=True)
-        assert num_actions == len(reindex_actions_idx)
+    # if args.reindex_actions:
+    num_actions = env.num_actions
+    reindex_actions_idx = env.env.handler.get_joint_reindex(obj_name=env.robot.name, inverse=False)
+    print(f"Reindex actions idx: {reindex_actions_idx}")
+    reverse_reindex_actions_idx = env.env.handler.get_joint_reindex(obj_name=env.robot.name, inverse=True)
+    assert num_actions == len(reindex_actions_idx)
+    print(f"Reverse reindex actions idx: {reverse_reindex_actions_idx}")
 
     for i in range(1000):
         # # set fixed command
@@ -114,13 +121,13 @@ def play(args):
 
 
 if __name__ == "__main__":
-    EXPORT_POLICY = False
+    EXPORT_POLICY = True
     args = get_args()
-    args.task = "dof12_walking" if args.task is None else args.task
-    args.robot = "g1_dof12" if args.robot is None else args.robot
-    args.load_run = "pretrain" if args.load_run is None else args.load_run
-    args.checkpoint = 0 if args.checkpoint is None else args.checkpoint
-    args.sim = "mujoco" if args.sim is None else args.sim
-    args.jit_load = False if args.jit_load is None else args.jit_load
-    args.reindex_actions = False if args.reindex_actions is None else args.reindex_actions
+    # args.task = "dof12_walking"
+    # args.robot = "g1_dof12"
+    # args.load_run = "2025_0813_080538"
+    # args.checkpoint = 1500
+    # args.sim = "isaacgym"
+    # args.jit_load = False
+    # args.reindex_actions = False
     play(args)

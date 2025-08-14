@@ -172,12 +172,13 @@ def reward_tracking_ang_vel(states: EnvState, robot_name: str, cfg: BaseTaskCfg)
     return torch.exp(-ang_vel_error * cfg.reward_cfg.tracking_sigma), torch.abs(ang_vel_diff)
 
 
+# FIXME
 def reward_feet_air_time(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     """
     Calculates the reward for feet air time.
     """
     air_time = states.robots[robot_name].extra["feet_air_time"]
-    return air_time.sum(dim=1)
+    return air_time.sum(dim=1) * (torch.norm(states.robots[robot_name].extra["command"][:, :2], dim=1) > 0.1)
 
 
 def reward_stumble(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
@@ -218,7 +219,11 @@ def reward_feet_contact_forces(states: EnvState, robot_name: str, cfg: BaseTaskC
 
 
 def reward_contact(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
-    pass
+    is_stance = states.robots[robot_name].extra["gait_phase"]
+    contact_forces = states.robots[robot_name].extra["contact_forces"]
+    contact = contact_forces[:, cfg.feet_indices, 2] > 1
+    res = ~(contact ^ is_stance)
+    return torch.sum(res, dim=1)
 
 
 def reward_feet_swing_height(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
@@ -235,7 +240,8 @@ def reward_alive(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.T
 def reward_contact_no_vel(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     # Penalize contact with no velocity
     contact = torch.norm(states.robots[robot_name].extra["contact_forces"][:, cfg.feet_indices, :3], dim=2) > 1.0
-    feet_vel = states.robots[robot_name].body_state[:, cfg.feet_indices, 7:10]
+    feet_state = states.robots[robot_name].body_state[:, cfg.feet_indices, :]
+    feet_vel = feet_state[:, :, 7:10]
     contact_feet_vel = feet_vel * contact.unsqueeze(-1)
     penalize = torch.square(contact_feet_vel[:, :, :3])
     return torch.sum(penalize, dim=(1, 2))

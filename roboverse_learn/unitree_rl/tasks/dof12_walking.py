@@ -4,6 +4,7 @@ from typing import Callable
 
 import torch
 
+from metasim.cfg.control import ControlCfg
 from metasim.cfg.scenario import ScenarioCfg
 from metasim.utils import configclass
 from metasim.utils.humanoid_robot_util import (
@@ -32,7 +33,7 @@ class Dof12WalkingCfgPPO(LeggedRobotCfgPPO):
         experiment_name="dof12_walking",
         policy_class_name="ActorCriticRecurrent",
         max_iterations=15001,
-        save_interval=500,
+        save_interval=50,
     )
 
 
@@ -45,16 +46,13 @@ class Dof12WalkingCfg(BaseLeggedTaskCfg):
 
     ppo_cfg = Dof12WalkingCfgPPO()
 
+    control = ControlCfg(action_scale=0.25, action_offset=True, torque_limit_scale=0.85)
+
     frame_stack = 1
     c_frame_stack = 1
 
     reward_cfg = BaseLeggedTaskCfg.RewardCfg(
-        base_height_target=0.780,
-        tracking_sigma=1 / 0.25,
-        max_contact_force=100,
-        soft_torque_limit=1.0,
-        cycle_time=0.8,
-        # offset=0.5
+        base_height_target=0.75, soft_dof_pos_limit=0.9, cycle_time=0.8, target_feet_height=0.08
     )
 
     reward_functions: list[Callable] = [
@@ -78,16 +76,20 @@ class Dof12WalkingCfg(BaseLeggedTaskCfg):
         rfs.reward_feet_contact_number,
         rfs.reward_alive,
         rfs.reward_feet_swing_height,
+        rfs.reward_contact,
+        rfs.reward_torques,
     ]
 
     reward_weights: dict[str, float] = {
+        "termination": -0.0,
+        "feet_stumble": -0.0,
         "tracking_lin_vel": 1.0,
         "tracking_ang_vel": 0.5,
         "lin_vel_z": -2.0,
         "ang_vel_xy": -0.05,
         # "orientation": -1.0,
         "orientation_sq": -1.0,
-        # "base_height": 5.0,
+        # "base_height": 10.0,
         "base_height_sq": -10.0,
         "dof_acc": -2.5e-7,
         "dof_vel": -1e-3,
@@ -98,10 +100,11 @@ class Dof12WalkingCfg(BaseLeggedTaskCfg):
         "alive": 0.15,
         "hip_pos": -1.0,
         "contact_no_vel": -0.2,
-        # "feet_clearance": -20.0,
         "feet_swing_height": -20.0,
-        # "contact": 0.18,
-        "feet_contact_number": 0.5,
+        # "feet_clearance": 2.0,
+        "contact": 0.18,
+        # "feet_contact_number": 2.4,
+        "torques": -0.00001,
     }
 
     def __post_init__(self):

@@ -80,7 +80,7 @@ class LeggedRobotCfgPPO:
         """max number of iterations"""
 
         # logging
-        save_interval = 500
+        save_interval = 50
         """save interval for checkpoints"""
         experiment_name = "test"
         """experiment name"""
@@ -145,11 +145,11 @@ class LeggedRobotDomainRandCfg(RandomizationCfg):
 
         enabled: bool = False
         """Whether to enable random push forces."""
-        max_push_vel_xy: float = 1.0
+        max_push_vel_xy: float = 1.5
         """Maximum push velocity in xy plane."""
         max_push_ang_vel: float = 0.5
         """Maximum push angular velocity."""
-        push_interval: int = 4
+        push_interval: int = 5
         """Interval in steps for applying random push forces and torques."""
 
     push = PushRandomCfg(enabled=True)
@@ -159,7 +159,7 @@ class LeggedRobotDomainRandCfg(RandomizationCfg):
         self.friction = FrictionRandomCfg(
             enabled=True, range=[0.1, 2.0], dist_fn=self.sample_uniform_buckets, num_buckets=256
         )
-        self.mass = MassRandomCfg(enabled=True, range=[-1.0, 1.0], dist_fn=self.sample_uniform)
+        self.mass = MassRandomCfg(enabled=True, range=[-1.0, 3.0], dist_fn=self.sample_uniform)
 
 
 # Config
@@ -177,7 +177,7 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
     class RewardCfg:
         """Constants for reward computation."""
 
-        base_height_target: float = 0.25
+        base_height_target: float = 1.0
         """target height of the base"""
         min_dist: float = 0.2
         """minimum distance between feet"""
@@ -190,8 +190,6 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
         """target feet height"""
         cycle_time: float = 0.64
         """cycle time"""
-        # offset: float = 0.5
-        # """offset for the leg phase"""
 
         only_positive_rewards: bool = True
         """whether to use only positive rewards"""
@@ -199,6 +197,10 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
         """tracking reward = exp(error*sigma)"""
         max_contact_force: float = 100.0
         """maximum contact force"""
+        soft_dof_pos_limit: float = 1.0
+        """# percentage of urdf limits, values above this limit are penalized"""
+        soft_dof_vel_limit: float = 1.0
+        """soft dof velocity limit"""
         soft_torque_limit: float = 1.0
         """soft torque limit"""
 
@@ -351,7 +353,7 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
     # """episode length in steps"""
     # max_episode_length: int = 2400
     # """episode length in steps"""
-    control: ControlCfg = ControlCfg(action_scale=0.25, action_offset=True, torque_limit_scale=0.85)
+    control: ControlCfg = ControlCfg(action_scale=0.5, action_offset=True, torque_limit_scale=0.85)
     """Control config."""
     random: LeggedRobotDomainRandCfg = LeggedRobotDomainRandCfg()
     """Randomization config."""

@@ -183,9 +183,9 @@ def torch_rand_float(lower: float, upper: float, shape: tuple[int, int], device:
     return (upper - lower) * torch.rand(*shape, device=device) + lower
 
 
-def export_policy_as_jit(actor_critic, path, filename=None):
+def export_policy_as_jit(actor, path, filename=None):
     """Export the policy as a JIT model."""
-    model = copy.deepcopy(actor_critic.actor).to("cpu")
+    model = copy.deepcopy(actor).to("cpu")
     traced_script_module = torch.jit.script(model)
     traced_script_module.save(path)
 
@@ -252,3 +252,32 @@ def find_unique_candidate(candidates: list[any], data_base: list[any]) -> int:
         raise ValueError(f"Multiple candidates found: {found_candidates}. Only one naming convention should be used.")
 
     return found_indices[0]
+
+
+class PolicyExporterLSTM(torch.nn.Module):
+    def __init__(self, actor_critic):
+        super().__init__()
+        self.actor = copy.deepcopy(actor_critic.actor)
+        self.is_recurrent = actor_critic.is_recurrent
+        self.memory = copy.deepcopy(actor_critic.memory_a.rnn)
+        self.memory.cpu()
+        self.register_buffer("hidden_state", torch.zeros(self.memory.num_layers, 1, self.memory.hidden_size))
+        self.register_buffer("cell_state", torch.zeros(self.memory.num_layers, 1, self.memory.hidden_size))
+
+    def forward(self, x):
+        out, (h, c) = self.memory(x.unsqueeze(0), (self.hidden_state, self.cell_state))
+        self.hidden_state[:] = h
+        self.cell_state[:] = c
+        return self.actor(out.squeeze(0))
+
+    @torch.jit.export
+    def reset_memory(self):
+        self.hidden_state[:] = 0.0
+        self.cell_state[:] = 0.0
+
+    def export(self, path):
+        if not path.endswith(".pt"):
+            path = os.path.join(path, "policy.pt")
+        self.to("cpu")
+        traced_script_module = torch.jit.script(self)
+        traced_script_module.save(path)
