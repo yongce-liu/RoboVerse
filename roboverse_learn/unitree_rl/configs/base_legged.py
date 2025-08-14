@@ -17,6 +17,7 @@ from metasim.cfg.tasks.base_task_cfg import BaseTaskCfg
 from metasim.sim import BaseSimHandler
 from metasim.utils import configclass
 from metasim.utils.humanoid_robot_util import contact_forces_tensor, get_euler_xyz_tensor, robot_rotation_tensor
+from roboverse_learn.unitree_rl.helper.terrain import Terrain
 
 
 # Training Config
@@ -154,12 +155,67 @@ class LeggedRobotDomainRandCfg(RandomizationCfg):
 
     push = PushRandomCfg(enabled=True)
 
+    @configclass
+    class TerrainCfg:
+        mesh_type = "trimesh"  # "heightfield" # none, plane, heightfield or trimesh
+        horizontal_scale = 0.1  # [m]
+        vertical_scale = 0.005  # [m]
+        border_size = 25  # [m]
+        curriculum = True
+        static_friction = 1.0
+        dynamic_friction = 1.0
+        restitution = 0.0
+        # rough terrain only:
+        measure_heights = True
+        include_act_obs_pair_buf = False
+        measured_points_x = [
+            -0.8,
+            -0.7,
+            -0.6,
+            -0.5,
+            -0.4,
+            -0.3,
+            -0.2,
+            -0.1,
+            0.0,
+            0.1,
+            0.2,
+            0.3,
+            0.4,
+            0.5,
+            0.6,
+            0.7,
+            0.8,
+        ]  # 1mx1.6m rectangle (without center line)
+        measured_points_y = [-0.5, -0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
+
+        # measured_points_x = [-0.45, -0.3, -0.15, 0, 0.15, 0.3, 0.45, 0.6, 0.75, 0.9, 1.05, 1.2] # 1mx1.6m rectangle (without center line)
+        # measured_points_y = [-0.75, -0.6, -0.45, -0.3, -0.15, 0., 0.15, 0.3, 0.45, 0.6, 0.75]
+
+        selected = False  # select a unique terrain type and pass all arguments
+        terrain_kwargs = None  # Dict of arguments for selected terrain
+        max_init_terrain_level = 5  # starting curriculum state
+        terrain_length = 8.0
+        terrain_width = 8.0
+        num_rows = 10  # number of terrain rows (levels)
+        num_cols = 20  # number of terrain cols (types)
+        # terrain types: [smooth slope, rough slope, stairs up, stairs down, discrete]
+        terrain_proportions = [0.1, 0.1, 0.35, 0.25, 0.2]
+        # terrain_proportions = [0.1, 0.2, 0.30, 0.30, 0.1]
+        # trimesh only:
+        slope_treshold = 0.75  # slopes above this threshold will be corrected to vertical surfaces
+
+    terrain_cfg: TerrainCfg = TerrainCfg()
+    terrain: Terrain | None = None
+
     def __post_init__(self):
         super().__post_init__()
         self.friction = FrictionRandomCfg(
             enabled=True, range=[0.1, 2.0], dist_fn=self.sample_uniform_buckets, num_buckets=256
         )
         self.mass = MassRandomCfg(enabled=True, range=[-1.0, 3.0], dist_fn=self.sample_uniform)
+        if self.ground:
+            self.terrain = Terrain(cfg=self.terrain_cfg)
 
 
 # Config
@@ -355,7 +411,7 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
     # """episode length in steps"""
     control: ControlCfg = ControlCfg(action_scale=0.5, action_offset=True, torque_limit_scale=0.85)
     """Control config."""
-    random: LeggedRobotDomainRandCfg = LeggedRobotDomainRandCfg()
+    random: LeggedRobotDomainRandCfg = LeggedRobotDomainRandCfg(level=1)
     """Randomization config."""
     init_states = [
         {

@@ -9,7 +9,7 @@ import numpy as np
 
 from metasim.cfg.scenario import ScenarioCfg
 from roboverse_learn.unitree_rl.deploy.mujoco_utils import IndependentMujocoController
-from roboverse_learn.unitree_rl.utils import (
+from roboverse_learn.unitree_rl.helper.utils import (
     get_class,
     make_robots,
     parse_arguments,

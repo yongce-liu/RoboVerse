@@ -388,9 +388,7 @@ class IsaacgymHandler(BaseSimHandler):
         )  # x, y, z, w order for gymapi.Quat
 
         # add ground plane
-        plane_params = gymapi.PlaneParams()
-        plane_params.normal = gymapi.Vec3(0, 0, 1)
-        self.gym.add_ground(self.sim, plane_params)
+        self._add_ground()
 
         # get object and robot asset
         obj_assets_list = [self._load_object_asset(obj) for obj in self.objects]
@@ -1054,6 +1052,57 @@ class IsaacgymHandler(BaseSimHandler):
         # TODO: add rigid body id index
         props[0].mass += self._rand_mass_dist[env_id]
         return props
+
+    def _add_ground(self):
+        if self.scenario.random.ground:
+            if self.scenario.random.terrain.type == "heightfield":
+                """ Adds a heightfield terrain to the simulation, sets parameters based on the cfg.
+                """
+                terrain = self.scenario.random.terrain
+                hf_params = gymapi.HeightFieldProperties()
+                hf_params.column_scale = terrain.horizontal_scale
+                hf_params.row_scale = terrain.horizontal_scale
+                hf_params.vertical_scale = terrain.vertical_scale
+                hf_params.nbRows = terrain.tot_cols
+                hf_params.nbColumns = terrain.tot_rows
+                hf_params.transform.p.x = -terrain.border_size
+                hf_params.transform.p.y = -terrain.border_size
+                hf_params.transform.p.z = 0.0
+                hf_params.static_friction = terrain.cfg.static_friction
+                hf_params.dynamic_friction = terrain.cfg.dynamic_friction
+                hf_params.restitution = terrain.cfg.restitution
+
+                self.gym.add_heightfield(self.sim, terrain.heightsamples, hf_params)
+                self.height_samples = (
+                    torch.tensor(terrain.heightsamples).view(terrain.tot_rows, terrain.tot_cols).to(self.device)
+                )
+            elif self.scenario.random.terrain.type == "trimesh":
+                """ Adds a triangle mesh terrain to the simulation, sets parameters based on the cfg.
+                # """
+                terrain = self.scenario.random.terrain
+                tm_params = gymapi.TriangleMeshParams()
+                tm_params.nb_vertices = terrain.vertices.shape[0]
+                tm_params.nb_triangles = terrain.triangles.shape[0]
+
+                tm_params.transform.p.x = -terrain.cfg.border_size
+                tm_params.transform.p.y = -terrain.cfg.border_size
+                tm_params.transform.p.z = 0.0
+                tm_params.static_friction = terrain.cfg.static_friction
+                tm_params.dynamic_friction = terrain.cfg.dynamic_friction
+                tm_params.restitution = terrain.cfg.restitution
+                self.gym.add_triangle_mesh(
+                    self.sim, terrain.vertices.flatten(order="C"), terrain.triangles.flatten(order="C"), tm_params
+                )
+                # self.height_samples = torch.tensor(self.terrain.heightsamples).view(self.terrain.tot_rows, self.terrain.tot_cols).to(self.device)
+            else:
+                raise NotImplementedError(
+                    f"Ground type {self.scenario.random.ground.type} is not implemented. "
+                    "Please use 'heightfield' or 'trimesh'."
+                )
+        else:
+            plane_params = gymapi.PlaneParams()
+            plane_params.normal = gymapi.Vec3(0, 0, 1)
+            self.gym.add_ground(self.sim, plane_params)
 
     @property
     def num_envs(self) -> int:

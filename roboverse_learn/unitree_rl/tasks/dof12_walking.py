@@ -90,7 +90,7 @@ class Dof12WalkingCfg(BaseLeggedTaskCfg):
         # "orientation": -1.0,
         "orientation_sq": -1.0,
         # "base_height": 10.0,
-        "base_height_sq": -10.0,
+        "base_height_sq": -5.0,  # -10.0,
         "dof_acc": -2.5e-7,
         "dof_vel": -1e-3,
         "feet_air_time": 0.0,

@@ -10,7 +10,7 @@ import torch
 from rsl_rl.runners.on_policy_runner import OnPolicyRunner
 
 from metasim.cfg.scenario import ScenarioCfg
-from roboverse_learn.unitree_rl.utils import (
+from roboverse_learn.unitree_rl.helper.utils import (
     PolicyExporterLSTM,
     export_policy_as_jit,
     get_args,

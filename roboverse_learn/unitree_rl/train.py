@@ -18,7 +18,7 @@ import wandb
 from rsl_rl.runners.on_policy_runner import OnPolicyRunner
 
 from metasim.cfg.scenario import ScenarioCfg
-from roboverse_learn.unitree_rl.utils import get_args, get_class, get_log_dir, make_robots
+from roboverse_learn.unitree_rl.helper.utils import get_args, get_class, get_log_dir, make_robots
 
 
 def train(args):
