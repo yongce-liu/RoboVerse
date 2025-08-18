@@ -268,7 +268,9 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
             )
             reset_buf = torch.zeros_like(reset_buf, dtype=torch.bool)
             if reset_buf.any():
-                print(f"Reset due to {handler.get_body_names(handler.robot.name, sort=True)[contact_forces[:, handler.task.termination_contact_indices, :].argmax()]}")
+                print(
+                    f"Reset due to {handler.get_body_names(handler.robot.name, sort=True)[contact_forces[:, handler.task.termination_contact_indices, :].argmax()]}"
+                )
             rpy = get_euler_xyz_tensor(robot_rotation_tensor(states, handler.robot.name))
             reset_buf |= torch.logical_or(torch.abs(rpy[:, 1]) > 1.0, torch.abs(rpy[:, 0]) > 0.8)
             return reset_buf

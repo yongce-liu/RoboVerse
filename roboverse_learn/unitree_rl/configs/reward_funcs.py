@@ -17,7 +17,7 @@ def reward_lin_vel_z(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> tor
 def reward_ang_vel_xy(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     xy = torch.norm(states.robots[robot_name].extra["base_ang_vel"][:, :2], dim=1)
     db = getattr(cfg.reward_cfg, "angvel_xy_deadband", 0.25)
-    k  = getattr(cfg.reward_cfg, "angvel_xy_k", 1.0)
+    k = getattr(cfg.reward_cfg, "angvel_xy_k", 1.0)
     return torch.square(torch.clamp(xy - db, min=0.0)) * k
 
 
@@ -46,7 +46,7 @@ def reward_base_height(states: EnvState, robot_name: str, cfg: BaseTaskCfg):
 
     # Soft stance weights from contact forces (0..1), avoids hard switches
     F = torch.norm(base.extra["contact_forces"][:, cfg.feet_indices, :], dim=-1)  # (B, nfeet)
-    w = torch.clamp((F - 20.0) / 40.0, 0.0, 1.0)   # tune 20/40 by your scale
+    w = torch.clamp((F - 20.0) / 40.0, 0.0, 1.0)  # tune 20/40 by your scale
 
     z_feet = states.robots[robot_name].body_state[:, cfg.feet_indices, 2]
     w_sum = w.sum(dim=1)
@@ -68,7 +68,7 @@ def reward_base_height(states: EnvState, robot_name: str, cfg: BaseTaskCfg):
     err = h - h_tgt
 
     # Huber-ish: deadband then squared
-    db = getattr(cfg.reward_cfg, "height_deadband", 0.015)   # 1.5 cm
+    db = getattr(cfg.reward_cfg, "height_deadband", 0.015)  # 1.5 cm
     err_db = torch.clamp(torch.abs(err) - db, min=0.0)
     sigma = getattr(cfg.reward_cfg, "base_height_sigma", 0.04)  # 4 cm scale
     return torch.exp(-(err_db**2) / (2 * sigma**2))
@@ -189,6 +189,7 @@ def _vy_gate(base, thresh=0.12):
         return torch.ones_like(base.extra["command"][:, 0])
     return (torch.abs(base.extra["command"][:, 1]) < thresh).float()
 
+
 def reward_tracking_ang_vel(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     """
     Track angular velocity commands (yaw).
@@ -302,8 +303,8 @@ def reward_joint_pos(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> tor
 
 def reward_feet_distance(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     base = states.robots[robot_name]
-    feet_y = base.body_state[:, cfg.feet_indices, 1]            # (B, 2)
-    step_width = torch.abs(feet_y[:, 0] - feet_y[:, 1])          # (B,)
+    feet_y = base.body_state[:, cfg.feet_indices, 1]  # (B, 2)
+    step_width = torch.abs(feet_y[:, 0] - feet_y[:, 1])  # (B,)
 
     # Double support gating
     contact = base.extra["contact_forces"][:, cfg.feet_indices, 2] > 5.0
@@ -314,7 +315,7 @@ def reward_feet_distance(states: EnvState, robot_name: str, cfg: BaseTaskCfg) ->
     sw_max = getattr(cfg.reward_cfg, "max_dist", 0.38)
     k = 100.0
     d_min = torch.clamp(step_width - sw_min, -0.5, 0.0)
-    d_max = torch.clamp(step_width - sw_max,  0.0, 0.5)
+    d_max = torch.clamp(step_width - sw_max, 0.0, 0.5)
     band = (torch.exp(-torch.abs(d_min) * k) + torch.exp(-torch.abs(d_max) * k)) / 2.0
 
     # Gate 1: Relax when there's lateral command (weaken step width constraint when vy_cmd is large)
@@ -493,8 +494,6 @@ def reward_action_smoothness(states: EnvState, robot_name: str, cfg: BaseTaskCfg
     return term_1 + term_2 + term_3
 
 
-
-
 def reward_waist_joint_stability(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     """
     Reward for keeping waist joints (yaw, roll, pitch) stable and close to default positions.
@@ -504,7 +503,6 @@ def reward_waist_joint_stability(states: EnvState, robot_name: str, cfg: BaseTas
     joint_vel = states.robots[robot_name].joint_vel
 
     waist_indices = cfg.waist_joint_indices
-
 
     # Get waist joint positions and velocities
     waist_pos = joint_pos[:, waist_indices]
