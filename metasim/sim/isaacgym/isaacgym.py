@@ -530,8 +530,8 @@ class IsaacgymHandler(BaseSimHandler):
 
                 self._env_rigid_body_global_indices[-1][self.objects[obj_i].name] = object_rigid_body_indices
 
-            # # carefully add robot
-            robot_handle = self.gym.create_actor(env, robot_asset, robot_pose, "robot", i, 2)
+            # # carefully add robot with self-collision enabled
+            robot_handle = self.gym.create_actor(env, robot_asset, robot_pose, "robot", i, 0)
             assert self.robot.scale[0] == 1.0 and self.robot.scale[1] == 1.0 and self.robot.scale[2] == 1.0
             self._robot_handles.append(robot_handle)
             # set dof properties

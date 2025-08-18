@@ -73,6 +73,11 @@ class Humanoid(LeggedRobot):
         self.cfg.upper_body_joint_indices = get_joint_reindexed_indices_from_substring(
             self.env.handler, robot.name, upper_body_names, device=self.device
         )
+        # keep the waist stable
+        if hasattr(robot, "waist_joints"):
+            self.cfg.waist_joint_indices = get_joint_reindexed_indices_from_substring(
+                self.env.handler, robot.name, robot.waist_joints, device=self.device
+            )
 
     # endregion
 

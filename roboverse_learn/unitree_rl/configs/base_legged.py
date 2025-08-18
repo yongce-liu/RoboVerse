@@ -264,8 +264,11 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
             states = handler.get_states()
             contact_forces = contact_forces_tensor(states, handler.robot.name)
             reset_buf = torch.any(
-                torch.norm(contact_forces[:, handler.task.termination_contact_indices, :], dim=-1) > 1.0, dim=1
+                torch.norm(contact_forces[:, handler.task.termination_contact_indices, :], dim=-1) > 300.0, dim=1
             )
+            reset_buf = torch.zeros_like(reset_buf, dtype=torch.bool)
+            if reset_buf.any():
+                print(f"Reset due to {handler.get_body_names(handler.robot.name, sort=True)[contact_forces[:, handler.task.termination_contact_indices, :].argmax()]}")
             rpy = get_euler_xyz_tensor(robot_rotation_tensor(states, handler.robot.name))
             reset_buf |= torch.logical_or(torch.abs(rpy[:, 1]) > 1.0, torch.abs(rpy[:, 0]) > 0.8)
             return reset_buf
@@ -364,7 +367,7 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
     # """episode length in steps"""
     control: ControlCfg = ControlCfg(action_scale=0.5, action_offset=True, torque_limit_scale=0.85)
     """Control config."""
-    random: LeggedRobotDomainRandCfg = LeggedRobotDomainRandCfg(level=1)
+    random: LeggedRobotDomainRandCfg = LeggedRobotDomainRandCfg(level=0)
     """Randomization config."""
     init_states = [
         {

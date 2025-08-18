@@ -275,14 +275,18 @@ class G1Dex3Cfg(BaseRobotCfg):
     elbow_links: list[str] = ["elbow"]
     wrist_links: list[str] = ["rubber_hand"]
     torso_links: list[str] = ["torso_link"]
+    # Only catastrophic contacts should terminate an episode
     terminate_contacts_links = ["pelvis", "torso", "waist", "shoulder", "elbow", "wrist"]
-    penalized_contacts_links: list[str] = ["hip", "knee"]
+    penalized_contacts_links: list[str] = ["hip", "knee", "shoulder", "elbow", "wrist", "hand"]
 
     # joint substrings, to find indices of joints.
 
     left_yaw_roll_joints = ["left_hip_yaw", "left_hip_roll"]
     right_yaw_roll_joints = ["right_hip_yaw", "right_hip_roll"]
-    upper_body_joints = ["shoulder", "elbow", "torso"]
+    # Include wrists and hands so RL keeps them close to default during locomotion
+    # This prevents the policy from exploiting free wrist/hand DoFs (twisting).
+    upper_body_joints = ["wrist", "hand", "torso", "waist"]
+    waist_joints = ["waist"]
 
     # From default joint armature in XML
-    dof_armature: float = 0.1
+    # dof_armature: float = 0.1
