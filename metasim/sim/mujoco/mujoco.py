@@ -810,6 +810,7 @@ class MujocoHandler(BaseSimHandler):
                 conaffinity="15",
                 material="matplane",
             )
+            hfield_name = None
             hfield_measure = None
         return hfield_name, hfield_measure
 
