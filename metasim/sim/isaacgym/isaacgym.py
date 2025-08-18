@@ -1058,7 +1058,7 @@ class IsaacgymHandler(BaseSimHandler):
     def _add_ground(self, if_random: bool = False):
         if if_random:
             tg = TerrainGenerator(self.scenario.random.terrain_cfg)
-            vertices, triangles = tg.generate_terrain(self.scenario.random.terrain_cfg)
+            vertices, triangles = tg.generate_terrain(self.scenario.random.terrain_cfg, type="trimesh")
             tm_params = gymapi.TriangleMeshParams()
             tm_params.nb_vertices = vertices.shape[0]
             tm_params.nb_triangles = triangles.shape[0]

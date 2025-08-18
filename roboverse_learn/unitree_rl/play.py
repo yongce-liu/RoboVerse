@@ -100,7 +100,7 @@ def play(args):
     assert num_actions == len(reindex_actions_idx)
     print(f"Reverse reindex actions idx: {reverse_reindex_actions_idx}")
 
-    for i in range(10000):
+    for i in range(1000):
         # # set fixed command
         # env.commands[:, 0] = 0.5
         # env.commands[:, 1] = 0.0

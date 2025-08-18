@@ -91,7 +91,7 @@ class ObstacleConfig(BaseTerrainConfig):
     type: str = "obstacle"
     origin: list[float] = [0, 0]
     size: list[float] = [1.0, 1.0]
-    rectangle_params: tuple[int, float, float] = (1.0, 2.0, 20)  # (min_size, max_size, num_rectangles)
+    rectangle_params: list[int, float, float] = (1.0, 2.0, 20)  # (min_size, max_size, num_rectangles)
     max_height: float = 0.2  # height of the obstacles in meters
     platform_size: float = 1.0
 
@@ -101,7 +101,7 @@ class StoneConfig(BaseTerrainConfig):
     type: str = "stone"
     origin: list[float] = [0, 0]
     size: list[float] = [1.0, 1.0]
-    stone_params: tuple[float, float] = (0.5, 1.0)
+    stone_params: list[float, float] = (0.5, 1.0)
     max_height: float = 0.2  # height of the stones in meters
     platform_size: float = 1.0
 
@@ -112,6 +112,7 @@ class GapConfig(BaseTerrainConfig):
     origin: list[float] = [0, 0]
     size: list[float] = [1.0, 1.0]
     gap_size: float = 1.0  # size of the gap in meters
+    platform_size: float = 1.0
 
 
 @configclass
@@ -120,6 +121,7 @@ class PitConfig(BaseTerrainConfig):
     position: list[float] = [0, 0]
     size: list[float] = [1.0, 1.0]
     depth: float = 1.0
+    platform_size: float = 1.0
 
 
 @configclass
@@ -130,7 +132,8 @@ class TerrainConfig:
     vertical_scale: float = 0.005  # m
     margin: float = 10  # m
     elements: dict[str, SlopeConfig | StairConfig | ObstacleConfig | StoneConfig | GapConfig | PitConfig] = None
-    repeat_direction: tuple[int, Literal["row", "column"]] = (0, "row")  # (repeat, repeat_direction)
+    repeat_direction_gap: list[int, Literal["row", "column"], float] = (0, "row", 0.1)  # (repeat, repeat_direction)
+    difficulty: list[float, float, Literal["linear"]] = [1.0, 4.0, "linear"]  # (difficulty, type)
     # For Isaacgym
     static_friction = 1.0
     dynamic_friction = 1.0

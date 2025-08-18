@@ -21,6 +21,9 @@ from metasim.sim.parallel import ParallelSimWrapper
 from metasim.types import Action
 from metasim.utils.state import CameraState, ObjectState, RobotState, TensorState
 
+# TODO: add it to the randomization of metasim
+from roboverse_learn.unitree_rl.helper.terrain_gererator import TerrainGenerator
+
 
 class MujocoHandler(BaseSimHandler):
     def __init__(self, scenario: ScenarioCfg, optional_queries: dict[str, BaseQueryType] | None = None):
@@ -63,6 +66,9 @@ class MujocoHandler(BaseSimHandler):
     def launch(self) -> None:
         model = self._init_mujoco()
         self.physics = mjcf.Physics.from_mjcf_model(model)
+        if self.hfield_measure is not None:
+            self.physics.model.hfield_data[:] = self.hfield_measure.flatten(order="C")
+
         self.data = self.physics.data
 
         self.body_names = [self.physics.model.body(i).name for i in range(self.physics.model.nbody)]
@@ -254,30 +260,12 @@ class MujocoHandler(BaseSimHandler):
         if camera_max_width > 640 or camera_max_height > 480:
             self._set_framebuffer_size(mjcf_model, camera_max_width, camera_max_height)
 
-        if self.scenario.try_add_table:
-            mjcf_model.asset.add(
-                "texture",
-                name="texplane",
-                type="2d",
-                builtin="checker",
-                width=512,
-                height=512,
-                rgb1=[0, 0, 0],
-                rgb2=[1.0, 1.0, 1.0],
-            )
-            mjcf_model.asset.add(
-                "material", name="matplane", reflectance="0.2", texture="texplane", texrepeat=[1, 1], texuniform=True
-            )
-            ground = mjcf_model.worldbody.add(
-                "geom",
-                type="plane",
-                pos="0 0 0",
-                size="100 100 0.001",
-                quat="1 0 0 0",
-                condim="3",
-                conaffinity="15",
-                material="matplane",
-            )
+        # if self.scenario.try_add_table:
+
+        self.hfield_name, self.hfield_measure = self._add_ground(
+            mjcf_model=mjcf_model, if_random=self.scenario.random.ground
+        )
+
         self.object_body_names = []
         self.mj_objects = {}
         for obj in self.objects:
@@ -761,6 +749,69 @@ class MujocoHandler(BaseSimHandler):
             contact_forces[body2] -= f_contact
 
         return contact_forces
+
+    def _add_ground(self, mjcf_model, if_random: bool = False):
+        if if_random:
+            tg = TerrainGenerator(self.scenario.random.terrain_cfg)
+            static_friction = getattr(self.scenario.random.terrain_cfg, "static_friction", 1.0)
+            dynamic_friction = getattr(self.scenario.random.terrain_cfg, "dynamic_friction", 1.0)
+            restitution = getattr(self.scenario.random.terrain_cfg, "restitution", 0.0)
+
+            height_mat = tg.generate_terrain(self.scenario.random.terrain_cfg, type="heightfield")
+            hfield_name = "terrain"
+            mjcf_model.asset.add(
+                "hfield",
+                name=hfield_name,
+                nrow=height_mat.shape[0],
+                ncol=height_mat.shape[1],
+                size=[
+                    height_mat.shape[0] * tg.horizontal_scale / 2,
+                    height_mat.shape[1] * tg.horizontal_scale / 2,
+                    1.0,
+                    0.1,
+                ],
+            )
+
+            mjcf_model.worldbody.add(
+                "geom",
+                name="terrain_geom",
+                type="hfield",
+                hfield=hfield_name,
+                pos=f"{-tg.margin} {-tg.margin} 0",
+                rgba="0.8 0.8 0.8 1",
+                friction=[static_friction, dynamic_friction, 0.001],
+                solimp=[restitution, 0.01, 0.99],
+                # contype="0",
+                # conaffinity="1",
+                # condim="6",
+            )
+            hfield_measure = height_mat
+        else:
+            mjcf_model.asset.add(
+                "texture",
+                name="texplane",
+                type="2d",
+                builtin="checker",
+                width=512,
+                height=512,
+                rgb1=[0, 0, 0],
+                rgb2=[1.0, 1.0, 1.0],
+            )
+            mjcf_model.asset.add(
+                "material", name="matplane", reflectance="0.2", texture="texplane", texrepeat=[1, 1], texuniform=True
+            )
+            ground = mjcf_model.worldbody.add(
+                "geom",
+                type="plane",
+                pos="0 0 0",
+                size="100 100 0.001",
+                quat="1 0 0 0",
+                condim="3",
+                conaffinity="15",
+                material="matplane",
+            )
+            hfield_measure = None
+        return hfield_name, hfield_measure
 
     ############################################################
     ## Misc
