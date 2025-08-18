@@ -220,6 +220,7 @@ def reward_feet_contact_forces(states: EnvState, robot_name: str, cfg: BaseTaskC
 
 def reward_contact(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     is_stance = states.robots[robot_name].extra["gait_phase"]
+    # is_stance = states.robots[robot_name].extra["leg_phase"] < 0.55
     contact_forces = states.robots[robot_name].extra["contact_forces"]
     contact = contact_forces[:, cfg.feet_indices, 2] > 1
     res = ~(contact ^ is_stance)
@@ -228,7 +229,10 @@ def reward_contact(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch
 
 def reward_feet_swing_height(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     contact = torch.norm(states.robots[robot_name].extra["contact_forces"][:, cfg.feet_indices, :3], dim=2) > 1.0
-    pos_error = torch.square(states.robots[robot_name].body_state[:, cfg.feet_indices, 2] - 0.08) * ~contact
+    pos_error = (
+        torch.square(states.robots[robot_name].body_state[:, cfg.feet_indices, 2] - cfg.reward_cfg.target_feet_height)
+        * ~contact
+    )
     return torch.sum(pos_error, dim=(1))
 
 

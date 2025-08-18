@@ -90,7 +90,9 @@ class Humanoid(LeggedRobot):
         # phase_left = phase
         # offset = 0.5
         # phase_right = (phase + offset) % 1
-        # envstate.robots[self.robot.name].extra["leg_phase"] = torch.cat([phase_left.unsqueeze(1), phase_right.unsqueeze(1)], dim=-1)
+        # envstate.robots[self.robot.name].extra["leg_phase"] = torch.cat(
+        #     [phase_left.unsqueeze(1), phase_right.unsqueeze(1)], dim=-1
+        # )
         envstate.robots[self.robot.name].extra["gait_phase"] = self._get_gait_phase()
 
     # NOTE: A Rewritten Function
@@ -144,7 +146,7 @@ class Humanoid(LeggedRobot):
         # right foot stance
         stance_mask[:, 1] = sin_pos < 0
         # Double support phase
-        stance_mask[torch.abs(sin_pos) < 0.1] = 1
+        stance_mask[torch.abs(sin_pos) < 0.05] = 1
         return stance_mask
 
     def _get_phase(self):

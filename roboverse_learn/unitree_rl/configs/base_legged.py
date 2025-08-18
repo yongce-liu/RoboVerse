@@ -2,11 +2,11 @@ from __future__ import annotations
 
 """Base class for legged-gym style legged-robot tasks."""
 
+import pathlib
 from dataclasses import MISSING
 from typing import Callable
 
 import torch
-from loguru import logger as log
 
 from metasim.cfg.checkers.base_checker import BaseChecker
 from metasim.cfg.control import ControlCfg
@@ -17,7 +17,8 @@ from metasim.cfg.tasks.base_task_cfg import BaseTaskCfg
 from metasim.sim import BaseSimHandler
 from metasim.utils import configclass
 from metasim.utils.humanoid_robot_util import contact_forces_tensor, get_euler_xyz_tensor, robot_rotation_tensor
-from roboverse_learn.unitree_rl.helper.terrain import Terrain
+
+from .base_terrain import TerrainConfig
 
 
 # Training Config
@@ -116,7 +117,7 @@ class LeggedRobotDomainRandCfg(RandomizationCfg):
             num_envs = params_dict["num_envs"]
             device = params_dict["device"]
         except KeyError as e:
-            log.error("num_buckets, range and device must be specified for uniform sampling")
+            print("num_buckets, range and device must be specified for uniform sampling")
             raise e
 
         shape = (num_buckets, 1)
@@ -133,7 +134,7 @@ class LeggedRobotDomainRandCfg(RandomizationCfg):
             num_envs = params_dict["num_envs"]
             device = params_dict["device"]
         except KeyError as e:
-            log.error("range and device must be specified for uniform sampling")
+            print("range and device must be specified for uniform sampling")
             raise e
 
         shape = (num_envs, 1)
@@ -150,63 +151,13 @@ class LeggedRobotDomainRandCfg(RandomizationCfg):
         """Maximum push velocity in xy plane."""
         max_push_ang_vel: float = 0.5
         """Maximum push angular velocity."""
-        push_interval: int = 5
+        push_interval: int = 500
         """Interval in steps for applying random push forces and torques."""
 
     push = PushRandomCfg(enabled=True)
 
-    @configclass
-    class TerrainCfg:
-        mesh_type = "trimesh"  # "heightfield" # none, plane, heightfield or trimesh
-        horizontal_scale = 0.1  # [m]
-        vertical_scale = 0.005  # [m]
-        border_size = 25  # [m]
-        curriculum = True
-        static_friction = 1.0
-        dynamic_friction = 1.0
-        restitution = 0.0
-        # rough terrain only:
-        measure_heights = True
-        include_act_obs_pair_buf = False
-        measured_points_x = [
-            -0.8,
-            -0.7,
-            -0.6,
-            -0.5,
-            -0.4,
-            -0.3,
-            -0.2,
-            -0.1,
-            0.0,
-            0.1,
-            0.2,
-            0.3,
-            0.4,
-            0.5,
-            0.6,
-            0.7,
-            0.8,
-        ]  # 1mx1.6m rectangle (without center line)
-        measured_points_y = [-0.5, -0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
-
-        # measured_points_x = [-0.45, -0.3, -0.15, 0, 0.15, 0.3, 0.45, 0.6, 0.75, 0.9, 1.05, 1.2] # 1mx1.6m rectangle (without center line)
-        # measured_points_y = [-0.75, -0.6, -0.45, -0.3, -0.15, 0., 0.15, 0.3, 0.45, 0.6, 0.75]
-
-        selected = False  # select a unique terrain type and pass all arguments
-        terrain_kwargs = None  # Dict of arguments for selected terrain
-        max_init_terrain_level = 5  # starting curriculum state
-        terrain_length = 8.0
-        terrain_width = 8.0
-        num_rows = 10  # number of terrain rows (levels)
-        num_cols = 20  # number of terrain cols (types)
-        # terrain types: [smooth slope, rough slope, stairs up, stairs down, discrete]
-        terrain_proportions = [0.1, 0.1, 0.35, 0.25, 0.2]
-        # terrain_proportions = [0.1, 0.2, 0.30, 0.30, 0.1]
-        # trimesh only:
-        slope_treshold = 0.75  # slopes above this threshold will be corrected to vertical surfaces
-
-    terrain_cfg: TerrainCfg = TerrainCfg()
-    terrain: Terrain | None = None
+    terrain_cfg: TerrainConfig = TerrainConfig.from_yaml(pathlib.Path(__file__).parent / "terrain.yaml")
+    """Terrain randomization configuration"""
 
     def __post_init__(self):
         super().__post_init__()
@@ -215,7 +166,9 @@ class LeggedRobotDomainRandCfg(RandomizationCfg):
         )
         self.mass = MassRandomCfg(enabled=True, range=[-1.0, 3.0], dist_fn=self.sample_uniform)
         if self.ground:
-            self.terrain = Terrain(cfg=self.terrain_cfg)
+            assert self.terrain_cfg is not None, (
+                "Terrain randomization config must be provided if ground randomization is enabled."
+            )
 
 
 # Config

@@ -343,6 +343,11 @@ class LeggedRobot(RslRlWrapper):
         dof_pos_limits = cfg.robots[0].joint_limits
         sorted_dof_pos_limits = [dof_pos_limits[joint] for joint in sorted_joint_names]
         self.cfg.dof_pos_limits = torch.tensor(sorted_dof_pos_limits, device=self.device)  # [n_joints, 2]
+        # soft constraints
+        _mid = (self.cfg.dof_pos_limits[:, 0] + self.cfg.dof_pos_limits[:, 1]) / 2.0
+        _diff = self.cfg.dof_pos_limits[:, 1] - self.cfg.dof_pos_limits[:, 0]
+        self.cfg.dof_pos_limits[:, 0] = _mid - 0.5 * _diff * self.cfg.reward_cfg.soft_dof_pos_limit
+        self.cfg.dof_pos_limits[:, 1] = _mid + 0.5 * _diff * self.cfg.reward_cfg.soft_dof_pos_limit
 
         default_joint_pos = cfg.robots[0].default_joint_positions
         sorted_joint_pos = [default_joint_pos[name] for name in sorted_joint_names]

@@ -23,6 +23,10 @@ from metasim.sim import BaseSimHandler, EnvWrapper, GymEnvWrapper
 from metasim.types import Action, EnvState
 from metasim.utils.dict import class_to_dict
 from metasim.utils.state import CameraState, ObjectState, RobotState, TensorState
+from metasim.utils.tensor_util import torch_rand_float
+
+# TODO: add it to the randomization of metasim
+from roboverse_learn.unitree_rl.helper.terrain_gererator import TerrainGenerator
 
 
 class IsaacgymHandler(BaseSimHandler):
@@ -388,7 +392,7 @@ class IsaacgymHandler(BaseSimHandler):
         )  # x, y, z, w order for gymapi.Quat
 
         # add ground plane
-        self._add_ground()
+        _height_measure, _horizontal_scale = self._add_ground(if_random=self.scenario.random.ground)
 
         # get object and robot asset
         obj_assets_list = [self._load_object_asset(obj) for obj in self.objects]
@@ -935,7 +939,8 @@ class IsaacgymHandler(BaseSimHandler):
                 new_root_states[actor_idx, 3:7] = torch.tensor(
                     rotation_list[i][j], dtype=torch.float32, device=self.device
                 )
-                new_root_states[actor_idx, 7:13] = torch.zeros(6, dtype=torch.float32, device=self.device)
+                # new_root_states[actor_idx, 7:13] = torch.zeros(6, dtype=torch.float32, device=self.device)
+                new_root_states[actor_idx, 7:13] = torch_rand_float(-0.5, 0.5, (1, 6), device=str(self.device))
             actor_indices.extend(range(env_offset, env_offset + len(self.objects) + 1))
 
         # Convert the actor indices to a tensor
@@ -1053,56 +1058,34 @@ class IsaacgymHandler(BaseSimHandler):
         props[0].mass += self._rand_mass_dist[env_id]
         return props
 
-    def _add_ground(self):
-        if self.scenario.random.ground:
-            if self.scenario.random.terrain.type == "heightfield":
-                """ Adds a heightfield terrain to the simulation, sets parameters based on the cfg.
-                """
-                terrain = self.scenario.random.terrain
-                hf_params = gymapi.HeightFieldProperties()
-                hf_params.column_scale = terrain.horizontal_scale
-                hf_params.row_scale = terrain.horizontal_scale
-                hf_params.vertical_scale = terrain.vertical_scale
-                hf_params.nbRows = terrain.tot_cols
-                hf_params.nbColumns = terrain.tot_rows
-                hf_params.transform.p.x = -terrain.border_size
-                hf_params.transform.p.y = -terrain.border_size
-                hf_params.transform.p.z = 0.0
-                hf_params.static_friction = terrain.cfg.static_friction
-                hf_params.dynamic_friction = terrain.cfg.dynamic_friction
-                hf_params.restitution = terrain.cfg.restitution
+    def _add_ground(self, if_random: bool = False):
+        if if_random:
+            tg = TerrainGenerator(self.scenario.random.terrain_cfg)
+            vertices, triangles = tg.generate_terrain(self.scenario.random.terrain_cfg)
+            tm_params = gymapi.TriangleMeshParams()
+            tm_params.nb_vertices = vertices.shape[0]
+            tm_params.nb_triangles = triangles.shape[0]
 
-                self.gym.add_heightfield(self.sim, terrain.heightsamples, hf_params)
-                self.height_samples = (
-                    torch.tensor(terrain.heightsamples).view(terrain.tot_rows, terrain.tot_cols).to(self.device)
-                )
-            elif self.scenario.random.terrain.type == "trimesh":
-                """ Adds a triangle mesh terrain to the simulation, sets parameters based on the cfg.
-                # """
-                terrain = self.scenario.random.terrain
-                tm_params = gymapi.TriangleMeshParams()
-                tm_params.nb_vertices = terrain.vertices.shape[0]
-                tm_params.nb_triangles = terrain.triangles.shape[0]
-
-                tm_params.transform.p.x = -terrain.cfg.border_size
-                tm_params.transform.p.y = -terrain.cfg.border_size
-                tm_params.transform.p.z = 0.0
-                tm_params.static_friction = terrain.cfg.static_friction
-                tm_params.dynamic_friction = terrain.cfg.dynamic_friction
-                tm_params.restitution = terrain.cfg.restitution
-                self.gym.add_triangle_mesh(
-                    self.sim, terrain.vertices.flatten(order="C"), terrain.triangles.flatten(order="C"), tm_params
-                )
-                # self.height_samples = torch.tensor(self.terrain.heightsamples).view(self.terrain.tot_rows, self.terrain.tot_cols).to(self.device)
-            else:
-                raise NotImplementedError(
-                    f"Ground type {self.scenario.random.ground.type} is not implemented. "
-                    "Please use 'heightfield' or 'trimesh'."
-                )
+            tm_params.transform.p.x = -tg.margin
+            tm_params.transform.p.y = -tg.margin
+            tm_params.transform.p.z = 0.0
+            tm_params.static_friction = getattr(self.scenario.random.terrain_cfg, "static_friction", 1.0)
+            tm_params.dynamic_friction = getattr(self.scenario.random.terrain_cfg, "dynamic_friction", 1.0)
+            tm_params.restitution = getattr(self.scenario.random.terrain_cfg, "restitution", 0.0)
+            self.gym.add_triangle_mesh(
+                self.sim, vertices.flatten(order="C"), triangles.flatten(order="C"), tm_params
+            )  # add terrain to sim
+            height_measure = tg.height_measure  ## get the actual height of each grid
+            horizontal_scale = tg.horizontal_scale
         else:
             plane_params = gymapi.PlaneParams()
             plane_params.normal = gymapi.Vec3(0, 0, 1)
+            plane_params.static_friction = getattr(self.scenario.random.terrain_cfg, "static_friction", 1.0)
+            plane_params.dynamic_friction = getattr(self.scenario.random.terrain_cfg, "dynamic_friction", 1.0)
+            plane_params.restitution = getattr(self.scenario.random.terrain_cfg, "restitution", 0.0)
             self.gym.add_ground(self.sim, plane_params)
+            height_measure, horizontal_scale = None, None
+        return (height_measure, horizontal_scale)
 
     @property
     def num_envs(self) -> int:

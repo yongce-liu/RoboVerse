@@ -52,7 +52,7 @@ class Dof12WalkingCfg(BaseLeggedTaskCfg):
     c_frame_stack = 1
 
     reward_cfg = BaseLeggedTaskCfg.RewardCfg(
-        base_height_target=0.75, soft_dof_pos_limit=0.9, cycle_time=0.8, target_feet_height=0.08
+        base_height_target=0.78, soft_dof_pos_limit=0.9, cycle_time=0.8, target_feet_height=0.08
     )
 
     reward_functions: list[Callable] = [
@@ -90,7 +90,7 @@ class Dof12WalkingCfg(BaseLeggedTaskCfg):
         # "orientation": -1.0,
         "orientation_sq": -1.0,
         # "base_height": 10.0,
-        "base_height_sq": -5.0,  # -10.0,
+        "base_height_sq": -10.0,  # -10.0,
         "dof_acc": -2.5e-7,
         "dof_vel": -1e-3,
         "feet_air_time": 0.0,
