@@ -106,7 +106,7 @@ def play(args):
         # env.commands[:, 1] = 0.0
         # env.commands[:, 2] = 0.0
         # env.commands[:, 3] = 0.0
-        commands = torch.tensor([1., 0.0, .0], device=env.device)
+        commands = torch.tensor([1.0, 0.0, 0.0], device=env.device)
         actions = policy(obs.detach()).detach()
         if args.reindex_actions:
             actions = actions[:, reindex_actions_idx]

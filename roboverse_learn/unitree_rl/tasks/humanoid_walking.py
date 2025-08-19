@@ -352,9 +352,7 @@ class HumanoidWalkingTask(Humanoid):
         noise_vec[9:12] = noise_scales.gravity * noise_level
         start = 12
         A = self.num_actions
-        noise_vec[start : start + A] = (
-            noise_scales.dof_pos * noise_level * self.cfg.normalization.obs_scales.dof_pos
-        )
+        noise_vec[start : start + A] = noise_scales.dof_pos * noise_level * self.cfg.normalization.obs_scales.dof_pos
         noise_vec[start + A : start + 2 * A] = (
             noise_scales.dof_vel * noise_level * self.cfg.normalization.obs_scales.dof_vel
         )
