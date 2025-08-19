@@ -205,7 +205,6 @@ class HumanoidWalkingCfg(BaseLeggedTaskCfg):
         rfs.reward_hip_pos,
         rfs.reward_contact,
         rfs.reward_feet_swing_height,
-        rfs.reward_tracking_lin_vel,
     ]
 
     reward_weights: dict[str, float] = {
@@ -231,8 +230,8 @@ class HumanoidWalkingCfg(BaseLeggedTaskCfg):
         "feet_contact_forces": -0.05,
         "contact": 0.18,
         # vel tracking
-        "tracking_lin_vel": 1.0,
-        "tracking_ang_vel": 0.5,
+        "tracking_lin_vel": 6.0,
+        "tracking_ang_vel": 3.0,
         "vel_mismatch_exp": 0.5,
         "low_speed": 0.2,
         "track_vel_hard": 1.0,
@@ -306,6 +305,11 @@ class HumanoidWalkingTask(Humanoid):
         self.ref_dof_pos = torch.zeros(
             self.num_envs, self.env.handler.robot_num_dof, device=self.device, requires_grad=False
         )
+        # Scale gait amplitude by command magnitude so zero command => no gait
+        # Combine linear speed and a fraction of yaw command to allow in-place turning
+        lin_speed = torch.norm(self.commands[:, :2], dim=1)
+        yaw_speed = torch.abs(self.commands[:, 2]) if self.commands.shape[1] > 2 else 0.0
+        speed_factor = torch.clamp(lin_speed + 0.5 * yaw_speed, 0.0, 1.0).unsqueeze(1)
         scale_1 = self.cfg.reward_cfg.target_joint_pos_scale
         scale_2 = 2 * scale_1
         sin_pos_l[sin_pos_l > 0] = 0
@@ -319,6 +323,8 @@ class HumanoidWalkingTask(Humanoid):
         # Double support phase
         self.ref_dof_pos[torch.abs(sin_pos) < 0.1] = 0
         self.ref_dof_pos = 2 * self.ref_dof_pos
+        # Apply speed-dependent amplitude
+        self.ref_dof_pos *= speed_factor
 
     def _parse_ref_pos(self, envstate):
         envstate.robots[self.robot.name].extra["ref_dof_pos"] = self.ref_dof_pos
@@ -337,17 +343,23 @@ class HumanoidWalkingTask(Humanoid):
         self.add_noise = self.cfg.noise.add_noise
         noise_scales = self.cfg.noise.noise_scales
         noise_level = self.cfg.noise.noise_level
-        noise_vec[0:3] = 0.0  # commands
+        # Observation layout (single frame):
+        # 0:3 commands, 3:6 base_ang_vel, 6:9 base_euler_xyz, 9:12 projected_gravity,
+        # 12:12+A q, 12+A:12+2A dq, 12+2A:12+3A actions, +1 sin, +1 cos
+        noise_vec[0:3] = 0.0  # commands (no noise)
         noise_vec[3:6] = noise_scales.ang_vel * noise_level * self.cfg.normalization.obs_scales.ang_vel
-        noise_vec[6:9] = noise_scales.gravity * noise_level
-        noise_vec[9 : 9 + self.num_actions] = (
+        noise_vec[6:9] = 0.0  # base_euler_xyz (keep clean)
+        noise_vec[9:12] = noise_scales.gravity * noise_level
+        start = 12
+        A = self.num_actions
+        noise_vec[start : start + A] = (
             noise_scales.dof_pos * noise_level * self.cfg.normalization.obs_scales.dof_pos
         )
-        noise_vec[9 + self.num_actions : 9 + 2 * self.num_actions] = (
+        noise_vec[start + A : start + 2 * A] = (
             noise_scales.dof_vel * noise_level * self.cfg.normalization.obs_scales.dof_vel
         )
-        noise_vec[9 + 2 * self.num_actions : 9 + 3 * self.num_actions] = 0.0  # previous actions
-        noise_vec[9 + 3 * self.num_actions : 9 + 3 * self.num_actions + 2] = 0.0  # sin/cos phase
+        noise_vec[start + 2 * A : start + 3 * A] = 0.0  # previous actions (actor already outputs noisy actions)
+        noise_vec[start + 3 * A : start + 3 * A + 2] = 0.0  # sin/cos phase
 
         return noise_vec
 
