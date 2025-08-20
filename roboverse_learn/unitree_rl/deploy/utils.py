@@ -28,6 +28,7 @@ def euler_xyz_from_quat(quat: np.ndarray):
     two_pi = 2.0 * np.pi
     return roll % two_pi, pitch % two_pi, yaw % two_pi
 
+
 def get_euler_xyz(quat: np.ndarray) -> np.ndarray:
     """Return Euler (roll, pitch, yaw) in [-π, π] for a single quaternion.
     Input: (4,), Output: (3,)

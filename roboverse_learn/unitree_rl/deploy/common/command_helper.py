@@ -1,6 +1,7 @@
+from typing import Union
+
 from unitree_sdk2py.idl.unitree_go.msg.dds_ import LowCmd_ as LowCmdGo
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_ as LowCmdHG
-from typing import Union
 
 
 class MotorMode:

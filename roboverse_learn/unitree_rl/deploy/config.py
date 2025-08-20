@@ -1,10 +1,12 @@
+import copy
+
 import numpy as np
 import yaml
-import copy
+
 
 class G1Config:
     def __init__(self, file_path) -> None:
-        with open(file_path, "r") as f:
+        with open(file_path) as f:
             config = yaml.load(f, Loader=yaml.FullLoader)
 
             self.control_dt = config["control_dt"]
@@ -67,20 +69,103 @@ class G1Config:
             "right_elbow_joint",
             "right_wrist_roll_joint",
             "right_wrist_pitch_joint",
-            "right_wrist_yaw_joint"
+            "right_wrist_yaw_joint",
         ]
 
         # default kps, kds, angles for the body joints
-        self.default_body_kps = np.array([200, 150, 150, 200, 20, 20, 200, 150,
-                                 150, 200, 20, 20, 200, 200, 200, 40,
-                                 40, 40, 40, 20, 20, 20, 40, 40, 40,
-                                 40, 20, 20, 20])
-        self.default_body_kds = np.array([5, 5, 5, 5, 4, 4, 5, 5, 5, 5, 4, 4,
-                                 5, 5, 5, 10, 10, 10, 10, 4, 4, 4,
-                                 10, 10, 10, 10, 4, 4, 4])
-        self.default_body_angles = np.array([-0.4, 0.0, 0.0, 0.8, -0.4, 0.0, -0.4, 0.0, 0.0, 0.8, -0.4,
-                                    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                                    0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        self.default_body_kps = np.array([
+            200,
+            150,
+            150,
+            200,
+            20,
+            20,
+            200,
+            150,
+            150,
+            200,
+            20,
+            20,
+            200,
+            200,
+            200,
+            40,
+            40,
+            40,
+            40,
+            20,
+            20,
+            20,
+            40,
+            40,
+            40,
+            40,
+            20,
+            20,
+            20,
+        ])
+        self.default_body_kds = np.array([
+            5,
+            5,
+            5,
+            5,
+            4,
+            4,
+            5,
+            5,
+            5,
+            5,
+            4,
+            4,
+            5,
+            5,
+            5,
+            10,
+            10,
+            10,
+            10,
+            4,
+            4,
+            4,
+            10,
+            10,
+            10,
+            10,
+            4,
+            4,
+            4,
+        ])
+        self.default_body_angles = np.array([
+            -0.4,
+            0.0,
+            0.0,
+            0.8,
+            -0.4,
+            0.0,
+            -0.4,
+            0.0,
+            0.0,
+            0.8,
+            -0.4,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+        ])
 
         # default kps, kds, angles for both hand joints
         self.default_left_hand_kps = self.default_right_hand_kps = np.array([5, 5, 5, 5, 5, 5, 5])

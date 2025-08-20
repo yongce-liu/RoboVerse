@@ -1,23 +1,36 @@
-from typing import Union
-import numpy as np
 import time
-import torch
+from typing import Union
+
+import numpy as np
 import rootutils
+import torch
+
 rootutils.setup_root(__file__, pythonpath=True)
-from unitree_sdk2py.core.channel import ChannelPublisher, ChannelSubscriber, ChannelFactoryInitialize
-from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_, unitree_hg_msg_dds__LowState_
-from unitree_sdk2py.idl.default import unitree_go_msg_dds__LowCmd_, unitree_go_msg_dds__LowState_
-from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_ as LowCmdHG
+from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelPublisher, ChannelSubscriber
+from unitree_sdk2py.idl.default import (
+    unitree_go_msg_dds__LowCmd_,
+    unitree_go_msg_dds__LowState_,
+    unitree_hg_msg_dds__LowCmd_,
+    unitree_hg_msg_dds__LowState_,
+)
 from unitree_sdk2py.idl.unitree_go.msg.dds_ import LowCmd_ as LowCmdGo
-from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_ as LowStateHG
 from unitree_sdk2py.idl.unitree_go.msg.dds_ import LowState_ as LowStateGo
+from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_ as LowCmdHG
+from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_ as LowStateHG
 from unitree_sdk2py.utils.crc import CRC
 
-from roboverse_learn.unitree_rl.deploy.common.command_helper import create_damping_cmd, create_zero_cmd, init_cmd_hg, init_cmd_go, MotorMode
+from roboverse_learn.unitree_rl.deploy.common.command_helper import (
+    MotorMode,
+    create_damping_cmd,
+    create_zero_cmd,
+    init_cmd_go,
+    init_cmd_hg,
+)
+from roboverse_learn.unitree_rl.deploy.common.remote_controller import KeyMap, RemoteController
 from roboverse_learn.unitree_rl.deploy.common.rotation_helper import get_gravity_orientation, transform_imu_data
-from roboverse_learn.unitree_rl.deploy.common.remote_controller import RemoteController, KeyMap
 from roboverse_learn.unitree_rl.deploy.config import G1Config
 from roboverse_learn.unitree_rl.deploy.utils import get_euler_xyz
+
 
 class Controller:
     def __init__(self, config: G1Config) -> None:
@@ -105,7 +118,6 @@ class Controller:
         total_time = 2
         num_step = int(total_time / self.config.control_dt)
 
-
         default_body_pos = self.config.default_body_angles.copy()
         body_kps = self.config.default_body_kps.copy()
         body_kds = self.config.default_body_kds.copy()
@@ -161,7 +173,9 @@ class Controller:
             # imu data needs to be transformed to the pelvis frame
             waist_yaw = self.low_state.motor_state[self.config.arm_waist_joint2motor_idx[0]].q
             waist_yaw_omega = self.low_state.motor_state[self.config.arm_waist_joint2motor_idx[0]].dq
-            quat, ang_vel = transform_imu_data(waist_yaw=waist_yaw, waist_yaw_omega=waist_yaw_omega, imu_quat=quat, imu_omega=ang_vel_in)
+            quat, ang_vel = transform_imu_data(
+                waist_yaw=waist_yaw, waist_yaw_omega=waist_yaw_omega, imu_quat=quat, imu_omega=ang_vel_in
+            )
         else:
             ang_vel = np.asarray(self.low_state.imu_state.gyroscope, dtype=np.float32)
 
@@ -210,12 +224,14 @@ class Controller:
         obs_tensor = torch.from_numpy(self.obs).unsqueeze(0)
         self.action = self.policy(obs_tensor).detach().numpy().squeeze()
         delay = 0.2
-        self.action = (1-delay)*self.action + delay*self.last_action
+        self.action = (1 - delay) * self.action + delay * self.last_action
         self.last_action = self.action.copy()
 
         # transform action to target_body_dof_pos
         target_body_dof_pos = self.config.default_body_angles.copy()
-        target_body_dof_pos[self.config.body_default_sorted_idx_tuples[:, 0]] += self.action[self.config.body_default_sorted_idx_tuples[:, 1]] * self.config.action_scale
+        target_body_dof_pos[self.config.body_default_sorted_idx_tuples[:, 0]] += (
+            self.action[self.config.body_default_sorted_idx_tuples[:, 1]] * self.config.action_scale
+        )
 
         # Build low cmd
 
@@ -225,7 +241,6 @@ class Controller:
             self.low_cmd.motor_cmd[i].kp = self.config.default_body_kps[i]
             self.low_cmd.motor_cmd[i].kd = self.config.default_body_kds[i]
             self.low_cmd.motor_cmd[i].tau = 0
-
 
         # send the command
         self.send_cmd(self.low_cmd)
