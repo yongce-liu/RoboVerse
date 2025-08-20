@@ -126,11 +126,4 @@ def play(args):
 if __name__ == "__main__":
     EXPORT_POLICY = True
     args = get_args()
-    # args.task = "dof12_walking"
-    # args.robot = "g1_dof12"
-    # args.load_run = "2025_0813_080538"
-    # args.checkpoint = 1500
-    # args.sim = "isaacgym"
-    # args.jit_load = False
-    # args.reindex_actions = False
     play(args)

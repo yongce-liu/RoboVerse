@@ -14,8 +14,8 @@ from .franka_urdf_cfg import FrankaUrdfCfg
 from .franka_urdf_sapien_cfg import FrankaUrdfSapienCfg
 from .franka_with_gripper_extension_cfg import FrankaWithGripperExtensionCfg
 from .g1_cfg import G1Cfg
-from .g1dex3_cfg import G1Dex3Cfg
-from .g1dof12_cfg import G1Dof12Cfg
+from .g1_dex3_cfg import G1Dex3Cfg
+from .g1_dof12_cfg import G1Dof12Cfg
 from .gen3_cfg import Gen3Cfg
 from .go2_cfg import Go2Cfg
 from .google_robot_static_cfg import GoogleRobotStaticCfg

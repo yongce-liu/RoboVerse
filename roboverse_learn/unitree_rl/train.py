@@ -22,7 +22,6 @@ from roboverse_learn.unitree_rl.helper.utils import get_args, get_class, get_log
 
 
 def train(args):
-    # device = "cuda" if torch.cuda.is_available() else "cpu"
     # only support single robot for now
     _robots_name, _robots = make_robots(args)
     robots_name, robots = [_robots_name[0]], [_robots[0]]
@@ -82,8 +81,4 @@ def train(args):
 
 if __name__ == "__main__":
     args = get_args()
-    # args.task = "dof12_walking"
-    # args.sim = "isaacgym"
-    # args.num_envs = 72
-    # args.robot = "g1_dof12"
     train(args)
