@@ -1,5 +1,6 @@
+from __future__ import annotations
+
 import time
-from typing import Union
 
 import numpy as np
 import rootutils
@@ -95,7 +96,7 @@ class Controller:
         self.low_state = msg
         self.remote_controller.set(self.low_state.wireless_remote)
 
-    def send_cmd(self, cmd: Union[LowCmdGo, LowCmdHG]):
+    def send_cmd(self, cmd: LowCmdGo | LowCmdHG):
         cmd.crc = CRC().Crc(cmd)
         self.lowcmd_publisher_.Write(cmd)
 
