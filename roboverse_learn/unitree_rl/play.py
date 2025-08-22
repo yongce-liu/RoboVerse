@@ -6,6 +6,8 @@ try:
 except ImportError:
     pass
 
+import os
+
 import torch
 from rsl_rl.runners.on_policy_runner import OnPolicyRunner
 
@@ -17,7 +19,6 @@ from roboverse_learn.unitree_rl.helper.utils import (
     get_class,
     get_export_jit_path,
     get_load_path,
-    get_log_dir,
     make_robots,
 )
 
@@ -51,11 +52,12 @@ def play(args):
     scenario.task.random.push.enabled = False
     scenario.task.noise.add_noise = False
 
-    log_dir = get_log_dir(args, scenario)
     task_wrapper = get_class(args.task, "Task")
     env = task_wrapper(scenario)
 
     load_path = get_load_path(args, scenario)
+    # Use the existing run directory as log_dir to avoid creating new output dirs during play
+    log_dir = os.path.dirname(load_path)
 
     obs = env.get_observations()
     # load policy
@@ -106,7 +108,7 @@ def play(args):
         # env.commands[:, 1] = 0.0
         # env.commands[:, 2] = 0.0
         # env.commands[:, 3] = 0.0
-        commands = torch.tensor([1.0, 0.0, 0.0], device=env.device)
+        commands = torch.tensor([0.0, 0.0, 0.0], device=env.device)
         actions = policy(obs.detach()).detach()
         if args.reindex_actions:
             actions = actions[:, reindex_actions_idx]

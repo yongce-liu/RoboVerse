@@ -92,6 +92,14 @@ python roboverse_learn/unitree_rl/play.py \
 
 ## Real-World deployment
 
+First please install the `unitree_sdk2_python` package:
+```
+cd third_party
+git clone https://github.com/unitreerobotics/unitree_sdk2_python.git
+cd unitree_sdk2_python
+pip install -e .
+```
+
 Real-world deployment entry point:
 ```
 python roboverse_learn/unitree_rl/deploy/deploy_real.py <network_interface> <robot_yaml>

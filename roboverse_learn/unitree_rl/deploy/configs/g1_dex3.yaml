@@ -66,7 +66,7 @@ joint_names: [
 ang_vel_scale: 0.25
 dof_pos_scale: 1.0
 dof_vel_scale: 0.05
-action_scale: 0.5
+action_scale: 0.25
 cmd_scale: [2.0, 2.0, 0.25]
 num_actions: 43
 num_obs: 143
