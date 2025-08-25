@@ -253,7 +253,7 @@ def reward_contact(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch
     contact_forces = states.robots[robot_name].extra["contact_forces"]
     contact = contact_forces[:, cfg.feet_indices, 2] > 1
     res = ~(contact ^ is_stance)
-    return torch.sum(res, dim=1)
+    return torch.sum(res, dim=1, dtype=torch.float32)
 
 
 def reward_feet_swing_height(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:

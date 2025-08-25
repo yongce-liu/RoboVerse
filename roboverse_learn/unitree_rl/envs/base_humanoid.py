@@ -129,7 +129,8 @@ class Humanoid(LeggedRobot):
         self.last_feet_z = feet_z
 
         # Compute swing mask
-        swing_mask = 1 - self._get_gait_phase()
+        # swing_mask = 1 - self._get_gait_phase()
+        swing_mask = ~self._get_gait_phase()
 
         # feet height should be closed to target feet height at the peak
         rew_pos = torch.abs(self.feet_height - self.cfg.reward_cfg.target_feet_height) < 0.01
@@ -145,13 +146,13 @@ class Humanoid(LeggedRobot):
         phase = self._get_phase()
         sin_pos = torch.sin(2 * torch.pi * phase)
         # Add double support phase
-        stance_mask = torch.zeros((self.num_envs, len(self.feet_indices)), dtype=torch.int16, device=self.device)
+        stance_mask = torch.zeros((self.num_envs, len(self.feet_indices)), dtype=torch.bool, device=self.device)
         # left foot stance
         stance_mask[:, 0] = sin_pos >= 0
         # right foot stance
         stance_mask[:, 1] = sin_pos < 0
-        # Double support phase
-        stance_mask[torch.abs(sin_pos) < 0.05] = 1
+        # # Double support phase
+        # stance_mask[torch.abs(sin_pos) < 0.1] = 1
         return stance_mask
 
     def _get_phase(self):

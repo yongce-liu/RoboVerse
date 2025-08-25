@@ -547,10 +547,13 @@ class IsaacgymHandler(BaseSimHandler):
             self._env_rigid_body_global_indices[-1]["robot"] = robot_rigid_body_indices
 
             # domain randomization for robots
+            # random friction
             self.rand_rigid_body_fric(self.scenario.random.friction, i, robot_rigid_shape_props_asset)
+            self.gym.set_asset_rigid_shape_properties(robot_asset, robot_rigid_shape_props_asset)
+            # random mass
             robot_body_props = self.gym.get_actor_rigid_body_properties(env, robot_handle)
             self.rand_rigid_body_mass(self.scenario.random.mass, i, robot_body_props)
-            # self.gym.set_actor_rigid_body_properties(env, robot_handle, robot_body_props, recomputeInertia=True)
+            self.gym.set_actor_rigid_body_properties(env, robot_handle, robot_body_props, recomputeInertia=True)
 
         # GET initial state, copy for reset later
         self._initial_state = np.copy(self.gym.get_sim_rigid_body_states(self.sim, gymapi.STATE_ALL))

@@ -133,7 +133,8 @@ class LeggedRobot(RslRlWrapper):
     def _pre_physics_step(self, actions: torch.Tensor):
         """Apply action smoothing and wrap actions as dict before physics step."""
         # low frequency action smoothing
-        delay = torch.rand((self.num_envs, 1), device=self.device)
+        # delay = torch.rand((self.num_envs, 1), device=self.device)
+        delay = 0.0
         actions = (1 - delay) * actions.to(self.device) + delay * self.actions
         # clip actions
         clip_action_limit = self.cfg.normalization.clip_actions

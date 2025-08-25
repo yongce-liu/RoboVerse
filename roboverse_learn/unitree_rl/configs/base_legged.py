@@ -151,7 +151,7 @@ class LeggedRobotDomainRandCfg(RandomizationCfg):
         """Maximum push velocity in xy plane."""
         max_push_ang_vel: float = 0.5
         """Maximum push angular velocity."""
-        push_interval: int = 500
+        push_interval: int = 50
         """Interval in steps for applying random push forces and torques."""
 
     push = PushRandomCfg(enabled=True)
@@ -162,7 +162,7 @@ class LeggedRobotDomainRandCfg(RandomizationCfg):
     def __post_init__(self):
         super().__post_init__()
         self.friction = FrictionRandomCfg(
-            enabled=True, range=[0.1, 2.0], dist_fn=self.sample_uniform_buckets, num_buckets=256
+            enabled=True, range=[0.1, 1.25], dist_fn=self.sample_uniform_buckets, num_buckets=256
         )
         self.mass = MassRandomCfg(enabled=True, range=[-1.0, 3.0], dist_fn=self.sample_uniform)
         if self.ground:
