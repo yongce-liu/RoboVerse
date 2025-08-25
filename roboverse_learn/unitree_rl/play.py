@@ -108,12 +108,10 @@ def play(args):
         # env.commands[:, 1] = 0.0
         # env.commands[:, 2] = 0.0
         # env.commands[:, 3] = 0.0
-        commands = torch.tensor([0.0, 0.0, 0.0], device=env.device)
         actions = policy(obs.detach()).detach()
         if args.reindex_actions:
             actions = actions[:, reindex_actions_idx]
         obs, _, _, _, _ = env.step(actions)
-        obs[:, :3] = commands.unsqueeze(0)
         if args.reindex_actions:
             # set the command
             obs[:, 9 : 9 + num_actions] = obs[:, 9 : 9 + num_actions][:, reverse_reindex_actions_idx]

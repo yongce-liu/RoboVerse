@@ -151,7 +151,7 @@ class LeggedRobotDomainRandCfg(RandomizationCfg):
         """Maximum push velocity in xy plane."""
         max_push_ang_vel: float = 0.5
         """Maximum push angular velocity."""
-        push_interval: int = 50
+        push_interval: int = 500
         """Interval in steps for applying random push forces and torques."""
 
     push = PushRandomCfg(enabled=True)
