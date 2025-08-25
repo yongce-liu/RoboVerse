@@ -275,8 +275,14 @@ class LeggedRobot(RslRlWrapper):
         self.commands[env_ids, :2] *= (torch.norm(self.commands[env_ids, :2], dim=1) > 0.2).unsqueeze(1)
 
     @staticmethod
-    def get_reward_fn(target: str, reward_functions: list[Callable]) -> Callable:
-        fn = next((f for f in reward_functions if f.__name__ == target), None)
+    def get_reward_fn(target: str, reward_functions: list[Callable] | str) -> Callable:
+        if isinstance(reward_functions, (list, tuple)):
+            fn = next((f for f in reward_functions if f.__name__ == target), None)
+        elif isinstance(reward_functions, str):
+            reward_module = __import__(reward_functions, fromlist=[target])
+            fn = getattr(reward_module, target, None)
+        else:
+            raise ValueError("reward_functions should be a list of functions or a string module path")
         if fn is None:
             raise KeyError(f"No reward function named '{target}'")
         return fn

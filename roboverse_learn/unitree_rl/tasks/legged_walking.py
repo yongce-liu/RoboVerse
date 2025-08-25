@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from typing import Callable
-
 import torch
 
+from metasim.cfg.control import ControlCfg
 from metasim.cfg.scenario import ScenarioCfg
 from metasim.utils import configclass
 from metasim.utils.humanoid_robot_util import (
@@ -11,7 +10,6 @@ from metasim.utils.humanoid_robot_util import (
     dof_vel_tensor,
 )
 from metasim.utils.state import TensorState
-from roboverse_learn.unitree_rl.configs import reward_funcs as rfs
 from roboverse_learn.unitree_rl.configs.base_legged import BaseLeggedTaskCfg, LeggedRobotCfgPPO
 from roboverse_learn.unitree_rl.envs.base_legged import LeggedRobot
 
@@ -19,6 +17,9 @@ from roboverse_learn.unitree_rl.envs.base_legged import LeggedRobot
 # Training Config
 @configclass
 class LeggedWalkingCfgPPO(LeggedRobotCfgPPO):
+    policy = LeggedRobotCfgPPO.Policy(
+        init_noise_std=1.0, actor_hidden_dims=[512, 256, 128], critic_hidden_dims=[512, 256, 128], activation="elu"
+    )
     algorithm = LeggedRobotCfgPPO.Algorithm(entropy_coef=0.01)
     runner = LeggedRobotCfgPPO.Runner(experiment_name="legged_walking")
 
@@ -33,29 +34,11 @@ class LeggedWalkingCfg(BaseLeggedTaskCfg):
     ppo_cfg = LeggedWalkingCfgPPO()
 
     frame_stack = 1
-    c_frame_stack = 3
+    c_frame_stack = 1
 
-    reward_functions: list[Callable] = [
-        rfs.reward_lin_vel_z,
-        rfs.reward_ang_vel_xy,
-        rfs.reward_orientation,
-        rfs.reward_base_height,
-        rfs.reward_torques,
-        rfs.reward_dof_vel,
-        rfs.reward_dof_acc,
-        rfs.reward_action_rate,
-        rfs.reward_collision,
-        rfs.reward_termination,
-        rfs.reward_dof_pos_limits,
-        rfs.reward_tracking_lin_vel,
-        rfs.reward_tracking_ang_vel,
-        rfs.reward_feet_air_time,
-        rfs.reward_stumble,
-        rfs.reward_stand_still,
-        # reward_dof_vel_limits,
-        # reward_torque_limits,
-        # reward_feet_contact_forces,
-    ]
+    control: ControlCfg = ControlCfg(action_scale=0.25, action_offset=True, torque_limit_scale=0.85)
+
+    reward_cfg = BaseLeggedTaskCfg.RewardCfg(soft_dof_pos_limit=0.9, base_height_target=0.25)
 
     reward_weights: dict[str, float] = {
         "termination": -0.0,
@@ -63,17 +46,19 @@ class LeggedWalkingCfg(BaseLeggedTaskCfg):
         "tracking_ang_vel": 0.5,
         "lin_vel_z": -2.0,
         "ang_vel_xy": -0.05,
-        "orientation": -0.0,
+        # "orientation": -0.0,
+        "orientation_sq": -0.0,
         "dof_vel": -0.0,
         "dof_acc": -2.5e-7,
-        "base_height": -0.0,
+        # "base_height": 0.0,
+        "base_height_sq": -0.0,  # -10.0,
         "feet_air_time": 1.0,
         "collision": -1.0,
         "feet_stumble": -0.0,
         "action_rate": -0.01,
         "stand_still": -0.0,
-        "torques": -0.0002,
         "dof_pos_limits": -10.0,
+        "torques": -0.0002,
     }
 
     def __post_init__(self):

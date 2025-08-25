@@ -151,13 +151,13 @@ class Humanoid(LeggedRobot):
         stance_mask[:, 0] = sin_pos >= 0
         # right foot stance
         stance_mask[:, 1] = sin_pos < 0
-        # # Double support phase
-        # stance_mask[torch.abs(sin_pos) < 0.1] = 1
+        # Double support phase
+        stance_mask[torch.abs(sin_pos) < 0.01] = 1
         return stance_mask
 
     def _get_phase(self):
         cycle_time = self.cfg.reward_cfg.cycle_time
-        phase = self.episode_length_buf * self.dt % cycle_time / cycle_time
+        phase = self.episode_length_buf * self.dt / cycle_time
         return phase
 
     # endregion

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from functools import partial
-from typing import Callable
 
 import torch
 
@@ -13,7 +12,6 @@ from metasim.utils.humanoid_robot_util import (
     dof_vel_tensor,
     ref_dof_pos_tensor,
 )
-from roboverse_learn.unitree_rl.configs import reward_funcs as rfs
 
 # from roboverse_learn.unitree_rl.configs.base_humanoid import BaseHumanoidCfg
 from roboverse_learn.unitree_rl.configs.base_legged import BaseLeggedTaskCfg, ControlCfg, LeggedRobotCfgPPO
@@ -160,36 +158,7 @@ class HumanoidWalkingCfg(BaseLeggedTaskCfg):
     frame_stack = 1
     c_frame_stack = 3
 
-    reward_cfg = BaseLeggedTaskCfg.RewardCfg(
-        base_height_target=0.80, tracking_sigma=1 / 0.2, max_contact_force=700, soft_torque_limit=0.001
-    )
-
-    reward_functions: list[Callable] = [
-        rfs.reward_tracking_lin_vel,
-        rfs.reward_tracking_ang_vel,
-        rfs.reward_lin_vel_z,
-        rfs.reward_ang_vel_xy,
-        rfs.reward_orientation,
-        rfs.reward_orientation_sq,
-        rfs.reward_base_height,
-        rfs.reward_base_height_sq,
-        rfs.reward_dof_acc,
-        rfs.reward_dof_vel,
-        rfs.reward_feet_air_time,
-        rfs.reward_collision,
-        rfs.reward_action_rate,
-        rfs.reward_dof_pos_limits,
-        rfs.reward_hip_pos,
-        rfs.reward_contact_no_vel,
-        rfs.reward_feet_clearance,
-        rfs.reward_feet_contact_number,
-        rfs.reward_alive,
-        rfs.reward_feet_swing_height,
-        rfs.reward_contact,
-        rfs.reward_torques,
-        rfs.reward_waist_joint_stability,
-        rfs.reward_upper_body_pos,
-    ]
+    reward_cfg = BaseLeggedTaskCfg.RewardCfg(base_height_target=0.80, tracking_sigma=1 / 0.2, max_contact_force=700)
 
     reward_weights: dict[str, float] = {
         "termination": -0.0,

@@ -165,11 +165,7 @@ def reward_torque_limits(states: EnvState, robot_name: str, cfg: BaseTaskCfg) ->
     Penalize high torques.
     """
     return torch.sum(
-        (
-            torch.abs(states.robots[robot_name].joint_effort_target)
-            - cfg.torque_limits * cfg.reward_cfg.soft_torque_limit
-        ).clip(min=0.0),
-        dim=1,
+        (torch.abs(states.robots[robot_name].joint_effort_target) - cfg.torque_limits).clip(min=0.0), dim=1
     )
 
 

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Callable
-
 import torch
 
 from metasim.cfg.control import ControlCfg
@@ -11,7 +9,6 @@ from metasim.utils.humanoid_robot_util import (
     dof_pos_tensor,
     dof_vel_tensor,
 )
-from roboverse_learn.unitree_rl.configs import reward_funcs as rfs
 from roboverse_learn.unitree_rl.configs.base_legged import BaseLeggedTaskCfg, LeggedRobotCfgPPO
 from roboverse_learn.unitree_rl.envs.base_humanoid import Humanoid
 
@@ -46,7 +43,7 @@ class Dof12WalkingCfg(BaseLeggedTaskCfg):
 
     ppo_cfg = Dof12WalkingCfgPPO()
 
-    control = ControlCfg(action_scale=0.25, action_offset=True, torque_limit_scale=0.85)
+    control = ControlCfg(action_scale=0.25, action_offset=True, torque_limit_scale=0.95)
 
     frame_stack = 1
     c_frame_stack = 1
@@ -55,30 +52,7 @@ class Dof12WalkingCfg(BaseLeggedTaskCfg):
         base_height_target=0.78, soft_dof_pos_limit=0.9, cycle_time=0.8, target_feet_height=0.08
     )
 
-    reward_functions: list[Callable] = [
-        rfs.reward_tracking_lin_vel,
-        rfs.reward_tracking_ang_vel,
-        rfs.reward_lin_vel_z,
-        rfs.reward_ang_vel_xy,
-        rfs.reward_orientation,
-        rfs.reward_orientation_sq,
-        rfs.reward_base_height,
-        rfs.reward_base_height_sq,
-        rfs.reward_dof_acc,
-        rfs.reward_dof_vel,
-        rfs.reward_feet_air_time,
-        rfs.reward_collision,
-        rfs.reward_action_rate,
-        rfs.reward_dof_pos_limits,
-        rfs.reward_hip_pos,
-        rfs.reward_contact_no_vel,
-        rfs.reward_feet_clearance,
-        rfs.reward_feet_contact_number,
-        rfs.reward_alive,
-        rfs.reward_feet_swing_height,
-        rfs.reward_contact,
-        rfs.reward_torques,
-    ]
+    reward_functions: str = "roboverse_learn.unitree_rl.configs.reward_funcs"
 
     reward_weights: dict[str, float] = {
         "termination": -0.0,

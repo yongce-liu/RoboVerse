@@ -151,7 +151,7 @@ class LeggedRobotDomainRandCfg(RandomizationCfg):
         """Maximum push velocity in xy plane."""
         max_push_ang_vel: float = 0.5
         """Maximum push angular velocity."""
-        push_interval: int = 500
+        push_interval: int = 10
         """Interval in steps for applying random push forces and torques."""
 
     push = PushRandomCfg(enabled=True)
@@ -210,11 +210,11 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
         """# percentage of urdf limits, values above this limit are penalized"""
         soft_dof_vel_limit: float = 1.0
         """soft dof velocity limit"""
-        soft_torque_limit: float = 1.0
-        """soft torque limit"""
+        # soft_torque_limit: float = 1.0
+        # """soft torque limit"""
 
     reward_cfg: RewardCfg = RewardCfg()
-    reward_functions: list[Callable] = MISSING
+    reward_functions: list[Callable] | str = "roboverse_learn.unitree_rl.configs.reward_funcs"
     reward_weights: dict[str, float] = MISSING
 
     @configclass
