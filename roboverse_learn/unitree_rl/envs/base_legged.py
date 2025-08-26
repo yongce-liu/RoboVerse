@@ -213,7 +213,6 @@ class LeggedRobot(RslRlWrapper):
             -max_push_angular, max_push_angular, (self.num_envs, 3), device=self.device
         )
         env_states.robots[self.robot.name].root_state[:, 10:13] = self.rand_push_torque
-        print("ddd"), input()
         self.env.handler.set_states(env_states)
 
     # endregion
