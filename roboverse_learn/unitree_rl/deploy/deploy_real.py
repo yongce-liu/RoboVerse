@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import rootutils
+
+rootutils.setup_root(__file__, pythonpath=True)
 import time
 
 import numpy as np
