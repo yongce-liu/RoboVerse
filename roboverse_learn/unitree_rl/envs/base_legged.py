@@ -51,7 +51,7 @@ class LeggedRobot(RslRlWrapper):
         if len(env_ids) == 0:
             return
 
-        _, _ = self.env.reset(self.init_states, env_ids)
+        env_states, _ = self.env.reset(self.init_states, env_ids)
 
         if self.cfg.commands.curriculum and (self.common_step_counter % self.max_episode_length == 0):
             self.update_command_curriculum(env_ids)

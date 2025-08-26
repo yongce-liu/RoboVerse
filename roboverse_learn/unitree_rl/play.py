@@ -41,7 +41,7 @@ def play(args):
         num_envs=args.num_envs,
         sim=args.sim,
         headless=args.headless,
-        try_add_table=True,  # add a ground plane
+        try_add_table=False,  # add a ground plane
         cameras=[],
     )
     scenario.num_envs = 1
@@ -103,11 +103,11 @@ def play(args):
     print(f"Reverse reindex actions idx: {reverse_reindex_actions_idx}")
 
     for i in range(1000):
-        # # set fixed command
-        # env.commands[:, 0] = 0.5
-        # env.commands[:, 1] = 0.0
-        # env.commands[:, 2] = 0.0
-        # env.commands[:, 3] = 0.0
+        # set fixed command
+        env.commands[:, 0] = 0.5
+        env.commands[:, 1] = 0.0
+        env.commands[:, 2] = 0.0
+        env.commands[:, 3] = 0.0
         actions = policy(obs.detach()).detach()
         if args.reindex_actions:
             actions = actions[:, reindex_actions_idx]

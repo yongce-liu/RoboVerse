@@ -43,13 +43,17 @@ class Dof12WalkingCfg(BaseLeggedTaskCfg):
 
     ppo_cfg = Dof12WalkingCfgPPO()
 
-    control = ControlCfg(action_scale=0.25, action_offset=True, torque_limit_scale=0.95)
+    control = ControlCfg(action_scale=0.25, action_offset=True, torque_limit_scale=0.9)
 
     frame_stack = 1
     c_frame_stack = 1
 
     reward_cfg = BaseLeggedTaskCfg.RewardCfg(
-        base_height_target=0.78, soft_dof_pos_limit=0.9, cycle_time=0.8, target_feet_height=0.08
+        base_height_target=0.78,
+        soft_dof_pos_limit=0.9,
+        cycle_time=0.8,
+        target_feet_height=0.08,
+        feet_contact_threshold=1.0,
     )
 
     reward_functions: str = "roboverse_learn.unitree_rl.configs.reward_funcs"
@@ -74,7 +78,7 @@ class Dof12WalkingCfg(BaseLeggedTaskCfg):
         "alive": 0.15,
         "hip_pos": -1.0,
         "contact_no_vel": -0.2,
-        "feet_swing_height": -20.0,
+        "feet_swing_height": -20.0 * 2,
         # "feet_clearance": 2.0,
         "contact": 0.18,
         # "feet_contact_number": 2.4,

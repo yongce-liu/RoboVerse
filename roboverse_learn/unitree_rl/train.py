@@ -81,4 +81,9 @@ def train(args):
 
 if __name__ == "__main__":
     args = get_args()
+    # args.task = "dof12_walking"
+    # args.sim = "isaacgym"
+    # args.num_envs = 1
+    # args.robot = 'g1_dof12'
+    # args.headless = True
     train(args)

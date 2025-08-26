@@ -17,6 +17,7 @@ from metasim.cfg.tasks.base_task_cfg import BaseTaskCfg
 from metasim.sim import BaseSimHandler
 from metasim.utils import configclass
 from metasim.utils.humanoid_robot_util import contact_forces_tensor, get_euler_xyz_tensor, robot_rotation_tensor
+from metasim.utils.tensor_util import torch_rand_float
 
 from .base_terrain import TerrainConfig
 
@@ -120,9 +121,8 @@ class LeggedRobotDomainRandCfg(RandomizationCfg):
             print("num_buckets, range and device must be specified for uniform sampling")
             raise e
 
-        shape = (num_buckets, 1)
         bucket_ids = torch.randint(0, num_buckets, (num_envs, 1))
-        friction_buckets = (range[1] - range[0]) * torch.rand(*shape, device=device) + range[0]
+        friction_buckets = torch_rand_float(range[0], range[1], (num_buckets, 1), device=device)
         friction_coeffs = friction_buckets[bucket_ids]
         return friction_coeffs
 
@@ -138,7 +138,7 @@ class LeggedRobotDomainRandCfg(RandomizationCfg):
             raise e
 
         shape = (num_envs, 1)
-        friction_coeffs = (range[1] - range[0]) * torch.rand(*shape, device=device) + range[0]
+        friction_coeffs = torch_rand_float(range[0], range[1], shape, device=device)
         return friction_coeffs
 
     @configclass
@@ -162,7 +162,7 @@ class LeggedRobotDomainRandCfg(RandomizationCfg):
     def __post_init__(self):
         super().__post_init__()
         self.friction = FrictionRandomCfg(
-            enabled=True, range=[0.1, 1.25], dist_fn=self.sample_uniform_buckets, num_buckets=256
+            enabled=True, range=[0.1, 1.25], dist_fn=self.sample_uniform_buckets, num_buckets=64
         )
         self.mass = MassRandomCfg(enabled=True, range=[-1.0, 3.0], dist_fn=self.sample_uniform)
         if self.ground:
@@ -199,6 +199,8 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
         """target feet height"""
         cycle_time: float = 0.64
         """cycle time"""
+        feet_contact_threshold: float = 1.0
+        """the contact force threshold"""
 
         only_positive_rewards: bool = True
         """whether to use only positive rewards"""
