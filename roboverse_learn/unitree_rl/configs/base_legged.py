@@ -116,7 +116,7 @@ class LeggedRobotDomainRandCfg(RandomizationCfg):
             num_buckets = params_dict["num_buckets"]
             range = params_dict["range"]
             num_envs = params_dict["num_envs"]
-            device = params_dict["device"]
+            device = str(params_dict["device"])
         except KeyError as e:
             print("num_buckets, range and device must be specified for uniform sampling")
             raise e
@@ -132,7 +132,7 @@ class LeggedRobotDomainRandCfg(RandomizationCfg):
         try:
             range = params_dict["range"]
             num_envs = params_dict["num_envs"]
-            device = params_dict["device"]
+            device = str(params_dict["device"])
         except KeyError as e:
             print("range and device must be specified for uniform sampling")
             raise e

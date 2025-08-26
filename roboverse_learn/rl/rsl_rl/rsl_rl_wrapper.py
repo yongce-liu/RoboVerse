@@ -25,12 +25,12 @@ class RslRlWrapper(VecEnv):
     def __init__(self, scenario: ScenarioCfg):
         super().__init__()
 
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu").type
         if SimType(scenario.sim) in [SimType.ISAACGYM, SimType.ISAACLAB, SimType.GENESIS, SimType.MJX]:
             log.info(f"RslRlWrapper uses {SimType(scenario.sim)} simulator.")
         elif SimType(scenario.sim) in [SimType.MUJOCO]:
             assert scenario.num_envs == 1, "MuJoCo only supports single environment in rsl_rl wrapper."
-            self.device = "cpu"
+            self.device = torch.device("cpu").type
             log.warning(f"Only for simulation, not for training, using {SimType(scenario.sim)} simulator.")
         else:
             raise NotImplementedError(f"RslRlWrapper in Roboverse now only supports {SimType.ISAACGYM}, but got {scenario.sim}")

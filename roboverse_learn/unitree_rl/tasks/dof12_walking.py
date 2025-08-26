@@ -78,9 +78,9 @@ class Dof12WalkingCfg(BaseLeggedTaskCfg):
         "alive": 0.15,
         "hip_pos": -1.0,
         "contact_no_vel": -0.2,
-        "feet_swing_height": -20.0 * 2,
+        "feet_swing_height": -20.0,
         # "feet_clearance": 2.0,
-        "contact": 0.18,
+        "contact": 0.18 * 2,
         # "feet_contact_number": 2.4,
         "torques": -0.00001,
     }

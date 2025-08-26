@@ -23,7 +23,6 @@ from metasim.sim import BaseSimHandler, EnvWrapper, GymEnvWrapper
 from metasim.types import Action, EnvState
 from metasim.utils.dict import class_to_dict
 from metasim.utils.state import CameraState, ObjectState, RobotState, TensorState
-from metasim.utils.tensor_util import torch_rand_float
 
 # TODO: add it to the randomization of metasim
 from roboverse_learn.unitree_rl.helper.terrain_gererator import TerrainGenerator
@@ -939,8 +938,9 @@ class IsaacgymHandler(BaseSimHandler):
                 new_root_states[actor_idx, 3:7] = torch.tensor(
                     rotation_list[i][j], dtype=torch.float32, device=self.device
                 )
-                # new_root_states[actor_idx, 7:13] = torch.zeros(6, dtype=torch.float32, device=self.device)
-                new_root_states[actor_idx, 7:13] = torch_rand_float(-0.5, 0.5, (1, 6), device=str(self.device))
+                new_root_states[actor_idx, 7:13] = torch.zeros(6, dtype=torch.float32, device=self.device)
+                # ONLY WORKS FOR NO FIXED BASE LINK
+                # new_root_states[actor_idx, 7:13] = torch_rand_float(-0.5, 0.5, (1, 6), device=self.device.type)
             actor_indices.extend(range(env_offset, env_offset + len(self.objects) + 1))
 
         # Convert the actor indices to a tensor
