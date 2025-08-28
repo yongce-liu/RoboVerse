@@ -14,6 +14,10 @@ import rootutils
 
 rootutils.setup_root(__file__, pythonpath=True)
 
+import random
+
+import numpy as np
+import torch
 import wandb
 from rsl_rl.runners.on_policy_runner import OnPolicyRunner
 
@@ -21,15 +25,28 @@ from metasim.cfg.scenario import ScenarioCfg
 from roboverse_learn.unitree_rl.helper.utils import get_args, get_class, get_log_dir, make_robots
 
 
+def set_seed(seed):
+    if seed == -1:
+        seed = np.random.randint(0, 10000)
+    print(f"Setting seed: {seed}")
+
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+
 def train(args):
     # only support single robot for now
     _robots_name, _robots = make_robots(args)
     robots_name, robots = [_robots_name[0]], [_robots[0]]
     config_wrapper = get_class(args.task, suffix="Cfg")
-    task = config_wrapper(robots=robots)
+    task_config = config_wrapper(robots=robots)
     scenario = ScenarioCfg(
-        task=task,
-        decimation=task.decimation,
+        task=task_config,
+        decimation=task_config.decimation,
         robots=robots,
         num_envs=args.num_envs,
         sim=args.sim,
@@ -47,7 +64,7 @@ def train(args):
         datetime = None
     log_dir = get_log_dir(args, scenario, datetime)
     task_wrapper = get_class(args.task, suffix="Task")
-    env = task_wrapper(scenario)
+    task_env = task_wrapper(scenario)
 
     # dump snapshot of training config
     task_path = f"roboverse_learn/unitree_rl/tasks/{scenario.task.task_name}.py"
@@ -58,32 +75,33 @@ def train(args):
 
     try:
         ppo_runner = OnPolicyRunner(
-            env=env,
-            train_cfg=env.train_cfg,
-            device=env.device,
+            env=task_env,
+            train_cfg=task_env.train_cfg,
+            device=task_env.device,
             log_dir=log_dir,
             # wandb=use_wandb,
             args=args,
         )
     except Exception as e:
         ppo_runner = OnPolicyRunner(
-            env=env,
-            train_cfg=env.train_cfg,
-            device=env.device,
+            env=task_env,
+            train_cfg=task_env.train_cfg,
+            device=task_env.device,
             log_dir=log_dir,
             # wandb=use_wandb,
             # args=args,
         )
     if args.load_run:
         ppo_runner.load(args.load_run)
-    ppo_runner.learn(num_learning_iterations=args.learning_iterations)
+    ppo_runner.learn(num_learning_iterations=task_config.ppo_cfg.runner.max_iterations, init_at_random_ep_len=True)
 
 
 if __name__ == "__main__":
+    set_seed(1)
     args = get_args()
     # args.task = "dof12_walking"
     # args.sim = "isaacgym"
-    # args.num_envs = 1
+    # args.num_envs = 128
     # args.robot = 'g1_dof12'
     # args.headless = True
     train(args)

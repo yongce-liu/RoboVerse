@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections import deque
-from copy import deepcopy
 from typing import Callable
 
 import torch
@@ -52,6 +51,11 @@ class LeggedRobot(RslRlWrapper):
             return
 
         env_states, _ = self.env.reset(self.init_states, env_ids)
+        if self.cfg.random.push.enabled:
+            env_states.robots[self.robot.name].root_state[:, 7:9] = torch_rand_float(
+                -0.5, 0.5, (self.num_envs, 2), device=self.device
+            )
+            self.env.handler.set_states(env_states, env_ids)
 
         if self.cfg.commands.curriculum and (self.common_step_counter % self.max_episode_length == 0):
             self.update_command_curriculum(env_ids)
@@ -79,9 +83,14 @@ class LeggedRobot(RslRlWrapper):
                 torch.mean(self.episode_sums[key][env_ids]) / self.cfg.max_episode_length_s
             )
             self.episode_sums[key][env_ids] = 0.0
+        if self.cfg.commands.curriculum:
+            self.extras["episode"]["max_command_x"] = self.command_ranges["lin_vel_x"][1]
+        # send timeout info to the algorithm
+        if self.cfg.send_timeouts:
+            self.extras["time_outs"] = self.time_out_buf
 
-        # log metrics
-        self.extras["episode_metrics"] = deepcopy(self.episode_metrics)
+        # # log metrics
+        # self.extras["episode_metrics"] = deepcopy(self.episode_metrics)
 
         # reset env handler state buffer
         for i in range(self.obs_history.maxlen):
@@ -110,7 +119,7 @@ class LeggedRobot(RslRlWrapper):
             rew_func_return = self.reward_functions[i](envstate, self.robot.name, self.cfg)
             if isinstance(rew_func_return, tuple):
                 unscaled_rew, metric = rew_func_return
-                self.episode_metrics[name] = metric.mean().item()
+                # self.episode_metrics[name] = metric.mean().item()
             else:
                 unscaled_rew = rew_func_return
             rew = unscaled_rew * self.reward_scales[name]
@@ -133,8 +142,8 @@ class LeggedRobot(RslRlWrapper):
     def _pre_physics_step(self, actions: torch.Tensor):
         """Apply action smoothing and wrap actions as dict before physics step."""
         # low frequency action smoothing
-        delay = torch.rand((self.num_envs, 1), device=self.device)
-        actions = (1 - delay) * actions.to(self.device) + delay * self.actions
+        # delay = torch.rand((self.num_envs, 1), device=self.device)
+        # actions = (1 - delay) * actions.to(self.device) + delay * self.actions
         # clip actions
         clip_action_limit = self.cfg.normalization.clip_actions
         actions = torch.clip(actions, -clip_action_limit, clip_action_limit).to(self.device)
@@ -146,8 +155,8 @@ class LeggedRobot(RslRlWrapper):
         """
         Task physics step
         """
-        env_states, _, terminated, time_out, _ = self.env.step(actions)
-        self.reset_buf = terminated | time_out
+        env_states, _, terminated, self.time_out_buf, _ = self.env.step(actions)
+        self.reset_buf = torch.logical_or(terminated, self.time_out_buf)
         return env_states
 
     def _post_physics_step(self, env_states):
@@ -155,10 +164,10 @@ class LeggedRobot(RslRlWrapper):
         # update episode length from env_wrapper
         self.episode_length_buf = self.env.episode_length_buf_tensor
         self.common_step_counter += 1
-        # update commands & randomizations
-        self._post_physics_step_callback()
         # unpack the estimated states from env_states, currently, it only support quaternions
         self._update_odometry_tensors(env_states)
+        # update commands & randomizations
+        self._post_physics_step_callback()
         # prepare all the states for reward computation
         self._parse_state_for_reward(env_states)
         # compute the reward
@@ -167,7 +176,7 @@ class LeggedRobot(RslRlWrapper):
         reset_env_idx = self.reset_buf.nonzero(as_tuple=False).flatten().tolist()
         self.reset(reset_env_idx)
         # simulate the push operation
-        if self.cfg.random.push.enabled and self.common_step_counter % self.cfg.random.push.push_interval == 0:
+        if self.cfg.random.push.enabled:
             self._push_robots()
         # compute obs for actor,  privileged_obs for critic network
         self.compute_observations(env_states)
@@ -203,16 +212,22 @@ class LeggedRobot(RslRlWrapper):
     # region: Randomizations
     def _push_robots(self):
         """Randomly set robot's root velocity to simulate a push."""
-        max_vel = self.cfg.random.push.max_push_vel_xy
-        max_push_angular = self.cfg.random.push.max_push_ang_vel
+        env_ids = torch.arange(self.num_envs, device=self.device)
+        push_env_ids = env_ids[self.episode_length_buf[env_ids] % self.cfg.random.push.push_interval == 0]
+        if len(push_env_ids) == 0:
+            return
         env_states = self.env.handler.get_states()
-        self.rand_push_force[:, :2] += torch_rand_float(-max_vel, max_vel, (self.num_envs, 2), device=self.device)
-        env_states.robots[self.robot.name].root_state[:, 0:2] += self.rand_push_force[:, :2]
-        self.rand_push_torque = torch_rand_float(
-            -max_push_angular, max_push_angular, (self.num_envs, 3), device=self.device
+
+        max_vel = self.cfg.random.push.max_push_vel_xy
+        env_states.robots[self.robot.name].root_state[:, 7:9] = torch_rand_float(
+            -max_vel, max_vel, (self.num_envs, 2), device=self.device
         )
-        env_states.robots[self.robot.name].root_state[:, 10:13] = self.rand_push_torque
-        self.env.handler.set_states(env_states)
+
+        max_angular = self.cfg.random.push.max_push_ang_vel
+        env_states.robots[self.robot.name].root_state[:, 10:13] = torch_rand_float(
+            -max_angular, max_angular, (self.num_envs, 3), device=self.device
+        )
+        self.env.handler.set_states(env_states, push_env_ids.tolist())
 
     # endregion
 
@@ -232,10 +247,10 @@ class LeggedRobot(RslRlWrapper):
         """update history buffer at the the of the frame, called after reset"""
         # we should always make a copy here
         # check whether torch.clone is necessary
-        self.last_last_actions[:] = torch.clone(self.last_actions[:])
-        self.last_actions[:] = self.actions[:]
-        self.last_dof_vel[:] = dof_vel_tensor(envstate, self.robot.name)[:]
-        self.last_root_vel[:] = torch.cat((self.base_lin_vel, self.base_ang_vel), dim=1)
+        self.last_last_actions[:] = self.last_actions[:].clone()
+        self.last_actions[:] = self.actions[:].clone()
+        self.last_dof_vel[:] = dof_vel_tensor(envstate, self.robot.name)[:].clone()
+        self.last_root_vel[:] = torch.cat((self.base_lin_vel, self.base_ang_vel), dim=1).clone()
         # robot_root_state_tensor(envstate, self.robot.name)[:, 7:13]
 
     def _resample_commands(self, env_ids):
@@ -358,9 +373,7 @@ class LeggedRobot(RslRlWrapper):
 
         default_joint_pos = cfg.robots[0].default_joint_positions
         sorted_joint_pos = [default_joint_pos[name] for name in sorted_joint_names]
-        self.cfg.default_joint_pd_target = (
-            torch.tensor(sorted_joint_pos, device=self.device).unsqueeze(0).repeat(self.num_envs, 1)
-        )
+        self.cfg.default_joint_pd_target = torch.tensor(sorted_joint_pos, device=self.device).unsqueeze(0)
 
     def _init_buffers(self):
         """
@@ -450,8 +463,8 @@ class LeggedRobot(RslRlWrapper):
         self.feet_pos = torch.zeros((self.num_envs, len(self.feet_indices), 3), device=self.device, requires_grad=False)
         self.feet_height = torch.zeros((self.num_envs, len(self.feet_indices)), device=self.device, requires_grad=False)
 
-        self.rand_push_force = torch.zeros((self.num_envs, 3), dtype=torch.float32, device=self.device)
-        self.rand_push_torque = torch.zeros((self.num_envs, 3), dtype=torch.float32, device=self.device)
+        # self.rand_push_force = torch.zeros((self.num_envs, 3), dtype=torch.float32, device=self.device)
+        # self.rand_push_torque = torch.zeros((self.num_envs, 3), dtype=torch.float32, device=self.device)
 
         # TODO add history manager, read from config.
         self.obs_history = deque(maxlen=self.cfg.frame_stack)
@@ -496,47 +509,39 @@ class LeggedRobot(RslRlWrapper):
             name: torch.zeros(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
             for name in self.reward_scales.keys()
         }
-        self.episode_metrics = {name: 0 for name in self.reward_scales.keys()}
+        # self.episode_metrics = {name: 0 for name in self.reward_scales.keys()}
 
     def _parse_state_for_reward(self, envstate: TensorState):
         """
         Parse all the states to prepare for reward computation, legged_robot level reward computation.
         """
-        self._parse_action(envstate)
-        self._parse_history_state(envstate)
-        self._parse_base_euler_xyz(envstate)
-        self._parse_command(envstate)
-        self._parse_projected_gravity(envstate)
-        self._parse_local_base_vel(envstate)
-        # self._parse_foot_all(envstate)
-        self._parse_feet_air_time(envstate)
+        _state = envstate.robots[self.robot.name]  # weak reference
 
-    def _parse_action(self, envstate: TensorState):
-        envstate.robots[self.robot.name].extra["actions"] = self.actions
+        """Adds the current action to state."""
+        _state.extra["actions"] = self.actions
 
-    def _parse_history_state(self, envstate: TensorState):
         """update history buffer, must be called after reset"""
-        envstate.robots[self.robot.name].extra["last_root_vel"] = self.last_root_vel
-        envstate.robots[self.robot.name].extra["last_dof_vel"] = self.last_dof_vel
-        envstate.robots[self.robot.name].extra["last_actions"] = self.last_actions
-        envstate.robots[self.robot.name].extra["last_last_actions"] = self.last_last_actions
+        _state.extra["last_root_vel"] = self.last_root_vel
+        _state.extra["last_dof_vel"] = self.last_dof_vel
+        _state.extra["last_actions"] = self.last_actions
+        _state.extra["last_last_actions"] = self.last_last_actions
 
-    def _parse_base_euler_xyz(self, envstate: TensorState):
+        """Adds the current base euler angles to state."""
         # self.base_euler_xyz = get_euler_xyz_tensor(envstate.robots[self.robot.name].root_state[:, 3:7])
-        envstate.robots[self.robot.name].extra["base_euler_xyz"] = self.base_euler_xyz
+        _state.extra["base_euler_xyz"] = self.base_euler_xyz
 
-    def _parse_command(self, envstate: TensorState):
-        """Adds the current velocity and heading command to state."""
-        envstate.robots[self.robot.name].extra["command"] = self.commands
+        """Adds the scaled command to state."""
+        _state.extra["command"] = self.commands
 
-    def _parse_projected_gravity(self, envstate: TensorState):
-        self.projected_gravity[:] = quat_rotate_inverse(self.base_quat, self.gravity_vec)
-        envstate.robots[self.robot.name].extra["projected_gravity"] = self.projected_gravity
+        """add the project gravity to state"""
+        # self.projected_gravity[:] = quat_rotate_inverse(self.base_quat, self.gravity_vec)
+        _state.extra["projected_gravity"] = self.projected_gravity
 
-    def _parse_local_base_vel(self, envstate: TensorState):
         """Add local base velocity into states"""
-        envstate.robots[self.robot.name].extra["base_lin_vel"] = self.base_lin_vel
-        envstate.robots[self.robot.name].extra["base_ang_vel"] = self.base_ang_vel
+        _state.extra["base_lin_vel"] = self.base_lin_vel
+        _state.extra["base_ang_vel"] = self.base_ang_vel
+
+        self._parse_feet_air_time(envstate)
 
     def _parse_feet_air_time(self, envstate: TensorState):
         contact = contact_forces_tensor(envstate, self.robot.name)[:, self.feet_indices, 2] > 1.0

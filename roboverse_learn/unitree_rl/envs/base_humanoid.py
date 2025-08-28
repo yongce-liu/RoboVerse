@@ -86,20 +86,21 @@ class Humanoid(LeggedRobot):
         """
         Parse all the states to prepare for reward computation, legged_robot level reward computation.
         """
-        self._parse_gait_phase(envstate)
+        # self._parse_gait_phase(envstate)
+        envstate.robots[self.robot.name].extra["gait_phase"] = self._get_gait_phase()
         self._parse_feet_clearance(envstate)
         super()._parse_state_for_reward(envstate)
 
-    def _parse_gait_phase(self, envstate: TensorState):
-        # period = self.cfg.reward_cfg.cycle_time
-        # offset = 0.5
-        # phase = (self.episode_length_buf * self.dt) % period / period
-        # phase_left = phase
-        # phase_right = (phase + offset) % 1
-        # envstate.robots[self.robot.name].extra["leg_phase"] = torch.cat(
-        #     [phase_left.unsqueeze(1), phase_right.unsqueeze(1)], dim=-1
-        # )
-        envstate.robots[self.robot.name].extra["gait_phase"] = self._get_gait_phase()
+    # def _parse_gait_phase(self, envstate: TensorState):
+    #     # period = self.cfg.reward_cfg.cycle_time
+    #     # offset = 0.5
+    #     # phase = (self.episode_length_buf * self.dt) % period / period
+    #     # phase_left = phase
+    #     # phase_right = (phase + offset) % 1
+    #     # envstate.robots[self.robot.name].extra["leg_phase"] = torch.cat(
+    #     #     [phase_left.unsqueeze(1), phase_right.unsqueeze(1)], dim=-1
+    #     # )
+    #     envstate.robots[self.robot.name].extra["gait_phase"] = self._get_gait_phase()
 
     # NOTE: A Rewritten Function
     def _parse_feet_air_time(self, envstate: TensorState):
@@ -131,7 +132,7 @@ class Humanoid(LeggedRobot):
 
         # Compute swing mask
         # swing_mask = 1 - self._get_gait_phase()
-        swing_mask = ~self._get_gait_phase()
+        swing_mask = torch.logical_not(self._get_gait_phase())
 
         # feet height should be closed to target feet height at the peak
         rew_pos = torch.abs(self.feet_height - self.cfg.reward_cfg.target_feet_height) < 0.01
@@ -153,8 +154,8 @@ class Humanoid(LeggedRobot):
         # right foot stance
         stance_mask[:, 1] = sin_pos < 0
         # Double support phase
-        stance_mask[torch.abs(sin_pos) < 0.1] = 1
-        return stance_mask
+        stance_mask[torch.abs(sin_pos) < 0.1] = True
+        return stance_mask.to(torch.bool)
 
     def _get_phase(self):
         cycle_time = self.cfg.reward_cfg.cycle_time

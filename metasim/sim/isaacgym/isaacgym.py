@@ -139,6 +139,8 @@ class IsaacgymHandler(BaseSimHandler):
         sim_params.physx.bounce_threshold_velocity = self.scenario.sim_params.bounce_threshold_velocity
         sim_params.physx.max_depenetration_velocity = self.scenario.sim_params.max_depenetration_velocity
         sim_params.physx.default_buffer_size_multiplier = self.scenario.sim_params.default_buffer_size_multiplier
+        # sim_params.physx.contact_collection = gymapi.ContactCollection.CC_ALL_SUBSTEPS
+        # sim_params.physx.max_gpu_contact_pairs = 2**23
 
         compute_device_id = 0
         graphics_device_id = 0
@@ -271,6 +273,21 @@ class IsaacgymHandler(BaseSimHandler):
         asset_root = "."
         robot_asset_file = self.robot.mjcf_path if self.robot.isaacgym_read_mjcf else self.robot.urdf_path
         asset_options = gymapi.AssetOptions()
+
+        # asset_options.default_dof_drive_mode = 3
+        # asset_options.collapse_fixed_joints = True
+        # asset_options.replace_cylinder_with_capsule = True
+        # asset_options.flip_visual_attachments = False
+        # asset_options.fix_base_link = False
+        # asset_options.density = 0.001
+        # asset_options.angular_damping = 0.0
+        # asset_options.linear_damping = 0.0
+        # asset_options.max_angular_velocity = 1000.0
+        # asset_options.max_linear_velocity = 1000.0
+        # asset_options.armature = 0.0
+        # asset_options.thickness = 0.01
+        # asset_options.disable_gravity = False
+
         asset_options.armature = getattr(self.robot, "dof_armature", 0.01)
         asset_options.fix_base_link = self.robot.fix_base_link
         asset_options.disable_gravity = not self.robot.enabled_gravity
@@ -530,7 +547,7 @@ class IsaacgymHandler(BaseSimHandler):
                 self._env_rigid_body_global_indices[-1][self.objects[obj_i].name] = object_rigid_body_indices
 
             # # carefully add robot with self-collision enabled
-            robot_handle = self.gym.create_actor(env, robot_asset, robot_pose, "robot", i, 0)
+            robot_handle = self.gym.create_actor(env, robot_asset, robot_pose, "robot", i, 0, 0)
             assert self.robot.scale[0] == 1.0 and self.robot.scale[1] == 1.0 and self.robot.scale[2] == 1.0
             self._robot_handles.append(robot_handle)
             # set dof properties

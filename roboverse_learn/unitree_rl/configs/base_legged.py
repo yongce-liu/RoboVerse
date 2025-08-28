@@ -188,13 +188,13 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
 
         base_height_target: float = 1.0
         """target height of the base"""
-        min_dist: float = 0.2
-        """minimum distance between feet"""
-        max_dist: float = 0.5
-        """maximum distance between feet"""
+        # min_dist: float = 0.2
+        # """minimum distance between feet"""
+        # max_dist: float = 0.5
+        # """maximum distance between feet"""
 
-        target_joint_pos_scale: float = 0.17
-        """target joint position scale"""
+        # target_joint_pos_scale: float = 0.17
+        # """target joint position scale"""
         target_feet_height: float = 0.06
         """target feet height"""
         cycle_time: float = 0.64
@@ -285,7 +285,7 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
             dof_pos = 1.0
             dof_vel = 0.05
             height_measurements = 5.0
-            quat = 1.0
+            # quat = 1.0
 
         clip_observations = 100.0
         clip_actions = 100.0
@@ -350,6 +350,7 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
         max_depenetration_velocity=1.0,
         default_buffer_size_multiplier=5,
         replace_cylinder_with_capsule=True,
+        friction_correlation_distance=0.025,
         friction_offset_threshold=0.04,
     )
     """Simulation parameters with physics engine settings."""
@@ -358,7 +359,7 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
     traj_filepath = None
     """path to the trajectory file"""
     # TODO read form max_episode_length_s and divide s
-    max_episode_length_s: int = 20
+    max_episode_length_s: float = 20.0
     """maximum episode length in seconds"""
     # episode_length: int = 2400
     # """episode length in steps"""
