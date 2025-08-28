@@ -223,10 +223,10 @@ class LeggedRobot(RslRlWrapper):
             -max_vel, max_vel, (self.num_envs, 2), device=self.device
         )
 
-        max_angular = self.cfg.random.push.max_push_ang_vel
-        env_states.robots[self.robot.name].root_state[:, 10:13] = torch_rand_float(
-            -max_angular, max_angular, (self.num_envs, 3), device=self.device
-        )
+        # max_angular = self.cfg.random.push.max_push_ang_vel
+        # env_states.robots[self.robot.name].root_state[:, 10:13] = torch_rand_float(
+        #     -max_angular, max_angular, (self.num_envs, 3), device=self.device
+        # )
         self.env.handler.set_states(env_states, push_env_ids.tolist())
 
     # endregion

@@ -92,7 +92,7 @@ class Humanoid(LeggedRobot):
         super()._parse_state_for_reward(envstate)
 
     # def _parse_gait_phase(self, envstate: TensorState):
-    #     # period = self.cfg.reward_cfg.cycle_time
+    #     # period = self.cfg.reward_cfg.feet_cycle_time
     #     # offset = 0.5
     #     # phase = (self.episode_length_buf * self.dt) % period / period
     #     # phase_left = phase
@@ -154,12 +154,12 @@ class Humanoid(LeggedRobot):
         # right foot stance
         stance_mask[:, 1] = sin_pos < 0
         # Double support phase
-        stance_mask[torch.abs(sin_pos) < 0.1] = True
+        stance_mask[torch.abs(sin_pos) < self.cfg.reward_cfg.feet_full_contact_time / 2.0] = True
         return stance_mask.to(torch.bool)
 
     def _get_phase(self):
-        cycle_time = self.cfg.reward_cfg.cycle_time
-        phase = self.episode_length_buf * self.dt % cycle_time / cycle_time
+        feet_cycle_time = self.cfg.reward_cfg.feet_cycle_time
+        phase = self.episode_length_buf * self.dt % feet_cycle_time / feet_cycle_time
         return phase
 
     # endregion

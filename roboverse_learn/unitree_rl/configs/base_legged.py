@@ -151,7 +151,7 @@ class LeggedRobotDomainRandCfg(RandomizationCfg):
         """Maximum push velocity in xy plane."""
         max_push_ang_vel: float = 0.5
         """Maximum push angular velocity."""
-        push_interval: int = 10
+        push_interval: int = 250
         """Interval in steps for applying random push forces and torques."""
 
     push = PushRandomCfg(enabled=True)
@@ -197,8 +197,10 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
         # """target joint position scale"""
         target_feet_height: float = 0.06
         """target feet height"""
-        cycle_time: float = 0.64
+        feet_cycle_time: float = 0.8
         """cycle time"""
+        feet_full_contact_time: float = 0.02
+        """the phase that all feet contact with the ground"""
         feet_contact_threshold: float = 1.0
         """the contact force threshold"""
 

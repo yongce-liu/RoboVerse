@@ -246,7 +246,7 @@ def reward_feet_contact_forces(states: EnvState, robot_name: str, cfg: BaseTaskC
 
 def reward_contact(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     is_stance = states.robots[robot_name].extra["gait_phase"]
-    # is_stance = states.robots[robot_name].extra["leg_phase"] < 0.55
+    # is_stance = states.robots[robot_name].extra["leg_phase"] < 0.5 + cfg.reward_cfg.feet_full_contact_time
     contact_forces = states.robots[robot_name].extra["contact_forces"][:, cfg.feet_indices, 2]
     contact = contact_forces > cfg.reward_cfg.feet_contact_threshold
     res = torch.sum(torch.logical_not(torch.logical_xor(contact, is_stance)), dim=1, dtype=torch.float32)
