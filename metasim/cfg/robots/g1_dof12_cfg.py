@@ -27,14 +27,14 @@ class G1Dof12Cfg(BaseRobotCfg):
         "left_hip_roll_joint": BaseActuatorCfg(stiffness=100, damping=2, torque_limit=139),
         "left_hip_yaw_joint": BaseActuatorCfg(stiffness=100, damping=2, torque_limit=88),
         "left_knee_joint": BaseActuatorCfg(stiffness=150, damping=4, torque_limit=139),
-        "left_ankle_pitch_joint": BaseActuatorCfg(stiffness=40, damping=2, torque_limit=35),
-        "left_ankle_roll_joint": BaseActuatorCfg(stiffness=40, damping=2, torque_limit=35),
+        "left_ankle_pitch_joint": BaseActuatorCfg(stiffness=40, damping=2, torque_limit=50),
+        "left_ankle_roll_joint": BaseActuatorCfg(stiffness=40, damping=2, torque_limit=50),
         "right_hip_pitch_joint": BaseActuatorCfg(stiffness=100, damping=2, torque_limit=88),
         "right_hip_roll_joint": BaseActuatorCfg(stiffness=100, damping=2, torque_limit=139),
         "right_hip_yaw_joint": BaseActuatorCfg(stiffness=100, damping=2, torque_limit=88),
         "right_knee_joint": BaseActuatorCfg(stiffness=150, damping=4, torque_limit=139),
-        "right_ankle_pitch_joint": BaseActuatorCfg(stiffness=40, damping=2, torque_limit=35),
-        "right_ankle_roll_joint": BaseActuatorCfg(stiffness=40, damping=2, torque_limit=35),
+        "right_ankle_pitch_joint": BaseActuatorCfg(stiffness=40, damping=2, torque_limit=50),
+        "right_ankle_roll_joint": BaseActuatorCfg(stiffness=40, damping=2, torque_limit=50),
     }
 
     joint_limits: dict[str, tuple[float, float]] = {
@@ -59,14 +59,14 @@ class G1Dof12Cfg(BaseRobotCfg):
         "left_hip_roll_joint": 139,
         "left_hip_yaw_joint": 88,
         "left_knee_joint": 139,
-        "left_ankle_pitch_joint": 35,
-        "left_ankle_roll_joint": 35,
+        "left_ankle_pitch_joint": 50,
+        "left_ankle_roll_joint": 50,
         "right_hip_pitch_joint": 88,
         "right_hip_roll_joint": 139,
         "right_hip_yaw_joint": 88,
         "right_knee_joint": 139,
-        "right_ankle_pitch_joint": 35,
-        "right_ankle_roll_joint": 35,
+        "right_ankle_pitch_joint": 50,
+        "right_ankle_roll_joint": 50,
     }
 
     default_joint_positions: dict[str, float] = {

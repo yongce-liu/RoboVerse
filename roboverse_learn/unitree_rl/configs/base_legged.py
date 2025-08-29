@@ -199,7 +199,7 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
         """target feet height"""
         feet_cycle_time: float = 0.8
         """cycle time"""
-        feet_full_contact_time: float = 0.02
+        feet_full_contact_time: float = 0.05
         """the phase that all feet contact with the ground"""
         feet_contact_threshold: float = 1.0
         """the contact force threshold"""

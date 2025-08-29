@@ -13,6 +13,7 @@ from metasim.utils.humanoid_robot_util import (
     get_euler_xyz_tensor,
     robot_ang_velocity_tensor,
     robot_position_tensor,
+    robot_root_state_tensor,
     robot_rotation_tensor,
     robot_velocity_tensor,
 )
@@ -48,17 +49,23 @@ class LeggedRobot(RslRlWrapper):
         if env_ids is None:
             env_ids = list(range(self.num_envs))
         if len(env_ids) == 0:
-            return
+            env_states = self.env.handler.get_states()
+            return env_states, None
 
         env_states, _ = self.env.reset(self.init_states, env_ids)
-        if self.cfg.random.push.enabled:
-            env_states.robots[self.robot.name].root_state[:, 7:9] = torch_rand_float(
-                -0.5, 0.5, (self.num_envs, 2), device=self.device
+        if self.scenario.sim == "isaacgym":
+            env_states.robots[self.robot.name].joint_pos[env_ids] = self.cfg.default_joint_pd_target * torch_rand_float(
+                0.5, 1.5, (len(env_ids), self.num_actions), device=self.device
+            )
+            env_states.robots[self.robot.name].joint_vel[env_ids] = 0.0
+            env_states.robots[self.robot.name].root_state[env_ids, 7:13] = torch_rand_float(
+                -0.5, 0.5, (len(env_ids), 6), device=self.device
             )
             self.env.handler.set_states(env_states, env_ids)
+        env_states = self.env.handler.get_states()
 
-        if self.cfg.commands.curriculum and (self.common_step_counter % self.max_episode_length == 0):
-            self.update_command_curriculum(env_ids)
+        # if self.cfg.commands.curriculum and (self.common_step_counter % self.max_episode_length == 0):
+        #     self.update_command_curriculum(env_ids)
 
         self._resample_commands(env_ids)
 
@@ -69,13 +76,14 @@ class LeggedRobot(RslRlWrapper):
         self.last_dof_vel[env_ids] = 0.0
         self.episode_length_buf[env_ids] = 0
         self.feet_air_time[env_ids] = 0.0
-        self.base_quat[env_ids] = (
-            torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device, dtype=torch.float32)
-            .unsqueeze(0)
-            .repeat(len(env_ids), 1)
-        )
-        self.base_euler_xyz = get_euler_xyz_tensor(self.base_quat)
-        self.projected_gravity[env_ids] = quat_rotate_inverse(self.base_quat[env_ids], self.gravity_vec[env_ids])
+        # self.base_quat[env_ids] = (
+        #     torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device, dtype=torch.float32)
+        #     .unsqueeze(0)
+        #     .repeat(len(env_ids), 1)
+        # )
+        # self.base_euler_xyz = get_euler_xyz_tensor(self.base_quat)
+        # self.projected_gravity[env_ids] = quat_rotate_inverse(self.base_quat[env_ids], self.gravity_vec[env_ids])
+        self.reset_buf[env_ids] = 1
 
         self.extras["episode"] = {}
         for key in self.episode_sums.keys():
@@ -97,7 +105,7 @@ class LeggedRobot(RslRlWrapper):
             self.obs_history[i][env_ids] *= 0
         for i in range(self.critic_history.maxlen):
             self.critic_history[i][env_ids] *= 0
-        return None, None
+        return env_states, None
 
     def step(self, actions: torch.Tensor):
         """Apply actions, simulate, call self.post_physics_step()
@@ -199,8 +207,7 @@ class LeggedRobot(RslRlWrapper):
             .nonzero(as_tuple=False)
             .flatten()
         )
-        if len(env_ids) > 0:
-            self._resample_commands(env_ids)
+        self._resample_commands(env_ids)
 
         if self.cfg.commands.heading_command:
             forward = quat_apply(self.base_quat, self.forward_vec)  # quat:[w, x, y, z], forward:[x, y, z]
@@ -212,16 +219,21 @@ class LeggedRobot(RslRlWrapper):
     # region: Randomizations
     def _push_robots(self):
         """Randomly set robot's root velocity to simulate a push."""
+        # if torch.all(self.episode_length_buf == 0):
+        #     return
         env_ids = torch.arange(self.num_envs, device=self.device)
-        push_env_ids = env_ids[self.episode_length_buf[env_ids] % self.cfg.random.push.push_interval == 0]
+        push_env_ids = env_ids[self.episode_length_buf[env_ids] % int(self.cfg.random.push.push_interval) == 0]
         if len(push_env_ids) == 0:
             return
         env_states = self.env.handler.get_states()
 
         max_vel = self.cfg.random.push.max_push_vel_xy
-        env_states.robots[self.robot.name].root_state[:, 7:9] = torch_rand_float(
-            -max_vel, max_vel, (self.num_envs, 2), device=self.device
+        env_states.robots[self.robot.name].root_state[push_env_ids, 7:9] = torch_rand_float(
+            -max_vel, max_vel, (len(push_env_ids), 2), device=self.device
         )
+        # env_states.robots[self.robot.name].root_state[:, :2] += torch_rand_float(
+        #     -max_vel, max_vel, (self.num_envs, 2), device=self.device
+        # )*self.dt
 
         # max_angular = self.cfg.random.push.max_push_ang_vel
         # env_states.robots[self.robot.name].root_state[:, 10:13] = torch_rand_float(
@@ -250,8 +262,9 @@ class LeggedRobot(RslRlWrapper):
         self.last_last_actions[:] = self.last_actions[:].clone()
         self.last_actions[:] = self.actions[:].clone()
         self.last_dof_vel[:] = dof_vel_tensor(envstate, self.robot.name)[:].clone()
-        self.last_root_vel[:] = torch.cat((self.base_lin_vel, self.base_ang_vel), dim=1).clone()
-        # robot_root_state_tensor(envstate, self.robot.name)[:, 7:13]
+        self.last_root_vel[:] = robot_root_state_tensor(envstate, self.robot.name)[:, 7:13].clone()
+        # torch.cat((self.base_lin_vel, self.base_ang_vel), dim=1).clone()
+        #
 
     def _resample_commands(self, env_ids):
         """Randommly select commands of some environments
@@ -358,8 +371,7 @@ class LeggedRobot(RslRlWrapper):
         sorted_joint_names = self.env.handler.get_joint_names(self.robot.name, sort=True)
         sorted_limits = [torque_limits[name] for name in sorted_joint_names]
         self.cfg.torque_limits = (
-            torch.tensor(sorted_limits, device=self.device).unsqueeze(0).repeat(self.num_envs, 1)
-            * self.cfg.control.torque_limit_scale
+            torch.tensor(sorted_limits, device=self.device).unsqueeze(0) * self.cfg.control.torque_limit_scale
         )
 
         dof_pos_limits = cfg.robots[0].joint_limits
