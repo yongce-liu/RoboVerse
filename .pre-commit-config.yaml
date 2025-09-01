@@ -7,7 +7,7 @@ repos:
     -   id: end-of-file-fixer
         exclude: '(^third_party|.*\.md|.*\.rst)'
     -   id: check-added-large-files
-        exclude: '^metasim/data/'
+        exclude: '^metasim/data/|^roboverse_learn/unitree_rl/'
     -   id: debug-statements  # check for debugger imports or `breakpoint()`
         exclude: '^roboverse_learn/'
     -   id: check-yaml

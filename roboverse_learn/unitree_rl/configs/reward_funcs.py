@@ -132,11 +132,12 @@ def reward_collision(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> tor
     )
 
 
-def reward_termination(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
-    """
-    Reward for termination, used to reset the environment.
-    """
-    return states.robots[robot_name].extra["reset_buf"] * ~states.robots[robot_name].extra["time_out_buf"]
+# FIXME, Here the reset buf has been logical OR using time_out_buf
+# def reward_termination(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+#     """
+#     Reward for termination, used to reset the environment.
+#     """
+#     return states.robots[robot_name].extra["reset_buf"] * ~states.robots[robot_name].extra["time_out_buf"]
 
 
 def reward_dof_pos_limits(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
@@ -166,7 +167,11 @@ def reward_torque_limits(states: EnvState, robot_name: str, cfg: BaseTaskCfg) ->
     Penalize high torques.
     """
     return torch.sum(
-        (torch.abs(states.robots[robot_name].joint_effort_target) - cfg.torque_limits).clip(min=0.0), dim=1
+        (
+            torch.abs(states.robots[robot_name].joint_effort_target)
+            - cfg.torque_limits * cfg.reward_cfg.soft_torque_limit
+        ).clip(min=0.0),
+        dim=1,
     )
 
 
@@ -239,7 +244,7 @@ def reward_feet_contact_forces(states: EnvState, robot_name: str, cfg: BaseTaskC
                 dim=-1,
             )
             - cfg.reward_cfg.max_contact_force
-        ).clip(0, 400),
+        ).clip(min=0, max=400),
         dim=1,
     )
 

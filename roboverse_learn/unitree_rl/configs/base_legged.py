@@ -138,8 +138,9 @@ class LeggedRobotDomainRandCfg(RandomizationCfg):
             raise e
 
         shape = (num_envs, 1)
-        friction_coeffs = torch_rand_float(range[0], range[1], shape, device=device)
-        return friction_coeffs
+        coeffs = torch_rand_float(range[0], range[1], shape, device=device)
+        # np.random.uniform(range[0], range[1], shape)
+        return coeffs
 
     @configclass
     class PushRandomCfg:
@@ -393,29 +394,10 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
                         "RR_calf_joint": -1.5,
                     },
                 },
-                "g1_dof12": {
-                    "pos": torch.tensor([0.0, 0.0, 0.8]),
-                    "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
-                    "dof_pos": {
-                        # Hips & legs
-                        "left_hip_yaw_joint": 0.0,
-                        "left_hip_roll_joint": 0.0,
-                        "left_hip_pitch_joint": -0.1,
-                        "left_knee_joint": 0.3,
-                        "left_ankle_pitch_joint": -0.2,
-                        "left_ankle_roll_joint": 0.0,
-                        "right_hip_yaw_joint": 0.0,
-                        "right_hip_roll_joint": 0.0,
-                        "right_hip_pitch_joint": -0.1,
-                        "right_knee_joint": 0.3,
-                        "right_ankle_pitch_joint": -0.2,
-                        "right_ankle_roll_joint": 0.0,
-                    },
-                },
             },
         }
     ]
-    """Initial states for the environment. Only used for legged robots, e.g., go2-12dof, g1-12dof, h1-12dof."""
+    """Initial states for the environment. Only used for legged robots, e.g., go2-12dof"""
 
     def __post_init__(self):
         super().__post_init__()

@@ -116,7 +116,7 @@ def GymEnvWrapper(cls: type[THandler]) -> type[EnvWrapper[THandler]]:
             states = self.handler.get_states()
             toc = time.time()
             log.trace(f"Time taken to handler.get_states(): {toc - tic:.4f}s")
-            time_out = self._episode_length_buf >= self.handler.scenario.episode_length
+            time_out = self._episode_length_buf > self.handler.scenario.episode_length
             return states, reward, success, time_out, None
 
         def step_actions(self, actions) -> tuple[Obs, Reward, Success, TimeOut, Extra]:

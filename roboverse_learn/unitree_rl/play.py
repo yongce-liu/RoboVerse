@@ -102,7 +102,7 @@ def play(args):
     assert num_actions == len(reindex_actions_idx)
     print(f"Reverse reindex actions idx: {reverse_reindex_actions_idx}")
 
-    for i in range(1000):
+    for i in range(1000000):
         # set fixed command
         env.commands[:, 0] = 0.5
         env.commands[:, 1] = 0.0
@@ -126,4 +126,11 @@ def play(args):
 if __name__ == "__main__":
     EXPORT_POLICY = True
     args = get_args()
+    # args.jit_load = True
+    # args.reindex_actions = True
+    # args.task = "dof12_walking"
+    # args.sim = "mujoco"
+    # args.robot = 'g1_dof12'
+    # args.load_run = "pretrain"
+    # args.checkpoint = "motion"
     play(args)

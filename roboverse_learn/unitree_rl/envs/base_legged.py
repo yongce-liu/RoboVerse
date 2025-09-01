@@ -11,11 +11,7 @@ from metasim.utils.humanoid_robot_util import (
     contact_forces_tensor,
     dof_vel_tensor,
     get_euler_xyz_tensor,
-    robot_ang_velocity_tensor,
-    robot_position_tensor,
     robot_root_state_tensor,
-    robot_rotation_tensor,
-    robot_velocity_tensor,
 )
 from metasim.utils.math import quat_apply, quat_rotate_inverse, wrap_to_pi
 from metasim.utils.state import TensorState
@@ -42,12 +38,18 @@ class LeggedRobot(RslRlWrapper):
         self._prepare_reward_function(self.cfg)
         self._init_buffers()
 
-    def reset(self, env_ids=None):
+    def reset(self):
+        """Reset all robots"""
+        self.reset_idx(list(range(self.num_envs)))
+        obs, privileged_obs, _, _, _ = self.step(
+            torch.zeros(self.num_envs, self.num_actions, device=self.device, requires_grad=False)
+        )
+        return obs, privileged_obs
+
+    def reset_idx(self, env_ids=None):
         """
         Reset state in the env and buffer in this wrapper
         """
-        if env_ids is None:
-            env_ids = list(range(self.num_envs))
         if len(env_ids) == 0:
             env_states = self.env.handler.get_states()
             return env_states, None
@@ -182,7 +184,7 @@ class LeggedRobot(RslRlWrapper):
         self.compute_reward(env_states)
         # reset envs
         reset_env_idx = self.reset_buf.nonzero(as_tuple=False).flatten().tolist()
-        self.reset(reset_env_idx)
+        env_states, _ = self.reset_idx(reset_env_idx)
         # simulate the push operation
         if self.cfg.random.push.enabled:
             self._push_robots()
@@ -244,15 +246,14 @@ class LeggedRobot(RslRlWrapper):
     # endregion
 
     # region: Utilities
-    def _update_odometry_tensors(self, env_states):
+    def _update_odometry_tensors(self, envstate: TensorState):
         """Update tensors from are refreshed tensors after physics step."""
-        self.base_pos[:] = robot_position_tensor(env_states, self.robot.name)
-        self.base_quat[:] = robot_rotation_tensor(env_states, self.robot.name)
+        name = self.robot.name
+        self.base_pos[:] = envstate.robots[name].root_state[:, 0:3]
+        self.base_quat[:] = envstate.robots[name].root_state[:, 3:7]
         self.base_euler_xyz = get_euler_xyz_tensor(self.base_quat)
-        self.base_lin_vel[:] = quat_rotate_inverse(self.base_quat, robot_velocity_tensor(env_states, self.robot.name))
-        self.base_ang_vel[:] = quat_rotate_inverse(
-            self.base_quat, robot_ang_velocity_tensor(env_states, self.robot.name)
-        )
+        self.base_lin_vel[:] = quat_rotate_inverse(self.base_quat, envstate.robots[name].root_state[:, 7:10])
+        self.base_ang_vel[:] = quat_rotate_inverse(self.base_quat, envstate.robots[name].root_state[:, 10:13])
         self.projected_gravity[:] = quat_rotate_inverse(self.base_quat, self.gravity_vec)
 
     def _update_history(self, envstate):
@@ -370,9 +371,7 @@ class LeggedRobot(RslRlWrapper):
         # sorted_joint_names = sorted(torque_limits.keys())
         sorted_joint_names = self.env.handler.get_joint_names(self.robot.name, sort=True)
         sorted_limits = [torque_limits[name] for name in sorted_joint_names]
-        self.cfg.torque_limits = (
-            torch.tensor(sorted_limits, device=self.device).unsqueeze(0) * self.cfg.control.torque_limit_scale
-        )
+        self.cfg.torque_limits = torch.tensor(sorted_limits, device=self.device) * self.cfg.control.torque_limit_scale
 
         dof_pos_limits = cfg.robots[0].joint_limits
         sorted_dof_pos_limits = [dof_pos_limits[joint] for joint in sorted_joint_names]
@@ -490,8 +489,8 @@ class LeggedRobot(RslRlWrapper):
                 torch.zeros(self.num_envs, self.cfg.single_num_privileged_obs, dtype=torch.float, device=self.device)
             )
 
-        self.env_frictions = torch.zeros(self.num_envs, 1, dtype=torch.float32, device=self.device)  # TODO now set 0
-        self.body_mass = torch.zeros(self.num_envs, 1, dtype=torch.float32, device=self.device, requires_grad=False)
+        # self.env_frictions = torch.zeros(self.num_envs, 1, dtype=torch.float32, device=self.device)  # TODO now set 0
+        # self.body_mass = torch.zeros(self.num_envs, 1, dtype=torch.float32, device=self.device, requires_grad=False)
 
     # endregion
 
