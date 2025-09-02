@@ -45,11 +45,10 @@ def train(args):
     config_wrapper = get_class(args.task, suffix="Cfg")
     task_config = config_wrapper(robots=robots)
     scenario = ScenarioCfg(
-        task=task_config,
-        decimation=task_config.decimation,
         robots=robots,
+        sim_params=task_config.sim_params,
         num_envs=args.num_envs,
-        sim=args.sim,
+        simulator=args.sim,
         headless=args.headless,
         cameras=[],
     )
@@ -62,12 +61,12 @@ def train(args):
         datetime = args.load_run.split("/")[-2]
     else:
         datetime = None
-    log_dir = get_log_dir(args, scenario, datetime)
+    log_dir = get_log_dir(args, task_config, datetime)
     task_wrapper = get_class(args.task, suffix="Task")
-    task_env = task_wrapper(scenario)
+    task_env = task_wrapper(task_config, scenario)
 
     # dump snapshot of training config
-    task_path = f"roboverse_learn/unitree_rl/tasks/{scenario.task.task_name}.py"
+    task_path = f"roboverse_learn/unitree_rl/tasks/{task_env.cfg.task_name}.py"
     if not os.path.exists(task_path):
         log.error(f"Task path {task_path} does not exist, please check your task name in config carefully")
         return

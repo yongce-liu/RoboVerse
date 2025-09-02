@@ -224,7 +224,7 @@ class BaseLeggedTaskCfg:
         # max_dist: float = 0.5
         # """maximum distance between feet"""
 
-        # target_joint_pos_scale: float = 0.17
+        target_joint_pos_scale: float = 0.17
         # """target joint position scale"""
         target_feet_height: float = 0.06
         """target feet height"""
@@ -318,7 +318,7 @@ class BaseLeggedTaskCfg:
             dof_pos = 1.0
             dof_vel = 0.05
             height_measurements = 5.0
-            # quat = 1.0
+            quat = 1.0
 
         clip_observations = 100.0
         clip_actions = 100.0

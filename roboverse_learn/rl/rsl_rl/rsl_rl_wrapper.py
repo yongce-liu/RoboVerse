@@ -8,13 +8,13 @@ from rsl_rl.env import VecEnv
 
 from metasim.scenario.scenario import ScenarioCfg
 from metasim.constants import SimType
-from metasim.utils.setup_util import get_sim_handler_class
+from metasim.task.base import BaseTaskEnv
 
 from metasim.utils.state import list_state_to_tensor
 
 
 
-class RslRlWrapper(VecEnv):
+class RslRlWrapper(BaseTaskEnv, VecEnv):
     """
     Wraps Metasim environments to be compatible with rsl_rl OnPolicyRunner.
 
@@ -22,22 +22,25 @@ class RslRlWrapper(VecEnv):
     """
 
     def __init__(self, scenario: ScenarioCfg):
-        super().__init__()
+        # Initialize BaseTaskEnv via MRO; VecEnv has no __init__
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        super().__init__(scenario, self.device)
+
 
 
         if SimType(scenario.simulator) not in [SimType.ISAACGYM,SimType.ISAACLAB, SimType.GENESIS]:
             raise NotImplementedError(
                 f"RslRlWrapper in Roboverse now only supports {SimType.ISAACGYM}, but got {scenario.simulator}"
             )
-        self.device = torch.device("cuda" if torch.cuda.is_available else "cpu")
         log.info(f"using device {self.device}")
 
         # TODO read camera config
         # self.env.cfg.sensor.camera
 
         # load simulator handler
-        env_class = get_sim_handler_class(SimType(scenario.simulator))
-        self.env = env_class(scenario)
+        # env_class = get_sim_handler_class(SimType(scenario.simulator))
+        # self.env = env_class(scenario)
+        # self.env.launch()
         self._parse_cfg(scenario)
         self._get_init_states(scenario)
 
@@ -46,20 +49,13 @@ class RslRlWrapper(VecEnv):
         self.scenario = scenario
         self.robot = scenario.robots[0]
         self.num_envs = scenario.num_envs
-        self.num_obs = scenario.task.num_observations
-        self.num_actions = scenario.task.num_actions
-        self.num_privileged_obs = scenario.task.num_privileged_obs
-        self.max_episode_length = scenario.task.max_episode_length
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.cfg = scenario.task
-        from metasim.utils.dict import class_to_dict
-        self.train_cfg = class_to_dict(scenario.task.ppo_cfg)
 
 
     def _get_init_states(self, scenario):
         """ Get initial states from the scenario configuration."""
 
-        init_states_list = getattr(scenario.task, 'init_states', None)
+        init_states_list = getattr(self.cfg, 'init_states', None)
         if init_states_list is None:
             raise AttributeError(f"'task cfg' has no attribute 'init_states', please add it in your scenario config!")
 
@@ -75,7 +71,7 @@ class RslRlWrapper(VecEnv):
 
         if scenario.simulator == SimType.ISAACGYM:
             #tensorize the initial states as TensorState, now we only support IsaacGym
-            self.init_states = list_state_to_tensor(self.env.handler, init_states_list, device=self.device)
+            self.init_states = list_state_to_tensor(self.handler, init_states_list, device=self.device)
 
 
     def get_observations(self):
@@ -100,4 +96,4 @@ class RslRlWrapper(VecEnv):
             env_ids = list(range(self.handler.num_envs))
 
         # reset in the env
-        self.env.reset(env_ids)
+        self.handler.reset(env_ids)

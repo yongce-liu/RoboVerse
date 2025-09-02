@@ -3,7 +3,7 @@ from __future__ import annotations
 from functools import partial
 
 import torch
-
+import math
 from metasim.scenario.scenario import ScenarioCfg
 from metasim.utils import configclass
 from metasim.utils.humanoid_robot_util import (
@@ -14,9 +14,10 @@ from metasim.utils.humanoid_robot_util import (
 )
 
 # from roboverse_learn.unitree_rl.configs.base_humanoid import BaseHumanoidCfg
-from roboverse_learn.unitree_rl.configs.base_legged import BaseLeggedTaskCfg, ControlCfg, LeggedRobotCfgPPO
+from roboverse_learn.unitree_rl.configs.base_legged import BaseLeggedTaskCfg, LeggedRobotCfgPPO
 from roboverse_learn.unitree_rl.envs.base_humanoid import Humanoid
 from roboverse_learn.unitree_rl.helper.utils import find_unique_candidate
+
 
 
 @configclass
@@ -38,7 +39,7 @@ class HumanoidWalkingCfg(BaseLeggedTaskCfg):
     task_name = "humanoid_walking"
     env_spacing: float = 1.0
     max_episode_length_s: int = 24
-    control = ControlCfg(action_scale=0.5, action_offset=True, torque_limit_scale=0.85)
+    control = BaseLeggedTaskCfg.ControlCfg(action_scale=0.25, action_offset=True, torque_limit_scale=0.85)
 
     init_states = [
         {
@@ -204,9 +205,21 @@ class HumanoidWalkingTask(Humanoid):
     # TODO implement push robot
     """
 
-    def __init__(self, scenario: ScenarioCfg):
+    def __init__(self, task_cfg, scenario: ScenarioCfg):
+        self.decimation = scenario.decimation
+        self._init_from_cfg(task_cfg)
         super().__init__(scenario)
         self._prepare_ref_indices()
+
+    def _init_from_cfg(self, task_cfg):
+        self.cfg = task_cfg
+        self.num_obs = self.cfg.num_observations
+        self.num_actions = self.cfg.num_actions
+        self.num_privileged_obs = self.cfg.num_privileged_obs
+        self.dt = self.decimation * self.cfg.sim_params.dt
+        self.max_episode_length = math.ceil(self.cfg.max_episode_length_s / self.dt)
+        from metasim.utils.dict import class_to_dict
+        self.train_cfg = class_to_dict(self.cfg.ppo_cfg)
 
     def _init_buffers(self):
         super()._init_buffers()
@@ -214,7 +227,7 @@ class HumanoidWalkingTask(Humanoid):
 
     def _prepare_ref_indices(self):
         """get joint indices for reference pos computation."""
-        joint_names = self.env.handler.get_joint_names(self.robot.name)
+        joint_names = self.handler.get_joint_names(self.robot.name)
         find_func = partial(find_unique_candidate, data_base=joint_names)
 
         def name_extend_func(x):
@@ -238,7 +251,7 @@ class HumanoidWalkingTask(Humanoid):
         sin_pos_l = sin_pos.clone()
         sin_pos_r = sin_pos.clone()
         self.ref_dof_pos = torch.zeros(
-            self.num_envs, self.env.handler.robot_num_dof, device=self.device, requires_grad=False
+            self.num_envs, self.handler.robot_num_dof, device=self.device, requires_grad=False
         )
         # Scale gait amplitude by command magnitude so zero command => no gait
         # Combine linear speed and a fraction of yaw command to allow in-place turning

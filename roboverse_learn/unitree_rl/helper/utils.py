@@ -112,11 +112,11 @@ def get_args(test=False):
     return args
 
 
-def get_log_dir(args: argparse.Namespace, scenario: ScenarioCfg, now=None) -> str:
+def get_log_dir(args: argparse.Namespace, task, now=None) -> str:
     """Get the log directory."""
 
     robot_name = args.robot
-    task_name = scenario.task.task_name
+    task_name = task.task_name
     task_name = f"{robot_name}_{task_name}"
     if now is None:
         now = datetime.datetime.now().strftime("%Y_%m%d_%H%M%S")

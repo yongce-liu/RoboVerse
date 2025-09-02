@@ -39,16 +39,16 @@ class Humanoid(LeggedRobot):
 
         # get sorted indices for specific body links
         self.knee_indices = get_body_reindexed_indices_from_substring(
-            self.env.handler, robot.name, knee_names, device=self.device
+            self.handler, robot.name, knee_names, device=self.device
         )
         self.elbow_indices = get_body_reindexed_indices_from_substring(
-            self.env.handler, robot.name, elbow_names, device=self.device
+            self.handler, robot.name, elbow_names, device=self.device
         )
         self.wrist_indices = get_body_reindexed_indices_from_substring(
-            self.env.handler, robot.name, wrist_names, device=self.device
+            self.handler, robot.name, wrist_names, device=self.device
         )
         self.torso_indices = get_body_reindexed_indices_from_substring(
-            self.env.handler, robot.name, torso_names, device=self.device
+            self.handler, robot.name, torso_names, device=self.device
         )
 
         # attach to cfg for reward computation.
@@ -65,18 +65,18 @@ class Humanoid(LeggedRobot):
         right_yaw_roll_names = robot.right_yaw_roll_joints
         upper_body_names = robot.upper_body_joints
         self.cfg.left_yaw_roll_joint_indices = get_joint_reindexed_indices_from_substring(
-            self.env.handler, robot.name, left_yaw_roll_names, device=self.device
+            self.handler, robot.name, left_yaw_roll_names, device=self.device
         )
         self.cfg.right_yaw_roll_joint_indices = get_joint_reindexed_indices_from_substring(
-            self.env.handler, robot.name, right_yaw_roll_names, device=self.device
+            self.handler, robot.name, right_yaw_roll_names, device=self.device
         )
         self.cfg.upper_body_joint_indices = get_joint_reindexed_indices_from_substring(
-            self.env.handler, robot.name, upper_body_names, device=self.device
+            self.handler, robot.name, upper_body_names, device=self.device
         )
         # keep the waist stable
         if hasattr(robot, "waist_joints"):
             self.cfg.waist_joint_indices = get_joint_reindexed_indices_from_substring(
-                self.env.handler, robot.name, robot.waist_joints, device=self.device
+                self.handler, robot.name, robot.waist_joints, device=self.device
             )
 
     # endregion
@@ -159,7 +159,7 @@ class Humanoid(LeggedRobot):
 
     def _get_phase(self):
         feet_cycle_time = self.cfg.reward_cfg.feet_cycle_time
-        phase = self.episode_length_buf * self.dt % feet_cycle_time / feet_cycle_time
+        phase = self._episode_steps * self.dt % feet_cycle_time / feet_cycle_time
         return phase
 
     # endregion

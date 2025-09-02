@@ -47,8 +47,9 @@ def play(args):
     scenario.num_envs = 1
     scenario.task.commands.curriculum = False
     scenario.task.ppo_cfg.runner.resume = True
-    scenario.task.random.friction.enabled = False
-    scenario.task.random.mass.enabled = False
+    # Disable object property randomization in play mode by unsetting configs
+    scenario.task.random.friction = None
+    scenario.task.random.mass = None
     scenario.task.random.push.enabled = False
     scenario.task.noise.add_noise = False
 

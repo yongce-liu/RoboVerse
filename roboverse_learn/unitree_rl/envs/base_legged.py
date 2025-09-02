@@ -18,6 +18,7 @@ from metasim.utils.humanoid_robot_util import (
 )
 from metasim.utils.math import quat_apply, quat_rotate_inverse, wrap_to_pi
 from metasim.utils.state import TensorState
+from metasim.task.base import BaseTaskEnv
 from roboverse_learn.rl.rsl_rl.rsl_rl_wrapper import RslRlWrapper
 from roboverse_learn.unitree_rl.configs.base_legged import BaseLeggedTaskCfg
 from roboverse_learn.unitree_rl.helper.utils import get_body_reindexed_indices_from_substring, torch_rand_float
@@ -50,12 +51,12 @@ class LeggedRobot(RslRlWrapper):
         if len(env_ids) == 0:
             return
 
-        env_states, _ = self.env.reset(self.init_states, env_ids)
+        env_states, _ = BaseTaskEnv.reset(self, self.init_states, env_ids)
         if self.cfg.random.push.enabled:
             env_states.robots[self.robot.name].root_state[:, 7:9] = torch_rand_float(
                 -0.5, 0.5, (self.num_envs, 2), device=self.device
             )
-            self.env.handler.set_states(env_states, env_ids)
+            self.handler.set_states(env_states, env_ids)
 
         if self.cfg.commands.curriculum and (self.common_step_counter % self.max_episode_length == 0):
             self.update_command_curriculum(env_ids)
@@ -142,11 +143,13 @@ class LeggedRobot(RslRlWrapper):
     def _pre_physics_step(self, actions: torch.Tensor):
         """Apply action smoothing and wrap actions as dict before physics step."""
         # low frequency action smoothing
-        # delay = torch.rand((self.num_envs, 1), device=self.device)
-        # actions = (1 - delay) * actions.to(self.device) + delay * self.actions
+        delay = torch.rand((self.num_envs, 1), device=self.device)
+        actions = (1 - delay) * actions.to(self.device) + delay * self.actions
         # clip actions
         clip_action_limit = self.cfg.normalization.clip_actions
         actions = torch.clip(actions, -clip_action_limit, clip_action_limit).to(self.device)
+
+
         # TODO: add the support of multi-embodiments
         # should return actions_list, [List, Action:[str, RobotAction:[...]]]
         return actions
@@ -155,14 +158,24 @@ class LeggedRobot(RslRlWrapper):
         """
         Task physics step
         """
-        env_states, _, terminated, self.time_out_buf, _ = self.env.step(actions)
+        env_states = self.handler.get_states()
+        for i in range(self.decimation):
+            # Apply PD control if needed
+            if self.manual_pd_on:
+                # Get current environment states for PD control
+                effort = self._apply_pd_control(actions, env_states)
+                self.handler._effort = effort
+                send_action = effort
+            else:
+                send_action = actions
+            env_states, _, terminated, self.time_out_buf, _ = BaseTaskEnv.step(self, send_action)
         self.reset_buf = torch.logical_or(terminated, self.time_out_buf)
         return env_states
 
     def _post_physics_step(self, env_states):
         """After physics step, compute reward, get obs and privileged_obs, resample command."""
         # update episode length from env_wrapper
-        self.episode_length_buf = self.env.episode_length_buf_tensor
+        # self.episode_length_buf = self.handler.episode_length_buf
         self.common_step_counter += 1
         # unpack the estimated states from env_states, currently, it only support quaternions
         self._update_odometry_tensors(env_states)
@@ -195,7 +208,7 @@ class LeggedRobot(RslRlWrapper):
         Default behaviour: Compute ang vel command based on target and heading, compute measured terrain heights and randomly push robots
         """
         env_ids = (
-            (self.episode_length_buf % int(self.cfg.commands.resampling_time / self.dt) == 0)
+            (self._episode_steps % int(self.cfg.commands.resampling_time / self.dt) == 0)
             .nonzero(as_tuple=False)
             .flatten()
         )
@@ -213,21 +226,59 @@ class LeggedRobot(RslRlWrapper):
     def _push_robots(self):
         """Randomly set robot's root velocity to simulate a push."""
         env_ids = torch.arange(self.num_envs, device=self.device)
-        push_env_ids = env_ids[self.episode_length_buf[env_ids] % self.cfg.random.push.push_interval == 0]
+        push_env_ids = env_ids[self._episode_steps[env_ids] % self.cfg.random.push.push_interval == 0]
         if len(push_env_ids) == 0:
             return
-        env_states = self.env.handler.get_states()
+        env_states = self.handler.get_states()
 
         max_vel = self.cfg.random.push.max_push_vel_xy
         env_states.robots[self.robot.name].root_state[:, 7:9] = torch_rand_float(
             -max_vel, max_vel, (self.num_envs, 2), device=self.device
         )
+        self.rand_push_force[:, :2] = env_states.robots[self.robot.name].root_state[:, 7:9]
+        max_angular = self.cfg.random.push.max_push_ang_vel
+        env_states.robots[self.robot.name].root_state[:, 10:13] = torch_rand_float(
+            -max_angular, max_angular, (self.num_envs, 3), device=self.device
+        )
+        self.rand_push_torque = env_states.robots[self.robot.name].root_state[:, 10:13]
+        self.handler.set_states(env_states, push_env_ids.tolist())
 
-        # max_angular = self.cfg.random.push.max_push_ang_vel
-        # env_states.robots[self.robot.name].root_state[:, 10:13] = torch_rand_float(
-        #     -max_angular, max_angular, (self.num_envs, 3), device=self.device
-        # )
-        self.env.handler.set_states(env_states, push_env_ids.tolist())
+    # endregion
+
+    # region: PD Control
+    def _compute_effort(self, actions: torch.Tensor, env_states: TensorState) -> torch.Tensor:
+        """Compute effort from actions using PD control"""
+        # Scale the actions (generally output from policy)
+        action_scaled = self.cfg.control.action_scale * actions
+
+        # Get current joint positions and velocities
+        dof_pos = env_states.robots[self.robot.name].joint_pos
+        dof_vel = env_states.robots[self.robot.name].joint_vel
+
+        # Default joint order to sorted joint order
+        reindex = self.handler.get_joint_reindex(self.robot.name, inverse=False)
+        dof_pos = dof_pos[:, reindex]
+        dof_vel = dof_vel[:, reindex]
+
+        # Compute PD control effort
+        if self.cfg.control.action_offset:
+            effort = (
+                self.p_gains * (action_scaled + self.cfg.default_joint_pd_target - dof_pos)
+                - self.d_gains * dof_vel
+            )
+        else:
+            effort = self.p_gains * (action_scaled - dof_pos) - self.d_gains * dof_vel
+
+        # Apply torque limits
+        effort = torch.clip(effort, -self.cfg.torque_limits, self.cfg.torque_limits)
+        return effort.to(torch.float32)
+
+    def _apply_pd_control(self, actions: torch.Tensor, env_states: TensorState) -> torch.Tensor:
+        """
+        Compute torque using PD controller for effort actuator and return torques.
+        """
+        effort = self._compute_effort(actions, env_states)
+        return effort
 
     # endregion
 
@@ -317,7 +368,7 @@ class LeggedRobot(RslRlWrapper):
     # region: Parse configs & Get the necessary parametres
     def _parse_cfg(self, scenario):
         super()._parse_cfg(scenario)
-        self.dt = self.cfg.dt
+        self.dt = self.cfg.dt = scenario.decimation * self.cfg.sim_params.dt
         self.command_ranges = self.cfg.commands.ranges
         self.num_commands = self.cfg.commands.commands_dim
         self.use_vision = self.cfg.use_vision
@@ -332,13 +383,13 @@ class LeggedRobot(RslRlWrapper):
 
         # get sorted indices for specific body links
         self.feet_indices = get_body_reindexed_indices_from_substring(
-            self.env.handler, robot.name, feet_names, device=self.device
+            self.handler, robot.name, feet_names, device=self.device
         )
         self.termination_contact_indices = get_body_reindexed_indices_from_substring(
-            self.env.handler, robot.name, termination_contact_names, device=self.device
+            self.handler, robot.name, termination_contact_names, device=self.device
         )
         self.penalised_contact_indices = get_body_reindexed_indices_from_substring(
-            self.env.handler, robot.name, penalised_contact_names, device=self.device
+            self.handler, robot.name, penalised_contact_names, device=self.device
         )
         # attach to cfg for reward computation.
         self.cfg.feet_indices = self.feet_indices
@@ -355,7 +406,7 @@ class LeggedRobot(RslRlWrapper):
             else {name: actuator_cfg.torque_limit for name, actuator_cfg in cfg.robots[0].actuators.items()}
         )
         # sorted_joint_names = sorted(torque_limits.keys())
-        sorted_joint_names = self.env.handler.get_joint_names(self.robot.name, sort=True)
+        sorted_joint_names = self.handler.get_joint_names(self.robot.name, sort=True)
         sorted_limits = [torque_limits[name] for name in sorted_joint_names]
         self.cfg.torque_limits = (
             torch.tensor(sorted_limits, device=self.device).unsqueeze(0).repeat(self.num_envs, 1)
@@ -374,6 +425,22 @@ class LeggedRobot(RslRlWrapper):
         default_joint_pos = cfg.robots[0].default_joint_positions
         sorted_joint_pos = [default_joint_pos[name] for name in sorted_joint_names]
         self.cfg.default_joint_pd_target = torch.tensor(sorted_joint_pos, device=self.device).unsqueeze(0)
+
+        # Parse PD gains for manual PD control, in sorted joint order
+        actuators = cfg.robots[0].actuators
+        p_gains = []
+        d_gains = []
+        for name in sorted_joint_names:
+            actuator_cfg = actuators[name]
+            p_gains.append(actuator_cfg.stiffness if actuator_cfg.stiffness is not None else 0.0)
+            d_gains.append(actuator_cfg.damping if actuator_cfg.damping is not None else 0.0)
+
+        self.p_gains = torch.tensor(p_gains, device=self.device).unsqueeze(0).repeat(self.num_envs, 1)
+        self.d_gains = torch.tensor(d_gains, device=self.device).unsqueeze(0).repeat(self.num_envs, 1)
+
+        # Check if manual PD control is needed (if any joints use effort control)
+        control_types = cfg.robots[0].control_type
+        self.manual_pd_on = any(mode == "effort" for mode in control_types.values()) if control_types else False
 
     def _init_buffers(self):
         """
@@ -400,6 +467,10 @@ class LeggedRobot(RslRlWrapper):
         self.reset_buf = torch.ones(self.num_envs, device=self.device, dtype=torch.bool)
         self.episode_length_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.int)
         self.time_out_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
+
+        ## align episode_steps with episode_length_buf, they are equal
+        self._episode_steps = self.episode_length_buf
+        self.max_episode_steps = self.max_episode_length
 
         # TODO read obs from cfg and auto concatenate
         self.obs_buf = torch.zeros(self.num_envs, self.num_obs, device=self.device, dtype=torch.float)
@@ -463,8 +534,8 @@ class LeggedRobot(RslRlWrapper):
         self.feet_pos = torch.zeros((self.num_envs, len(self.feet_indices), 3), device=self.device, requires_grad=False)
         self.feet_height = torch.zeros((self.num_envs, len(self.feet_indices)), device=self.device, requires_grad=False)
 
-        # self.rand_push_force = torch.zeros((self.num_envs, 3), dtype=torch.float32, device=self.device)
-        # self.rand_push_torque = torch.zeros((self.num_envs, 3), dtype=torch.float32, device=self.device)
+        self.rand_push_force = torch.zeros((self.num_envs, 3), dtype=torch.float32, device=self.device)
+        self.rand_push_torque = torch.zeros((self.num_envs, 3), dtype=torch.float32, device=self.device)
 
         # TODO add history manager, read from config.
         self.obs_history = deque(maxlen=self.cfg.frame_stack)
@@ -480,6 +551,7 @@ class LeggedRobot(RslRlWrapper):
 
         self.env_frictions = torch.zeros(self.num_envs, 1, dtype=torch.float32, device=self.device)  # TODO now set 0
         self.body_mass = torch.zeros(self.num_envs, 1, dtype=torch.float32, device=self.device, requires_grad=False)
+
 
     # endregion
 
