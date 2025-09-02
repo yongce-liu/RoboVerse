@@ -52,11 +52,6 @@ class LeggedRobot(RslRlWrapper):
             return
 
         env_states, _ = BaseTaskEnv.reset(self, self.init_states, env_ids)
-        if self.cfg.random.push.enabled:
-            env_states.robots[self.robot.name].root_state[:, 7:9] = torch_rand_float(
-                -0.5, 0.5, (self.num_envs, 2), device=self.device
-            )
-            self.handler.set_states(env_states, env_ids)
 
         if self.cfg.commands.curriculum and (self.common_step_counter % self.max_episode_length == 0):
             self.update_command_curriculum(env_ids)
@@ -219,7 +214,7 @@ class LeggedRobot(RslRlWrapper):
         reset_env_idx = self.reset_buf.nonzero(as_tuple=False).flatten().tolist()
         self.reset(reset_env_idx)
         # simulate the push operation
-        if self.cfg.random.push.enabled:
+        if self.cfg.random.push.enabled and self.common_step_counter % self.cfg.random.push.push_interval == 0:
             self._push_robots()
         # compute obs for actor,  privileged_obs for critic network
         self.compute_observations(env_states)
@@ -267,6 +262,7 @@ class LeggedRobot(RslRlWrapper):
         )
         self.rand_push_force[:, :2] = env_states.robots[self.robot.name].root_state[:, 7:9]
         max_angular = self.cfg.random.push.max_push_ang_vel
+        max_angular = 0
         env_states.robots[self.robot.name].root_state[:, 10:13] = torch_rand_float(
             -max_angular, max_angular, (self.num_envs, 3), device=self.device
         )

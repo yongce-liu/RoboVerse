@@ -13,12 +13,11 @@ def reward_lin_vel_z(states: DictEnvState, robot_name: str, cfg) -> torch.Tensor
     return torch.square(states.robots[robot_name].extra["base_lin_vel"][:, 2])
 
 
-def reward_ang_vel_xy(states: DictEnvState, robot_name: str, cfg) -> torch.Tensor:
-    # xy = torch.norm(states.robots[robot_name].extra["base_ang_vel"][:, :2], dim=1)
-    # db = getattr(cfg.reward_cfg, "angvel_xy_deadband", 0.25)
-    # k = getattr(cfg.reward_cfg, "angvel_xy_k", 1.0)
-    # return torch.square(torch.clamp(xy - db, min=0.0)) * k
-    return torch.sum(torch.square(states.robots[robot_name].extra["base_ang_vel"][:, :2]), dim=1)
+def reward_ang_vel_xy(states: DictEnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+    xy = torch.norm(states.robots[robot_name].extra["base_ang_vel"][:, :2], dim=1)
+    db = getattr(cfg.reward_cfg, "angvel_xy_deadband", 0.25)
+    k = getattr(cfg.reward_cfg, "angvel_xy_k", 1.0)
+    return torch.square(torch.clamp(xy - db, min=0.0)) * k
 
 
 def reward_orientation(states: DictEnvState, robot_name: str, cfg) -> torch.Tensor:
@@ -165,7 +164,11 @@ def reward_torque_limits(states: DictEnvState, robot_name: str, cfg) -> torch.Te
     Penalize high torques.
     """
     return torch.sum(
-        (torch.abs(states.robots[robot_name].joint_effort_target) - cfg.torque_limits).clip(min=0.0), dim=1
+        (
+            torch.abs(states.robots[robot_name].joint_effort_target)
+            - cfg.torque_limits * cfg.reward_cfg.soft_torque_limit
+        ).clip(min=0.0),
+        dim=1,
     )
 
 
@@ -245,21 +248,19 @@ def reward_feet_contact_forces(states: DictEnvState, robot_name: str, cfg) -> to
 
 def reward_contact(states: DictEnvState, robot_name: str, cfg) -> torch.Tensor:
     is_stance = states.robots[robot_name].extra["gait_phase"]
-    # is_stance = states.robots[robot_name].extra["leg_phase"] < 0.5 + cfg.reward_cfg.feet_full_contact_time
-    contact_forces = states.robots[robot_name].extra["contact_forces"][:, cfg.feet_indices, 2]
-    contact = contact_forces > cfg.reward_cfg.feet_contact_threshold
-    res = torch.sum(torch.logical_not(torch.logical_xor(contact, is_stance)), dim=1, dtype=torch.float32)
-    return res
+    # is_stance = states.robots[robot_name].extra["leg_phase"] < 0.55
+    contact_forces = states.robots[robot_name].extra["contact_forces"]
+    contact = contact_forces[:, cfg.feet_indices, 2] > 1
+    res = ~(contact ^ is_stance)
+    return torch.sum(res, dim=1)
 
 
-def reward_feet_swing_height(states: DictEnvState, robot_name: str, cfg) -> torch.Tensor:
-    contact = (
-        torch.norm(states.robots[robot_name].extra["contact_forces"][:, cfg.feet_indices, :3], dim=2)
-        > cfg.reward_cfg.feet_contact_threshold
+def reward_feet_swing_height(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+    contact = torch.norm(states.robots[robot_name].extra["contact_forces"][:, cfg.feet_indices, :3], dim=2) > 1.0
+    pos_error = (
+        torch.square(states.robots[robot_name].body_state[:, cfg.feet_indices, 2] - cfg.reward_cfg.target_feet_height)
+        * ~contact
     )
-    feet_state = states.robots[robot_name].body_state[:, cfg.feet_indices, :]
-    feet_pos = feet_state[:, :, :3]
-    pos_error = torch.square(feet_pos[:, :, 2] - cfg.reward_cfg.target_feet_height) * ~contact
     return torch.sum(pos_error, dim=(1))
 
 
@@ -270,10 +271,7 @@ def reward_alive(states: DictEnvState, robot_name: str, cfg) -> torch.Tensor:
 
 def reward_contact_no_vel(states: DictEnvState, robot_name: str, cfg) -> torch.Tensor:
     # Penalize contact with no velocity
-    contact = (
-        torch.norm(states.robots[robot_name].extra["contact_forces"][:, cfg.feet_indices, :3], dim=2)
-        > cfg.reward_cfg.feet_contact_threshold
-    )
+    contact = torch.norm(states.robots[robot_name].extra["contact_forces"][:, cfg.feet_indices, :3], dim=2) > 1.0
     feet_state = states.robots[robot_name].body_state[:, cfg.feet_indices, :]
     feet_vel = feet_state[:, :, 7:10]
     contact_feet_vel = feet_vel * contact.unsqueeze(-1)
@@ -283,11 +281,11 @@ def reward_contact_no_vel(states: DictEnvState, robot_name: str, cfg) -> torch.T
 
 def reward_hip_pos(states, robot_name, cfg):
     base = states.robots[robot_name]
-    # gate = _vy_gate(base, getattr(cfg.reward_cfg, "hip_pos_gate_vy", 0.12))
+    gate = _vy_gate(base, getattr(cfg.reward_cfg, "hip_pos_gate_vy", 0.12))
     dof_pos = base.joint_pos
     indices = torch.concat([cfg.left_yaw_roll_joint_indices, cfg.right_yaw_roll_joint_indices])
     dof_pos_hip = dof_pos[:, indices]
-    return torch.sum(torch.square(dof_pos_hip), dim=1)  # * gate
+    return torch.sum(torch.square(dof_pos_hip), dim=1) * gate
 
 
 # ==========================h1 walking========================
@@ -524,3 +522,38 @@ def reward_waist_joint_stability(states: DictEnvState, robot_name: str, cfg) -> 
     waist_stability_reward = 0.6 * pos_penalty + 0.4 * vel_penalty
 
     return waist_stability_reward
+
+
+def reward_hip_upright_axis(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+    """
+    Reward for keeping hip/pelvis axis oriented upward (vertical).
+    This penalizes hip tilting and rolling motions that cause shaking.
+
+    Uses the pelvis/hip body orientation to ensure the local Z-axis stays aligned with world Z-axis.
+    """
+    # Get hip/pelvis body indices - typically the torso or pelvis link
+    if hasattr(cfg, 'torso_indices') and len(cfg.torso_indices) > 0:
+        hip_body_idx = cfg.torso_indices[0]  # Use first torso link as hip reference
+    else:
+        # Fallback to base body (root link) if no torso indices defined
+        hip_body_idx = 0
+
+    # Get body state for the hip/pelvis
+    body_quat = states.robots[robot_name].body_state[:, hip_body_idx, 3:7]  # quaternion [w, x, y, z]
+
+    # Convert quaternion to rotation matrix to get local Z-axis direction
+    # Local Z-axis in world coordinates after rotation
+    w, x, y, z = body_quat[:, 0], body_quat[:, 1], body_quat[:, 2], body_quat[:, 3]
+
+    # Extract local Z-axis (3rd column of rotation matrix)
+    # R[2,2] = 1 - 2*(x^2 + y^2) - this is the Z-component of local Z-axis in world frame
+    local_z_world_z = 1 - 2 * (x**2 + y**2)
+
+    # We want local Z-axis to be aligned with world Z-axis (pointing up)
+    # Perfect alignment: local_z_world_z = 1, worst case: local_z_world_z = -1
+    alignment_error = 1.0 - local_z_world_z  # Error ranges from 0 (perfect) to 2 (upside down)
+
+    # Use exponential reward function - higher reward for better alignment
+    hip_upright_reward = torch.exp(-alignment_error * 5.0)  # Scale factor 5.0 for sensitivity
+
+    return hip_upright_reward

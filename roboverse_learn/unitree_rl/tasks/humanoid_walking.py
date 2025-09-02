@@ -188,6 +188,7 @@ class HumanoidWalkingCfg(BaseLeggedTaskCfg):
         "contact": 0.18,
         # "feet_contact_number": 2.4,
         "torques": -0.00001,
+        "hip_upright_axis": 6.0,
     }
 
     def __post_init__(self):

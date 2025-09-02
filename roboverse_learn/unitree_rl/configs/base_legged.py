@@ -172,7 +172,7 @@ class LeggedRobotDomainRandCfg:
         """Maximum push velocity in xy plane."""
         max_push_ang_vel: float = 0.5
         """Maximum push angular velocity."""
-        push_interval: int = 250
+        push_interval: int = 500
         """Interval in steps for applying random push forces and torques."""
 
     push = PushRandomCfg(enabled=True)
@@ -219,18 +219,18 @@ class BaseLeggedTaskCfg:
 
         base_height_target: float = 1.0
         """target height of the base"""
-        # min_dist: float = 0.2
-        # """minimum distance between feet"""
-        # max_dist: float = 0.5
-        # """maximum distance between feet"""
+        min_dist: float = 0.2
+        """minimum distance between feet"""
+        max_dist: float = 0.5
+        """maximum distance between feet"""
 
         target_joint_pos_scale: float = 0.17
-        # """target joint position scale"""
+        """target joint position scale"""
         target_feet_height: float = 0.06
         """target feet height"""
-        feet_cycle_time: float = 0.8
+        feet_cycle_time: float = 0.64
         """cycle time"""
-        feet_full_contact_time: float = 0.02
+        feet_full_contact_time: float = 0.1
         """the phase that all feet contact with the ground"""
         feet_contact_threshold: float = 1.0
         """the contact force threshold"""
@@ -245,8 +245,8 @@ class BaseLeggedTaskCfg:
         """# percentage of urdf limits, values above this limit are penalized"""
         soft_dof_vel_limit: float = 1.0
         """soft dof velocity limit"""
-        # soft_torque_limit: float = 1.0
-        # """soft torque limit"""
+        soft_torque_limit: float = 1.0
+        """soft torque limit"""
 
     reward_cfg: RewardCfg = RewardCfg()
     reward_functions: list[Callable] | str = "roboverse_learn.unitree_rl.configs.reward_funcs"
