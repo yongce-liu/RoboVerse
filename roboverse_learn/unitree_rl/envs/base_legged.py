@@ -112,6 +112,36 @@ class LeggedRobot(RslRlWrapper):
         ## clip observations
         return obs, privileged_obs, reward, self.reset_buf, self.extras
 
+    # ------------------------------------------------------------------
+    # Termination logic
+    # ------------------------------------------------------------------
+    def _terminated(self, env_states: TensorState) -> torch.Tensor:
+        """
+        Judge early termination based on contacts and base orientation, matching
+        the logic used in RoboVerse. An episode is terminated when either:
+        - Any body in `termination_contact_indices` has contact force above a threshold.
+        - Base roll/pitch exceeds configured thresholds (approximately fall-over).
+        """
+        # Contact-based termination
+        try:
+            contact_forces = contact_forces_tensor(env_states, self.robot.name)
+            # termination_contact_indices is computed from robot config in _parse_rigid_body_indices
+            term_idx = self.termination_contact_indices
+            contact_mag = torch.norm(contact_forces[:, term_idx, :], dim=-1)  # [N, K]
+            contact_violation = torch.any(contact_mag > 1.0, dim=1)  # [N]
+        except Exception:
+            # If contact forces are unavailable, skip this criterion
+            contact_violation = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
+
+        # Orientation-based termination (roll/pitch)
+        base_quat = robot_rotation_tensor(env_states, self.robot.name)
+        rpy = get_euler_xyz_tensor(base_quat)  # [N, 3] -> roll (x), pitch (y), yaw (z)
+        roll_excess = torch.abs(rpy[:, 0]) > 0.8
+        pitch_excess = torch.abs(rpy[:, 1]) > 1.0
+        orient_violation = torch.logical_or(roll_excess, pitch_excess)
+
+        return torch.logical_or(contact_violation, orient_violation)
+
     def compute_reward(self, envstate: TensorState):
         """Compute all the reward from the states provided."""
         self.rew_buf[:] = 0

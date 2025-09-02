@@ -350,7 +350,7 @@ class BaseLeggedTaskCfg:
         torque_limit_scale: float = 1.0  # scale it down can ensure safety
         action_offset: bool = False  # set true if target position = action * action_scale + default position
 
-    control: ControlCfg = ControlCfg()
+    control: ControlCfg = ControlCfg(action_scale=0.25, action_offset=True, torque_limit_scale=0.85)
     """Control config."""
 
     robots: list[RobotCfg] | None = None

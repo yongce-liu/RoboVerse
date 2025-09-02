@@ -74,8 +74,26 @@ class LeggedWalkingTask(LeggedRobot):
     Wrapper for walking task for legged robots.
     """
 
-    def __init__(self, scenario: ScenarioCfg):
+    def __init__(self, task_cfg: LeggedWalkingCfg, scenario: ScenarioCfg):
+        # Set decimation from scenario for consistent dt
+        self.decimation = scenario.decimation
+        # Bootstrap configuration into the env prior to BaseTaskEnv init
+        self._init_from_cfg(task_cfg)
         super().__init__(scenario)
+
+    def _init_from_cfg(self, task_cfg: LeggedWalkingCfg):
+        self.cfg = task_cfg
+        # Dimensions
+        self.num_obs = self.cfg.num_observations
+        self.num_actions = self.cfg.num_actions
+        self.num_privileged_obs = self.cfg.num_privileged_obs
+        # Timing
+        self.dt = self.decimation * self.cfg.sim_params.dt
+        import math
+        self.max_episode_length = math.ceil(self.cfg.max_episode_length_s / self.dt)
+        # PPO train cfg for rsl_rl
+        from metasim.utils.dict import class_to_dict
+        self.train_cfg = class_to_dict(self.cfg.ppo_cfg)
 
     def _init_buffers(self):
         super()._init_buffers()
