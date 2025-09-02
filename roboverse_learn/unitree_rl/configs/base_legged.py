@@ -4,19 +4,18 @@ from __future__ import annotations
 
 import pathlib
 from dataclasses import MISSING
-from typing import Callable
+from typing import Callable, Literal
 
 import torch
-
 from roboverse_pack.tasks.maniskill.checkers import EmptyChecker
-from metasim.scenario.randomization import FrictionRandomCfg, MassRandomCfg, RandomizationCfg
+from roboverse_pack.randomization import FrictionRandomCfg, MassRandomCfg
 from metasim.scenario.robot import RobotCfg
 from metasim.scenario.simulator_params import SimParamCfg
-from metasim.scenario.metasim.task.base_task_cfg import BaseTaskCfg
+
 from metasim.sim import BaseSimHandler
 from metasim.utils import configclass
 from metasim.utils.humanoid_robot_util import contact_forces_tensor, get_euler_xyz_tensor, robot_rotation_tensor
-from metasim.utils.tensor_util import torch_rand_float
+from roboverse_learn.unitree_rl.helper.utils import torch_rand_float
 
 from .base_terrain import TerrainConfig
 
@@ -105,8 +104,31 @@ class LeggedRobotCfgPPO:
 
 # Randomization
 @configclass
-class LeggedRobotDomainRandCfg(RandomizationCfg):
+class LeggedRobotDomainRandCfg:
     """Randomization config for legged robots."""
+
+    camera: bool = False
+    """Randomize camera pose"""
+    light: bool = False
+    """Randomize light direction, temperature, intensity"""
+    ground: bool = False
+    """Randomize ground"""
+    reflection: bool = False
+    """Randomize reflection (roughness, metallic, reflectance), attach random diffuse color to surfaces that have no material"""
+    table: bool = False
+    """Randomize table albedo"""
+    wall: bool = False
+    """Add wall and roof, randomize wall"""
+    scene: bool = False
+    """Randomize scene"""
+    level: Literal[0, 1, 2, 3] = 0
+    """Randomization level"""
+
+    # New-style randomization configs (require robot name via obj_name)
+    friction: FrictionRandomCfg | None = None
+    """Friction randomization config (new API). Must set obj_name later."""
+    mass: MassRandomCfg | None = None
+    """Mass randomization config (new API). Must set obj_name later."""
 
     def sample_uniform_buckets(params_dict: dict) -> torch.Tensor:
         """Sample friction coefficients uniformly via discrete buckets."""
@@ -159,11 +181,21 @@ class LeggedRobotDomainRandCfg(RandomizationCfg):
     """Terrain randomization configuration"""
 
     def __post_init__(self):
-        super().__post_init__()
-        self.friction = FrictionRandomCfg(
-            enabled=True, range=[0.1, 1.25], dist_fn=self.sample_uniform_buckets, num_buckets=64
-        )
-        self.mass = MassRandomCfg(enabled=True, range=[-1.0, 3.0], dist_fn=self.sample_uniform)
+        """Post-initialization configuration."""
+        assert self.level in [0, 1, 2, 3]
+        if self.level >= 0:
+            pass
+        if self.level >= 1:
+            self.table = True
+            self.ground = True
+            self.wall = True
+        if self.level >= 2:
+            self.camera = True
+        if self.level >= 3:
+            self.light = True
+            self.reflection = True
+        # Friction and mass configs are populated in the TaskCfg __post_init__
+        # once the robot name is available.
         if self.ground:
             assert self.terrain_cfg is not None, (
                 "Terrain randomization config must be provided if ground randomization is enabled."
@@ -172,7 +204,7 @@ class LeggedRobotDomainRandCfg(RandomizationCfg):
 
 # Config
 @configclass
-class BaseLeggedTaskCfg(BaseTaskCfg):
+class BaseLeggedTaskCfg:
     """Base class for legged-gym style humanoid tasks. Deault values are designed for Unitree Go2.
 
     Attributes:
@@ -363,9 +395,6 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
         friction_correlation_distance=0.025,
         friction_offset_threshold=0.04,
     )
-    """Simulation parameters with physics engine settings."""
-    decimation: int = 4
-    """decimation factor for the control loop, e.g., 4 means every 4th step is a control step"""
     traj_filepath = None
     """path to the trajectory file"""
     # TODO read form max_episode_length_s and divide s
@@ -424,15 +453,49 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
     """Initial states for the environment. Only used for legged robots, e.g., go2-12dof, g1-12dof, h1-12dof."""
 
     def __post_init__(self):
-        super().__post_init__()
+        # super().__post_init__()
         """simulation time step in s"""
-        self.dt = self.decimation * self.sim_params.dt
+        # self.dt = self.decimation * self.sim_params.dt
         from math import ceil
 
         # self.max_episode_length = ceil(self.max_episode_length_s / self.dt)
-        self.episode_length = ceil(self.max_episode_length_s / self.dt)
+        # self.episode_length = ceil(self.max_episode_length_s / self.dt)
         """maximum episode length in steps"""
         # set the number of actions based on the robot's joints if available
         if self.robots is not None:
             self.num_actions = self.robots[0].num_joints
         assert self.num_actions is not None, "num_actions must be set in the task config"
+
+        # Populate domain randomization configs that require robot name
+        try:
+            robot_name = None
+            if self.robots is not None and len(self.robots) > 0:
+                robot_name = getattr(self.robots[0], "name", None)
+            if robot_name:
+                # Friction: absolute assignment with uniform sampling
+                if self.random.friction is None:
+                    self.random.friction = FrictionRandomCfg(
+                        obj_name=robot_name,
+                        range=(0.1, 1.25),
+                        distribution="uniform",
+                        operation="abs",
+                    )
+                else:
+                    # Ensure robot name is set if provided externally
+                    if getattr(self.random.friction, "obj_name", None) is None:
+                        self.random.friction.obj_name = robot_name
+
+                # Mass: scale with a mild uniform factor around 1.0
+                if self.random.mass is None:
+                    self.random.mass = MassRandomCfg(
+                        obj_name=robot_name,
+                        range=(0.8, 1.2),  # conservative scaling
+                        distribution="uniform",
+                        operation="scale",
+                    )
+                else:
+                    if getattr(self.random.mass, "obj_name", None) is None:
+                        self.random.mass.obj_name = robot_name
+        except Exception:
+            # Be robust if robots are not provided at construction time
+            pass

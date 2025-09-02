@@ -8,8 +8,7 @@ from rsl_rl.env import VecEnv
 
 from metasim.scenario.scenario import ScenarioCfg
 from metasim.constants import SimType
-from metasim.sim.env_wrapper import EnvWrapper
-from metasim.utils.setup_util import get_sim_env_class
+from metasim.utils.setup_util import get_sim_handler_class
 
 from metasim.utils.state import list_state_to_tensor
 
@@ -26,9 +25,9 @@ class RslRlWrapper(VecEnv):
         super().__init__()
 
 
-        if SimType(scenario.sim) not in [SimType.ISAACGYM,SimType.ISAACLAB, SimType.GENESIS]:
+        if SimType(scenario.simulator) not in [SimType.ISAACGYM,SimType.ISAACLAB, SimType.GENESIS]:
             raise NotImplementedError(
-                f"RslRlWrapper in Roboverse now only supports {SimType.ISAACGYM}, but got {scenario.sim}"
+                f"RslRlWrapper in Roboverse now only supports {SimType.ISAACGYM}, but got {scenario.simulator}"
             )
         self.device = torch.device("cuda" if torch.cuda.is_available else "cpu")
         log.info(f"using device {self.device}")
@@ -37,8 +36,8 @@ class RslRlWrapper(VecEnv):
         # self.env.cfg.sensor.camera
 
         # load simulator handler
-        env_class = get_sim_env_class(SimType(scenario.sim))
-        self.env: EnvWrapper = env_class(scenario)
+        env_class = get_sim_handler_class(SimType(scenario.simulator))
+        self.env = env_class(scenario)
         self._parse_cfg(scenario)
         self._get_init_states(scenario)
 
@@ -74,7 +73,7 @@ class RslRlWrapper(VecEnv):
 
         self.init_states = init_states_list
 
-        if scenario.sim == SimType.ISAACGYM:
+        if scenario.simulator == SimType.ISAACGYM:
             #tensorize the initial states as TensorState, now we only support IsaacGym
             self.init_states = list_state_to_tensor(self.env.handler, init_states_list, device=self.device)
 
