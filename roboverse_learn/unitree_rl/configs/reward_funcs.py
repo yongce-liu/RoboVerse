@@ -271,6 +271,8 @@ def reward_feet_swing_height(states: EnvState, robot_name: str, cfg: BaseTaskCfg
         torch.norm(states.robots[robot_name].extra["contact_forces"][:, cfg.feet_indices, :3], dim=2)
         > cfg.reward_cfg.feet_contact_threshold
     )
+    # leg_phase = states.robots[robot_name].extra["leg_phase"]
+    # contact = leg_phase < 0.5 + cfg.reward_cfg.feet_full_contact_time
     feet_state = states.robots[robot_name].body_state[:, cfg.feet_indices, :]
     feet_pos = feet_state[:, :, :3]
     pos_error = torch.square(feet_pos[:, :, 2] - cfg.reward_cfg.target_feet_height) * ~contact
@@ -409,7 +411,7 @@ def reward_default_joint_pos(states: EnvState, robot_name: str, cfg: BaseTaskCfg
     """
     Keep joint positions close to defaults (penalize yaw/roll).
     """
-    joint_diff = states.robots[robot_name].joint_pos - cfg.default_joint_pd_target
+    joint_diff = states.robots[robot_name].joint_pos - cfg.default_dof_pos
     left_yaw_roll = joint_diff[:, cfg.left_yaw_roll_joint_indices]
     right_yaw_roll = joint_diff[:, cfg.right_yaw_roll_joint_indices]
     yaw_roll = torch.norm(left_yaw_roll, dim=1) + torch.norm(right_yaw_roll, dim=1)
@@ -421,7 +423,7 @@ def reward_upper_body_pos(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -
     """
     Keep upper body joints close to default positions.
     """
-    joint_diff = states.robots[robot_name].joint_pos - cfg.default_joint_pd_target
+    joint_diff = states.robots[robot_name].joint_pos - cfg.default_dof_pos
     upper_body_diff = joint_diff[:, cfg.upper_body_joint_indices]  # start from torso
     upper_body_error = torch.mean(torch.abs(upper_body_diff), dim=1)
     return torch.exp(-4 * upper_body_error), upper_body_error
@@ -524,7 +526,7 @@ def reward_waist_joint_stability(states: EnvState, robot_name: str, cfg: BaseTas
     waist_vel = joint_vel[:, waist_indices]
 
     # Default waist positions (should be close to 0 for stability)
-    waist_default = cfg.default_joint_pd_target[:, waist_indices]
+    waist_default = cfg.default_dof_pos[:, waist_indices]
 
     # Penalize deviation from default positions
     pos_error = torch.norm(waist_pos - waist_default, dim=1)

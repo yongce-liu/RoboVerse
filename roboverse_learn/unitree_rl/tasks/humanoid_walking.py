@@ -308,12 +308,12 @@ class HumanoidWalkingTask(Humanoid):
         contact_mask = contact_forces_tensor(envstates, self.robot.name)[:, self.feet_indices, 2] > 5
 
         q = (
-            dof_pos_tensor(envstates, self.robot.name) - self.cfg.default_joint_pd_target
+            dof_pos_tensor(envstates, self.robot.name) - self.cfg.default_dof_pos
         ) * self.cfg.normalization.obs_scales.dof_pos
         dq = dof_vel_tensor(envstates, self.robot.name) * self.cfg.normalization.obs_scales.dof_vel
         diff = dof_pos_tensor(envstates, self.robot.name) - ref_dof_pos_tensor(envstates, self.robot.name)
 
-        self.privileged_obs_buf = torch.cat(
+        privileged_obs_buf = torch.cat(
             (
                 self.commands[:, :3] * self.commands_scale,  # 3
                 self.base_lin_vel * self.cfg.normalization.obs_scales.lin_vel,  # 3
@@ -351,13 +351,11 @@ class HumanoidWalkingTask(Humanoid):
             dim=-1,
         )
 
-        obs_now = obs_buf.clone()
-        self.obs_history.append(obs_now)
-        self.critic_history.append(self.privileged_obs_buf)
-        obs_buf_all = torch.stack([self.obs_history[i] for i in range(self.obs_history.maxlen)], dim=1)
-        self.obs_buf = obs_buf_all.reshape(self.num_envs, -1)
-        self.privileged_obs_buf = torch.cat([self.critic_history[i] for i in range(self.cfg.c_frame_stack)], dim=1)
-
         # add noise if needed
         if self.add_noise:
             self.obs_buf += (2 * torch.rand_like(self.obs_buf) - 1) * self.noise_scale_vec
+
+        self.obs_history.append(obs_buf)
+        self.critic_history.append(privileged_obs_buf)
+        self.obs_buf = torch.cat(list(self.obs_history), dim=1)
+        self.privileged_obs_buf = torch.cat(list(self.critic_history), dim=1)

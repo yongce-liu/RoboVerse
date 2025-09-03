@@ -113,7 +113,7 @@ class LeggedWalkingTask(LeggedRobot):
     def compute_observations(self, envstate: TensorState):
         """compute observations and priviledged observation"""
         q = (
-            dof_pos_tensor(envstate, self.robot.name) - self.cfg.default_joint_pd_target
+            dof_pos_tensor(envstate, self.robot.name) - self.cfg.default_dof_pos
         ) * self.cfg.normalization.obs_scales.dof_pos
         dq = dof_vel_tensor(envstate, self.robot.name) * self.cfg.normalization.obs_scales.dof_vel
 

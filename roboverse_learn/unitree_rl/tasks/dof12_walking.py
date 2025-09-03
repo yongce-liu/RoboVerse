@@ -25,7 +25,7 @@ class Dof12WalkingCfgPPO(LeggedRobotCfgPPO):
     runner = LeggedRobotCfgPPO.Runner(
         experiment_name="dof12_walking",
         policy_class_name="ActorCriticRecurrent",
-        max_iterations=15001,
+        max_iterations=20001,
         save_interval=50,
     )
 
@@ -50,7 +50,7 @@ class Dof12WalkingCfg(BaseLeggedTaskCfg):
         feet_cycle_time=0.8,
         feet_full_contact_time=0.05,
         feet_contact_threshold=1.0,
-        target_feet_height=0.12,
+        target_feet_height=0.08,
     )
 
     reward_functions: str = "roboverse_learn.unitree_rl.configs.reward_funcs"
@@ -178,7 +178,7 @@ class Dof12WalkingTask(Humanoid):
         cos_phase = torch.cos(2 * torch.pi * phase).unsqueeze(1)
         # --- Joint position / velocity (normalised) in NATIVE simulator order
         q = (
-            envstate.robots[self.robot.name].joint_pos - self.cfg.default_joint_pd_target
+            envstate.robots[self.robot.name].joint_pos - self.cfg.default_dof_pos
         ) * self.cfg.normalization.obs_scales.dof_pos
         dq = envstate.robots[self.robot.name].joint_vel * self.cfg.normalization.obs_scales.dof_vel
 
@@ -218,5 +218,5 @@ class Dof12WalkingTask(Humanoid):
         # Frame stacking (reuse existing obs_history)
         self.obs_history.append(obs_buf)
         self.critic_history.append(privileged_obs_buf)
-        self.obs_buf = torch.cat([self.obs_history[i] for i in range(self.obs_history.maxlen)], dim=1)
-        self.privileged_obs_buf = torch.cat([self.critic_history[i] for i in range(self.critic_history.maxlen)], dim=1)
+        self.obs_buf = torch.cat(list(self.obs_history), dim=1)
+        self.privileged_obs_buf = torch.cat(list(self.critic_history), dim=1)
