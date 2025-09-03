@@ -29,6 +29,9 @@ class EnvWrapper(Generic[THandler]):
     @property
     def episode_length_buf(self) -> list[int]: ...
 
+    @property
+    def episode_length_buf_tensor(self) -> torch.Tensor: ...
+
 
 def IdentityEnvWrapper(cls: type[BaseSimHandler]) -> type[EnvWrapper[BaseSimHandler]]:
     """Gym-like environment wrapper for IsaacLab."""
@@ -149,7 +152,7 @@ def GymEnvWrapper(cls: type[THandler]) -> type[EnvWrapper[THandler]]:
             return self._episode_length_buf.tolist()
 
         @property
-        def episode_length_buf_tensor(self) -> list[int]:
+        def episode_length_buf_tensor(self) -> torch.Tensor:
             return self._episode_length_buf
 
         @property
