@@ -58,7 +58,7 @@ def train(args):
     if use_wandb:
         wandb.init(project=args.wandb, name=args.run_name)
 
-    log_dir = get_log_dir(args, scenario, None)
+    log_dir = get_log_dir(args, scenario, args.log_dir)
     resume_dir = get_log_dir(args, scenario, args.load_run)
     task_wrapper = get_class(args.task, suffix="Task")
     task_env = task_wrapper(scenario)

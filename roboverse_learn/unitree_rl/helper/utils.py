@@ -107,6 +107,12 @@ def get_args(test=False):
             "default": False,
             "help": "Whether to reindex actions from the default order sequence to a sorted (ascending) order",
         },
+        {
+            "name": "--log_dir",
+            "type": str,
+            "default": None,
+            "help": "log directory. If None, will be set automatically.",
+        },
     ]
     args = parse_arguments(custom_parameters=custom_parameters)
     return args
