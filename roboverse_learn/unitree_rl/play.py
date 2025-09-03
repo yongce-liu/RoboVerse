@@ -31,30 +31,28 @@ def play(args):
     task = config_wrapper(robots=robots)
     if args.sim == "mujoco":
         task.sim_params.dt = 0.002
-        task.decimation = 10
         task.__post_init__()
     scenario = ScenarioCfg(
-        task=task,
         sim_params=task.sim_params,
-        decimation=task.decimation,
         robots=robots,
         num_envs=args.num_envs,
-        sim=args.sim,
+        simulator=args.sim,
         headless=args.headless,
-        try_add_table=False,  # add a ground plane
         cameras=[],
     )
+    if args.sim == "mujoco":
+        scenario.decimation = 10
     scenario.num_envs = 1
-    scenario.task.commands.curriculum = False
-    scenario.task.ppo_cfg.runner.resume = True
+    task.commands.curriculum = False
+    task.ppo_cfg.runner.resume = True
     # Disable object property randomization in play mode by unsetting configs
-    scenario.task.random.friction = None
-    scenario.task.random.mass = None
-    scenario.task.random.push.enabled = False
-    scenario.task.noise.add_noise = False
+    task.random.friction = None
+    task.random.mass = None
+    task.random.push.enabled = False
+    task.noise.add_noise = False
 
     task_wrapper = get_class(args.task, "Task")
-    env = task_wrapper(scenario)
+    env = task_wrapper(task, scenario)
 
     load_path = get_load_path(args, scenario)
     # Use the existing run directory as log_dir to avoid creating new output dirs during play
@@ -97,9 +95,9 @@ def play(args):
 
     # if args.reindex_actions:
     num_actions = env.num_actions
-    reindex_actions_idx = env.env.handler.get_joint_reindex(obj_name=env.robot.name, inverse=False)
+    reindex_actions_idx = env.handler.get_joint_reindex(obj_name=env.robot.name, inverse=False)
     print(f"Reindex actions idx: {reindex_actions_idx}")
-    reverse_reindex_actions_idx = env.env.handler.get_joint_reindex(obj_name=env.robot.name, inverse=True)
+    reverse_reindex_actions_idx = env.handler.get_joint_reindex(obj_name=env.robot.name, inverse=True)
     assert num_actions == len(reindex_actions_idx)
     print(f"Reverse reindex actions idx: {reverse_reindex_actions_idx}")
 

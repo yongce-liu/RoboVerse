@@ -251,7 +251,8 @@ def reward_contact(states: DictEnvState, robot_name: str, cfg) -> torch.Tensor:
     # is_stance = states.robots[robot_name].extra["leg_phase"] < 0.55
     contact_forces = states.robots[robot_name].extra["contact_forces"]
     contact = contact_forces[:, cfg.feet_indices, 2] > 1
-    res = ~(contact ^ is_stance)
+    # Reward when stance matches contact (True if both are the same)
+    res = (contact == is_stance)
     return torch.sum(res, dim=1)
 
 
@@ -524,7 +525,7 @@ def reward_waist_joint_stability(states: DictEnvState, robot_name: str, cfg) -> 
     return waist_stability_reward
 
 
-def reward_hip_upright_axis(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+def reward_hip_upright_axis(states: DictEnvState, robot_name: str, cfg) -> torch.Tensor:
     """
     Reward for keeping hip/pelvis axis oriented upward (vertical).
     This penalizes hip tilting and rolling motions that cause shaking.

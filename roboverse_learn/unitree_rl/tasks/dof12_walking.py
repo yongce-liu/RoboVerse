@@ -6,7 +6,7 @@ from metasim.scenario.scenario import ScenarioCfg
 from metasim.utils import configclass
 from roboverse_learn.unitree_rl.configs.base_legged import BaseLeggedTaskCfg, LeggedRobotCfgPPO
 from roboverse_learn.unitree_rl.envs.base_humanoid import Humanoid
-
+import math
 
 # Training Config
 @configclass
@@ -37,9 +37,9 @@ class Dof12WalkingCfg(BaseLeggedTaskCfg):
     task_name = "dof12_walking"
 
     ppo_cfg = Dof12WalkingCfgPPO()
-
+    env_spacing: float = 1.0
     control = BaseLeggedTaskCfg.ControlCfg(action_scale=0.25, action_offset=True, torque_limit_scale=1.0)
-
+    max_episode_length_s: int = 24
     frame_stack = 1
     c_frame_stack = 1
 
@@ -96,8 +96,20 @@ class Dof12WalkingTask(Humanoid):
     Wrapper for walking task for legged robots.
     """
 
-    def __init__(self, scenario: ScenarioCfg):
+    def __init__(self, task_cfg, scenario: ScenarioCfg):
+        self.decimation = scenario.decimation
+        self._init_from_cfg(task_cfg)
         super().__init__(scenario)
+
+    def _init_from_cfg(self, task_cfg):
+        self.cfg = task_cfg
+        self.num_obs = self.cfg.num_observations
+        self.num_actions = self.cfg.num_actions
+        self.num_privileged_obs = self.cfg.num_privileged_obs
+        self.dt = self.decimation * self.cfg.sim_params.dt
+        self.max_episode_length = math.ceil(self.cfg.max_episode_length_s / self.dt)
+        from metasim.utils.dict import class_to_dict
+        self.train_cfg = class_to_dict(self.cfg.ppo_cfg)
 
     def _init_buffers(self):
         super()._init_buffers()

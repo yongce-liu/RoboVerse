@@ -216,7 +216,7 @@ def get_load_root_dir(args: argparse.Namespace, scenario: ScenarioCfg) -> str:
     """Get the root directory to load the model from."""
 
     robot_name = args.robot
-    task_name = scenario.task.task_name
+    task_name = args.task
     task_name = f"{robot_name}_{task_name}"
     if args.load_run is None:
         raise ValueError("Please provide a run name to load the model from using --load_run")

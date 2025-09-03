@@ -278,22 +278,18 @@ class LeggedRobot(RslRlWrapper):
         action_scaled = self.cfg.control.action_scale * actions
 
         # Get current joint positions and velocities
-        dof_pos = env_states.robots[self.robot.name].joint_pos
-        dof_vel = env_states.robots[self.robot.name].joint_vel
+        sorted_dof_pos = env_states.robots[self.robot.name].joint_pos
+        sorted_dof_vel = env_states.robots[self.robot.name].joint_vel
 
-        # Default joint order to sorted joint order
-        reindex = self.handler.get_joint_reindex(self.robot.name, inverse=False)
-        dof_pos = dof_pos[:, reindex]
-        dof_vel = dof_vel[:, reindex]
 
         # Compute PD control effort
         if self.cfg.control.action_offset:
             effort = (
-                self.p_gains * (action_scaled + self.cfg.default_joint_pd_target - dof_pos)
-                - self.d_gains * dof_vel
+                self.p_gains * (action_scaled + self.cfg.default_joint_pd_target - sorted_dof_pos)
+                - self.d_gains * sorted_dof_vel
             )
         else:
-            effort = self.p_gains * (action_scaled - dof_pos) - self.d_gains * dof_vel
+            effort = self.p_gains * (action_scaled - sorted_dof_pos) - self.d_gains * sorted_dof_vel
 
         # Apply torque limits
         effort = torch.clip(effort, -self.cfg.torque_limits, self.cfg.torque_limits)
