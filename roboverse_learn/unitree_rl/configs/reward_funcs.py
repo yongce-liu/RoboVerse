@@ -6,15 +6,16 @@ import torch
 
 from metasim.cfg.tasks.base_task_cfg import BaseTaskCfg
 from metasim.types import EnvState
+from metasim.utils.state import TensorState
 
 
 # =====================reward functions=====================
-def reward_lin_vel_z(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+def reward_lin_vel_z(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     """Reward for z linear velocity."""
     return torch.square(states.robots[robot_name].extra["base_lin_vel"][:, 2])
 
 
-def reward_ang_vel_xy(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+def reward_ang_vel_xy(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     # xy = torch.norm(states.robots[robot_name].extra["base_ang_vel"][:, :2], dim=1)
     # db = getattr(cfg.reward_cfg, "angvel_xy_deadband", 0.25)
     # k = getattr(cfg.reward_cfg, "angvel_xy_k", 1.0)
@@ -22,7 +23,7 @@ def reward_ang_vel_xy(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> to
     return torch.sum(torch.square(states.robots[robot_name].extra["base_ang_vel"][:, :2]), dim=1)
 
 
-def reward_orientation(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+def reward_orientation(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     """
     Penalize deviation from flat base orientation.
     """
@@ -34,14 +35,14 @@ def reward_orientation(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> t
     return (quat_mismatch + orientation) / 2.0 * allow_roll_gate
 
 
-def reward_orientation_sq(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+def reward_orientation_sq(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     """
     Penalize deviation from flat base orientation.
     """
     return torch.sum(torch.square(states.robots[robot_name].extra["projected_gravity"][:, :2]), dim=1)
 
 
-def reward_base_height(states: EnvState, robot_name: str, cfg: BaseTaskCfg):
+def reward_base_height(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg):
     base = states.robots[robot_name]
     z_root = base.root_state[:, 2]
 
@@ -75,27 +76,27 @@ def reward_base_height(states: EnvState, robot_name: str, cfg: BaseTaskCfg):
     return torch.exp(-(err_db**2) / (2 * sigma**2))
 
 
-def reward_base_height_sq(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+def reward_base_height_sq(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     # Penalize base height away from target
     base_height = states.robots[robot_name].root_state[:, 2]
     return torch.square(base_height - cfg.reward_cfg.base_height_target)
 
 
-def reward_torques(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+def reward_torques(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     """
     Penalize high torques.
     """
     return torch.sum(torch.square(states.robots[robot_name].joint_effort_target), dim=1)
 
 
-def reward_dof_vel(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+def reward_dof_vel(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     """
     Penalize high DOF velocities.
     """
     return torch.sum(torch.square(states.robots[robot_name].joint_vel), dim=1)
 
 
-def reward_dof_acc(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+def reward_dof_acc(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     """
     Penalize high DOF accelerations.
     """
@@ -105,7 +106,7 @@ def reward_dof_acc(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch
     )
 
 
-def reward_action_rate(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+def reward_action_rate(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     """
     Penalize high action rate.
     """
@@ -115,7 +116,7 @@ def reward_action_rate(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> t
     )
 
 
-def reward_collision(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+def reward_collision(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     """
     Penalize collisions.
     """
@@ -133,14 +134,14 @@ def reward_collision(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> tor
 
 
 # FIXME, Here the reset buf has been logical OR using time_out_buf
-# def reward_termination(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+# def reward_termination(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
 #     """
 #     Reward for termination, used to reset the environment.
 #     """
 #     return states.robots[robot_name].extra["reset_buf"] * ~states.robots[robot_name].extra["time_out_buf"]
 
 
-def reward_dof_pos_limits(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+def reward_dof_pos_limits(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     """
     Penalize DOF positions that are out of limits.
     """
@@ -149,7 +150,7 @@ def reward_dof_pos_limits(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -
     return torch.sum(out_of_limits, dim=1)
 
 
-def reward_dof_vel_limits(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+def reward_dof_vel_limits(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     """
     Penalize high DOF velocities.
     """
@@ -162,7 +163,7 @@ def reward_dof_vel_limits(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -
     )
 
 
-def reward_torque_limits(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+def reward_torque_limits(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     """
     Penalize high torques.
     """
@@ -175,7 +176,7 @@ def reward_torque_limits(states: EnvState, robot_name: str, cfg: BaseTaskCfg) ->
     )
 
 
-def reward_tracking_lin_vel(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+def reward_tracking_lin_vel(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     """
     Track linear velocity commands (xy axes).
     """
@@ -192,7 +193,7 @@ def _vy_gate(base, thresh=0.12):
     return (torch.abs(base.extra["command"][:, 1]) < thresh).float()
 
 
-def reward_tracking_ang_vel(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+def reward_tracking_ang_vel(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     """
     Track angular velocity commands (yaw).
     """
@@ -204,7 +205,7 @@ def reward_tracking_ang_vel(states: EnvState, robot_name: str, cfg: BaseTaskCfg)
 
 
 # FIXME
-def reward_feet_air_time(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+def reward_feet_air_time(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     """
     Calculates the reward for feet air time.
     """
@@ -212,7 +213,7 @@ def reward_feet_air_time(states: EnvState, robot_name: str, cfg: BaseTaskCfg) ->
     return air_time.sum(dim=1) * (torch.norm(states.robots[robot_name].extra["command"][:, :2], dim=1) > 0.1)
 
 
-def reward_stumble(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+def reward_stumble(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     """
     Penalize stumbling based on contact forces.
     """
@@ -224,7 +225,7 @@ def reward_stumble(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch
 
 
 # FIXME place default dof pos better
-def reward_stand_still(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+def reward_stand_still(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     """
     Reward for standing still, penalizing deviation from default joint positions.
     """
@@ -233,7 +234,7 @@ def reward_stand_still(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> t
     )
 
 
-def reward_feet_contact_forces(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+def reward_feet_contact_forces(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     """
     Penalize high contact forces on feet.
     """
@@ -249,7 +250,7 @@ def reward_feet_contact_forces(states: EnvState, robot_name: str, cfg: BaseTaskC
     )
 
 
-def reward_contact(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+def reward_contact(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     # # is_stance = states.robots[robot_name].extra["gait_phase"]
     # is_stance = states.robots[robot_name].extra["leg_phase"] < 0.5 + cfg.reward_cfg.feet_full_contact_time
     # contact_forces = states.robots[robot_name].extra["contact_forces"][:, cfg.feet_indices, 2]
@@ -260,13 +261,13 @@ def reward_contact(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch
     contact_forces = states.robots[robot_name].extra["contact_forces"][:, cfg.feet_indices, 2]
     res = torch.zeros(leg_phase.shape[0], dtype=torch.float, device=leg_phase.device)
     for i in range(leg_phase.shape[1]):
-        is_stance = leg_phase[:, i] < 0.5 + cfg.reward_cfg.feet_full_contact_time
+        is_stance = leg_phase[:, i] < (0.5 + cfg.reward_cfg.feet_full_contact_time)
         contact = contact_forces[:, i] > cfg.reward_cfg.feet_contact_threshold
-        res += ~(contact ^ is_stance)
+        res += contact == is_stance
     return res
 
 
-def reward_feet_swing_height(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+def reward_feet_swing_height(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     contact = (
         torch.norm(states.robots[robot_name].extra["contact_forces"][:, cfg.feet_indices, :3], dim=2)
         > cfg.reward_cfg.feet_contact_threshold
@@ -279,12 +280,12 @@ def reward_feet_swing_height(states: EnvState, robot_name: str, cfg: BaseTaskCfg
     return torch.sum(pos_error, dim=(1))
 
 
-def reward_alive(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+def reward_alive(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     # Reward for staying alive
     return 1.0
 
 
-def reward_contact_no_vel(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+def reward_contact_no_vel(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     # Penalize contact with no velocity
     contact = (
         torch.norm(states.robots[robot_name].extra["contact_forces"][:, cfg.feet_indices, :3], dim=2)
@@ -307,7 +308,7 @@ def reward_hip_pos(states, robot_name, cfg):
 
 
 # ==========================h1 walking========================
-def reward_joint_pos(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+def reward_joint_pos(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     """
     Calculates the reward based on the difference between the current joint positions and the target joint positions.
     """
@@ -318,7 +319,7 @@ def reward_joint_pos(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> tor
     return r, torch.mean(torch.abs(diff), dim=1)
 
 
-def reward_feet_distance(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+def reward_feet_distance(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     base = states.robots[robot_name]
     feet_y = base.body_state[:, cfg.feet_indices, 1]  # (B, 2)
     step_width = torch.abs(feet_y[:, 0] - feet_y[:, 1])  # (B,)
@@ -360,7 +361,7 @@ def reward_feet_distance(states: EnvState, robot_name: str, cfg: BaseTaskCfg) ->
     return reward, step_width
 
 
-def reward_knee_distance(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+def reward_knee_distance(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     """
     Calculates the reward based on the distance between the knee of the humanoid.
     """
@@ -373,7 +374,7 @@ def reward_knee_distance(states: EnvState, robot_name: str, cfg: BaseTaskCfg) ->
     return (torch.exp(-torch.abs(d_min) * 100) + torch.exp(-torch.abs(d_max) * 100)) / 2, knee_dist
 
 
-def reward_elbow_distance(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+def reward_elbow_distance(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     """
     Calculates the reward based on the distance between the elbow of the humanoid.
     """
@@ -386,7 +387,7 @@ def reward_elbow_distance(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -
     return (torch.exp(-torch.abs(d_min) * 100) + torch.exp(-torch.abs(d_max) * 100)) / 2, elbow_dist
 
 
-def reward_foot_slip(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+def reward_foot_slip(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     """
     Calculates the reward for minimizing foot slip.
     """
@@ -397,7 +398,7 @@ def reward_foot_slip(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> tor
     return torch.sum(rew, dim=1)
 
 
-def reward_feet_contact_number(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+def reward_feet_contact_number(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     """
     Reward based on feet contact matching gait phase.
     """
@@ -407,7 +408,7 @@ def reward_feet_contact_number(states: EnvState, robot_name: str, cfg: BaseTaskC
     return torch.mean(reward, dim=1)
 
 
-def reward_default_joint_pos(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+def reward_default_joint_pos(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     """
     Keep joint positions close to defaults (penalize yaw/roll).
     """
@@ -419,7 +420,7 @@ def reward_default_joint_pos(states: EnvState, robot_name: str, cfg: BaseTaskCfg
     return torch.exp(-yaw_roll * 100) - 0.01 * torch.norm(joint_diff, dim=1)
 
 
-def reward_upper_body_pos(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+def reward_upper_body_pos(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     """
     Keep upper body joints close to default positions.
     """
@@ -429,7 +430,7 @@ def reward_upper_body_pos(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -
     return torch.exp(-4 * upper_body_error), upper_body_error
 
 
-def reward_base_acc(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+def reward_base_acc(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     """
     Penalize base acceleration.
     """
@@ -438,7 +439,7 @@ def reward_base_acc(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torc
     return rew
 
 
-def reward_vel_mismatch_exp(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+def reward_vel_mismatch_exp(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     """
     Penalize velocity mismatch.
     """
@@ -447,7 +448,7 @@ def reward_vel_mismatch_exp(states: EnvState, robot_name: str, cfg: BaseTaskCfg)
     return (lin_mismatch + ang_mismatch) / 2.0
 
 
-def reward_track_vel_hard(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+def reward_track_vel_hard(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     """
     Track linear and angular velocity commands.
     """
@@ -464,14 +465,14 @@ def reward_track_vel_hard(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -
     return (lin_vel_error_exp + ang_vel_error_exp) / 2.0 - linear_error
 
 
-def reward_feet_clearance(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+def reward_feet_clearance(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     """
     Reward swing leg clearance.
     """
     return states.robots[robot_name].extra["feet_clearance"]
 
 
-def reward_low_speed(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+def reward_low_speed(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     """
     Penalize speed mismatch with command.
     """
@@ -491,7 +492,7 @@ def reward_low_speed(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> tor
     return reward * (states.robots[robot_name].extra["command"][:, 0].abs() > 0.1)
 
 
-def reward_action_smoothness(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+def reward_action_smoothness(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     """
     Penalize jerk in actions.
     """
@@ -511,7 +512,7 @@ def reward_action_smoothness(states: EnvState, robot_name: str, cfg: BaseTaskCfg
     return term_1 + term_2 + term_3
 
 
-def reward_waist_joint_stability(states: EnvState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
+def reward_waist_joint_stability(states: EnvState | TensorState, robot_name: str, cfg: BaseTaskCfg) -> torch.Tensor:
     """
     Reward for keeping waist joints (yaw, roll, pitch) stable and close to default positions.
     This directly penalizes waist joint deviations and velocities to prevent shaking.
