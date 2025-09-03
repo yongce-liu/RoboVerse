@@ -10,8 +10,8 @@ import torch
 from loguru import logger as log
 
 from metasim.cfg.scenario import ScenarioCfg
-from metasim.sim import BaseSimHandler
 from metasim.utils import is_camel_case, is_snake_case, to_camel_case
+from metasim.utils.math import copysign
 from metasim.utils.setup_util import get_robot
 
 
@@ -143,44 +143,30 @@ def get_class(name: str, suffix: str, library="roboverse_learn.unitree_rl"):
     return wrapper_cls
 
 
-def get_body_reindexed_indices_from_substring(
-    sim_handler: BaseSimHandler, obj_name: str, body_names: list[str], device
-):
-    """given substrings of body name, find all the bodies indices in sorted order."""
-
-    matches = []
-    sorted_names = sim_handler.get_body_names(obj_name, sort=True)
-
-    for name in body_names:
-        for i, s in enumerate(sorted_names):
-            if name in s:
-                matches.append(i)
-
-    index = torch.tensor(matches, dtype=torch.int32, device=device)
-    return index
-
-
-def get_joint_reindexed_indices_from_substring(
-    sim_handler: BaseSimHandler, obj_name: str, joint_names: list[str], device: str
-):
-    """given substrings of joint name, find all the bodies indices in sorted order."""
-
-    matches = []
-    sorted_names = sim_handler.get_joint_names(obj_name, sort=True)
-
-    for name in joint_names:
-        for i, s in enumerate(sorted_names):
-            if name in s:
-                matches.append(i)
-
-    index = torch.tensor(matches, dtype=torch.int32, device=device)
-    return index
-
-
 @torch.jit.script
 def torch_rand_float(lower: float, upper: float, shape: tuple[int, int], device: str) -> torch.Tensor:
     """Generate a tensor of random floats in the range [lower, upper]."""
     return (upper - lower) * torch.rand(*shape, device=device) + lower
+
+
+@torch.jit.script
+def get_euler_xyz(q):
+    qw, qx, qy, qz = 0, 1, 2, 3  # wxyz
+    # roll (x-axis rotation)
+    sinr_cosp = 2.0 * (q[:, qw] * q[:, qx] + q[:, qy] * q[:, qz])
+    cosr_cosp = q[:, qw] * q[:, qw] - q[:, qx] * q[:, qx] - q[:, qy] * q[:, qy] + q[:, qz] * q[:, qz]
+    roll = torch.atan2(sinr_cosp, cosr_cosp)
+
+    # pitch (y-axis rotation)
+    sinp = 2.0 * (q[:, qw] * q[:, qy] - q[:, qz] * q[:, qx])
+    pitch = torch.where(torch.abs(sinp) >= 1, copysign(torch.pi / 2.0, sinp), torch.asin(sinp))
+
+    # yaw (z-axis rotation)
+    siny_cosp = 2.0 * (q[:, qw] * q[:, qz] + q[:, qx] * q[:, qy])
+    cosy_cosp = q[:, qw] * q[:, qw] + q[:, qx] * q[:, qx] - q[:, qy] * q[:, qy] - q[:, qz] * q[:, qz]
+    yaw = torch.atan2(siny_cosp, cosy_cosp)
+
+    return torch.stack((roll, pitch, yaw), dim=-1)
 
 
 def export_policy_as_jit(actor, path, filename=None):
@@ -252,6 +238,24 @@ def find_unique_candidate(candidates: list[any], data_base: list[any]) -> int:
         raise ValueError(f"Multiple candidates found: {found_candidates}. Only one naming convention should be used.")
 
     return found_indices[0]
+
+
+def get_indices_from_substring(candidates_list: list[list[any]], data_base: list[any]) -> torch.Tensor:
+    found_indices = []
+    for candidate in candidates_list:
+        for i, name in enumerate(data_base):
+            if candidate in name:
+                found_indices.append(i)
+    return torch.tensor(found_indices, dtype=torch.int32, requires_grad=False)
+
+
+def reindex_func(data: torch.Tensor, new_idx: torch.Tensor, start_idx: int | torch.Tensor) -> torch.Tensor:
+    assert data.dim() == 2, "data must be a 2D tensor"
+    assert new_idx.dim() == 1, "new_idx must be a 1D tensor"
+    reindex_length = len(new_idx)
+    for start in start_idx:
+        data[:, start : start + reindex_length] = data[:, start : start + reindex_length][:, new_idx]
+    return data
 
 
 class PolicyExporterLSTM(torch.nn.Module):
