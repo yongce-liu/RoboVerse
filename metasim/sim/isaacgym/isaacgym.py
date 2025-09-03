@@ -126,7 +126,7 @@ class IsaacgymHandler(BaseSimHandler):
         # TODO move more params into sim_params cfg
         sim_params = gymapi.SimParams()
         sim_params.up_axis = gymapi.UP_AXIS_Z
-        sim_params.gravity = gymapi.Vec3(0.0, 0.0, -9.8)
+        sim_params.gravity = gymapi.Vec3(0.0, 0.0, -9.81)
         if self.scenario.sim_params.dt is not None:
             # IsaacGym has a different dt definition than IsaacLab, see https://isaac-sim.github.io/IsaacLab/main/source/migration/migrating_from_isaacgymenvs.html#simulation-config
             sim_params.dt = self.scenario.sim_params.dt
@@ -528,7 +528,7 @@ class IsaacgymHandler(BaseSimHandler):
                 self._env_rigid_body_global_indices[-1][self.objects[obj_i].name] = object_rigid_body_indices
 
             # # carefully add robot
-            robot_handle = self.gym.create_actor(env, robot_asset, robot_pose, "robot", i, 2)
+            robot_handle = self.gym.create_actor(env, robot_asset, robot_pose, "robot", i, 0, 0)
             assert self.robots[0].scale[0] == 1.0 and self.robots[0].scale[1] == 1.0 and self.robots[0].scale[2] == 1.0
             self._robot_handles.append(robot_handle)
             # set dof properties
