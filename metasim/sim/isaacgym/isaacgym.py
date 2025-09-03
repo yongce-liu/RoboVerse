@@ -144,6 +144,8 @@ class IsaacgymHandler(BaseSimHandler):
 
         compute_device_id = 0
         graphics_device_id = 0
+        if self.headless:
+            graphics_device_id = -1
         self.sim = self.gym.create_sim(compute_device_id, graphics_device_id, physics_engine, sim_params)
         if self.sim is None:
             raise Exception("Failed to create sim")
@@ -634,7 +636,9 @@ class IsaacgymHandler(BaseSimHandler):
                 joint_vel=self._dof_states.view(self.num_envs, -1, 2)[:, joint_ids_reindex, 1],
                 joint_pos_target=None,  # TODO
                 joint_vel_target=None,  # TODO
-                joint_effort_target=self._effort if self._manual_pd_on else None,
+                joint_effort_target=self._effort[:, joint_ids_reindex]
+                if (self._manual_pd_on and self._effort is not None)
+                else None,
             )
             # FIXME a temporary solution for accessing net contact forces of robots, it will be moved to
             extra = {
