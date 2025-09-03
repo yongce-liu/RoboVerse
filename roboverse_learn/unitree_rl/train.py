@@ -58,11 +58,8 @@ def train(args):
     if use_wandb:
         wandb.init(project=args.wandb, name=args.run_name)
 
-    if args.load_run:
-        datetime = args.load_run.split("/")[-2]
-    else:
-        datetime = None
-    log_dir = get_log_dir(args, scenario, datetime)
+    log_dir = get_log_dir(args, scenario, None)
+    resume_dir = get_log_dir(args, scenario, args.load_run)
     task_wrapper = get_class(args.task, suffix="Task")
     task_env = task_wrapper(scenario)
 
@@ -92,16 +89,16 @@ def train(args):
             # args=args,
         )
     if args.load_run:
-        ppo_runner.load(args.load_run)
+        ppo_runner.load(resume_dir + f"/model_{args.checkpoint}.pt")
     ppo_runner.learn(num_learning_iterations=task_config.ppo_cfg.runner.max_iterations, init_at_random_ep_len=True)
 
 
 if __name__ == "__main__":
-    set_seed(1)
+    # set_seed(1)
     args = get_args()
     # args.task = "dof12_walking"
     # args.sim = "isaacgym"
-    # args.num_envs = 128
-    # args.robot = 'g1_dof12'
+    # args.num_envs = 1
+    # args.robot = "g1_dof12"
     # args.headless = True
     train(args)

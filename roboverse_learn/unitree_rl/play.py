@@ -20,6 +20,7 @@ from roboverse_learn.unitree_rl.helper.utils import (
     get_export_jit_path,
     get_load_path,
     make_robots,
+    reindex_func,
 )
 
 
@@ -114,13 +115,8 @@ def play(args):
         obs, _, _, _, _ = env.step(actions)
         if args.reindex_actions:
             # set the command
-            obs[:, 9 : 9 + num_actions] = obs[:, 9 : 9 + num_actions][:, reverse_reindex_actions_idx]
-            obs[:, 9 + num_actions : 9 + num_actions * 2] = obs[:, 9 + num_actions : 9 + num_actions * 2][
-                :, reverse_reindex_actions_idx
-            ]
-            obs[:, 9 + num_actions * 2 : 9 + num_actions * 3] = obs[:, 9 + num_actions * 2 : 9 + num_actions * 3][
-                :, reverse_reindex_actions_idx
-            ]
+            obs_start_idx = torch.tensor([9, 9 + num_actions, 9 + num_actions * 2])
+            obs = reindex_func(obs, reverse_reindex_actions_idx, obs_start_idx)
 
 
 if __name__ == "__main__":
@@ -129,8 +125,10 @@ if __name__ == "__main__":
     # args.jit_load = True
     # args.reindex_actions = True
     # args.task = "dof12_walking"
-    # args.sim = "mujoco"
+    # args.sim = "isaacgym"
     # args.robot = 'g1_dof12'
-    # args.load_run = "pretrain"
-    # args.checkpoint = "motion"
+    # args.load_run = "2025_0902_125815"
+    # args.checkpoint = "600"
+    # args.num_envs = 128
+    # args.headless = True
     play(args)
