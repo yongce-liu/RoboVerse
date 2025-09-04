@@ -11,7 +11,7 @@ from loguru import logger as log
 
 from metasim.scenario.objects import BaseObjCfg, PrimitiveCubeCfg, PrimitiveCylinderCfg, PrimitiveSphereCfg
 
-from .parse_util import extract_mesh_paths_from_mjcf, extract_mesh_paths_from_urdf
+from .parse_util import extract_mesh_paths_from_urdf, extract_paths_from_mjcf
 
 ## This is to avoid circular import
 try:
@@ -76,8 +76,10 @@ def check_and_download_recursive(filepaths: list[str], n_processes: int = 16):
     """
     if len(filepaths) == 0:
         return
+    os.makedirs(LOCAL_DIR, exist_ok=True)
 
-    with portalocker.Lock(os.path.join(LOCAL_DIR, "download.lock")):
+    lock_path = os.path.join(LOCAL_DIR, "download.lock")
+    with portalocker.Lock(lock_path):
         # in parallel env settings, we need to prevent child processes from downloading the same file.
 
         # check if current process is the main process
@@ -94,9 +96,11 @@ def check_and_download_recursive(filepaths: list[str], n_processes: int = 16):
             mesh_paths = extract_mesh_paths_from_urdf(filepath)
             new_filepaths.extend(mesh_paths)
         elif filepath.endswith(".xml"):
-            mesh_paths = extract_mesh_paths_from_mjcf(filepath)
+            mesh_paths = extract_paths_from_mjcf(filepath)
             new_filepaths.extend(mesh_paths)
-    check_and_download_recursive(new_filepaths, n_processes)
+
+    if len(new_filepaths) > 0:
+        check_and_download_recursive(new_filepaths, n_processes)
 
 
 class FileDownloader:

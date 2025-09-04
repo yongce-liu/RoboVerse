@@ -1,43 +1,15 @@
 from __future__ import annotations
 
-from loguru import logger as log
-from rich.logging import RichHandler
-
-log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
-
-
-def log_randomization_result(
-    randomizer_type: str, obj_name: str, property_name: str, before_value, after_value, unit: str = ""
-):
-    """Log randomization results in a consistent format."""
-    if hasattr(before_value, "cpu"):
-        before_str = str(before_value.cpu().numpy().round(3) if hasattr(before_value, "numpy") else before_value)
-    else:
-        before_str = str(before_value)
-
-    if hasattr(after_value, "cpu"):
-        after_str = str(after_value.cpu().numpy().round(3) if hasattr(after_value, "numpy") else after_value)
-    else:
-        after_str = str(after_value)
-
-    log.info(f"  [{randomizer_type}] {obj_name}.{property_name}: {before_str} -> {after_str} {unit}")
-
-
-def log_randomization_header(randomizer_name: str, description: str = ""):
-    """Log a consistent header for randomization sections."""
-    log.info("=" * 50)
-    if description:
-        log.info(f"{randomizer_name}: {description}")
-    else:
-        log.info(randomizer_name)
-
-
 import math
 from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Literal
 
 import tyro
+from loguru import logger as log
+from rich.logging import RichHandler
+
+log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
 
 from metasim.scenario.render import RenderCfg
 
@@ -46,13 +18,13 @@ from metasim.scenario.render import RenderCfg
 class Args:
     render: RenderCfg = field(default_factory=RenderCfg)
     """Renderer options"""
-    task: str = "close_box"
+    task: str = "pick_butter"
     """Task name"""
     robot: str = "franka"
     """Robot name"""
     num_envs: int = 1
     """Number of parallel environments, find a proper number for best performance on your machine"""
-    sim: Literal["isaaclab", "isaacsim", "mujoco", "isaacgym", "genesis", "pybullet", "sapien2", "sapien3"] = "mujoco"
+    sim: Literal["isaaclab", "isaacsim", "mujoco", "isaacgym", "genesis", "pybullet", "sapien2", "sapien3"] = "isaacsim"
     """Simulator backend"""
     demo_start_idx: int | None = None
     """The index of the first demo to collect, None for all demos"""
@@ -60,7 +32,7 @@ class Args:
     """Maximum number of demos to collect, None for all demos"""
     retry_num: int = 0
     """Number of retries for a failed demo"""
-    headless: bool = False
+    headless: bool = True
     """Run in headless mode"""
     table: bool = True
     """Try to add a table"""
@@ -81,11 +53,11 @@ class Args:
     renderer: Literal["isaaclab", "mujoco", "isaacgym", "genesis", "pybullet", "sapien2", "sapien3"] = "mujoco"
 
     ## Domain randomization options
-    enable_randomization: bool = False
+    enable_randomization: bool = True
     """Enable domain randomization during demo collection"""
     randomize_materials: bool = True
     """Enable material randomization (when randomization is enabled)"""
-    randomize_lights: bool = True
+    randomize_lights: bool = False
     """Enable light randomization (when randomization is enabled)"""
     randomize_cameras: bool = True
     """Enable camera randomization (when randomization is enabled)"""
@@ -95,6 +67,8 @@ class Args:
     """When to apply randomization: per_demo (once at start) or per_episode (every episode)"""
     randomization_seed: int | None = None
     """Seed for reproducible randomization. If None, uses random seed"""
+    include_ee_state: bool = True
+    """Include end-effector state in collected observations"""
 
     def __post_init__(self):
         assert self.run_all or self.run_unfinished or self.run_failed, (
@@ -148,6 +122,7 @@ from metasim.scenario.robot import RobotCfg
 from metasim.sim import BaseSimHandler
 from metasim.task.registry import get_task_class
 from metasim.utils.demo_util import get_traj
+from metasim.utils.kinematics_utils import get_ee_state
 from metasim.utils.setup_util import get_robot
 from metasim.utils.state import state_tensor_to_nested
 from metasim.utils.tensor_util import tensor_to_cpu
@@ -171,6 +146,32 @@ try:
 except ImportError as e:
     log.warning(f"Randomization components not available: {e}")
     RANDOMIZATION_AVAILABLE = False
+
+
+def log_randomization_result(
+    randomizer_type: str, obj_name: str, property_name: str, before_value, after_value, unit: str = ""
+):
+    """Log randomization results in a consistent format."""
+    if hasattr(before_value, "cpu"):
+        before_str = str(before_value.cpu().numpy().round(3) if hasattr(before_value, "numpy") else before_value)
+    else:
+        before_str = str(before_value)
+
+    if hasattr(after_value, "cpu"):
+        after_str = str(after_value.cpu().numpy().round(3) if hasattr(after_value, "numpy") else after_value)
+    else:
+        after_str = str(after_value)
+
+    log.info(f"  [{randomizer_type}] {obj_name}.{property_name}: {before_str} -> {after_str} {unit}")
+
+
+def log_randomization_header(randomizer_name: str, description: str = ""):
+    """Log a consistent header for randomization sections."""
+    log.info("=" * 50)
+    if description:
+        log.info(f"{randomizer_name}: {description}")
+    else:
+        log.info(randomizer_name)
 
 
 class DomainRandomizationManager:
@@ -751,6 +752,9 @@ def main():
     ## Now record the clean, stabilized initial state
     obs = env.handler.get_states()
     obs = state_tensor_to_nested(env.handler, obs)
+    if args.include_ee_state:
+        ee_state = get_ee_state(obs, robot)
+        obs["ee_state"] = ee_state
     for env_id, demo_idx in enumerate(demo_idxs):
         log.info(f"Starting Demo {demo_idx} in Env {env_id}")
         collector.create(demo_idx, obs[env_id])
@@ -761,6 +765,9 @@ def main():
         actions = get_actions(all_actions, env, demo_idxs, robot)
         obs, reward, success, time_out, extras = env.step(actions)
         obs = state_tensor_to_nested(env.handler, obs)
+        if args.include_ee_state:
+            ee_state = get_ee_state(obs, robot)
+            obs["ee_state"] = ee_state
         run_out = get_run_out(all_actions, env, demo_idxs)
 
         for env_id in range(env.handler.num_envs):
@@ -821,6 +828,9 @@ def main():
 
                 obs = env.handler.get_states()
                 obs = state_tensor_to_nested(env.handler, obs)
+                if args.include_ee_state:
+                    ee_state = get_ee_state(obs, robot)
+                    obs["ee_state"] = ee_state
                 collector.create(demo_idx, obs[env_id])
             else:
                 log.error(f"Demo {demo_idx} failed too many times, giving up")
@@ -837,6 +847,9 @@ def main():
 
                     obs = env.handler.get_states()
                     obs = state_tensor_to_nested(env.handler, obs)
+                    if args.include_ee_state:
+                        ee_state = get_ee_state(obs, robot)
+                        obs["ee_state"] = ee_state
                     collector.create(new_demo_idx, obs[env_id])
                     demo_indexer.move_on()
                 else:

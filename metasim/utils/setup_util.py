@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib
+import os
+import sys
 
 from loguru import logger as log
 
@@ -135,9 +137,17 @@ def get_robot(robot_name: str) -> RobotCfg:
         "roboverse_pack.robots",
         "metasim.example.example_pack.robots",
     ]
+    cwd = os.getcwd()
+    if cwd not in sys.path:
+        sys.path.insert(0, cwd)
 
     attr_name = f"{RobotName}Cfg"
     errors: list[str] = []
+
+    for fname in os.listdir(cwd):
+        if fname.endswith(".py") and not fname.startswith("_"):
+            modname = os.path.splitext(fname)[0]
+            candidate_packages.append(modname)
 
     for pkg_name in candidate_packages:
         try:
@@ -162,19 +172,47 @@ def get_robot(robot_name: str) -> RobotCfg:
 
 
 def get_scene(scene_name: str) -> SceneCfg:
-    """Get the scene cfg instance from the scene name.
+    """Get a scene configuration by name.
 
     Args:
-        scene_name: The name of the scene.
+        scene_name (str): The name of the scene in either snake_case or CamelCase format.
 
     Returns:
-        The scene cfg instance.
+        SceneCfg: The scene configuration object corresponding to the given scene name.
+
+    Raises:
+        ValueError: If the scene name is not found or has invalid format.
     """
     if is_snake_case(scene_name):
-        scene_name = to_camel_case(scene_name)
-    try:
-        module = importlib.import_module("roboverse_pack.scenes")
-        scene_cls = getattr(module, f"{scene_name}Cfg")
-        return scene_cls()
-    except (ImportError, AttributeError) as e:
-        raise ValueError(f"Scene {scene_name} not found: {e}") from e
+        SceneName = to_camel_case(scene_name)
+    elif is_camel_case(scene_name):
+        SceneName = scene_name
+    else:
+        raise ValueError(f"Invalid scene name: {scene_name}")
+
+    candidate_packages = [
+        "roboverse_pack.scenes",
+    ]
+
+    cwd = os.getcwd()
+    if cwd not in sys.path:
+        sys.path.insert(0, cwd)
+
+    for fname in os.listdir(cwd):
+        if fname.endswith(".py") and not fname.startswith("_"):
+            candidate_packages.append(os.path.splitext(fname)[0])
+
+    attr_name = f"{SceneName}Cfg"
+    errors: list[str] = []
+    for pkg_name in candidate_packages:
+        try:
+            pkg = importlib.import_module(pkg_name)
+            scene_cls = getattr(pkg, attr_name)
+            return scene_cls()
+        except AttributeError:
+            continue
+        except Exception as e:
+            errors.append(f"{pkg_name}: {e}")
+            continue
+
+    raise ValueError(f"Scene config class '{attr_name}' not found in {candidate_packages}. Errors: {errors}")

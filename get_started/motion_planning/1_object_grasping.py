@@ -72,8 +72,7 @@ args = tyro.cli(Args)
 # initialize scenario
 scenario = ScenarioCfg(
     robots=[args.robot],
-    try_add_table=False,
-    sim=args.sim,
+    simulator=args.sim,
     headless=args.headless,
     num_envs=args.num_envs,
 )
@@ -90,9 +89,9 @@ scenario.objects = [
         name="bbq_sauce",
         scale=(1.5, 1.5, 1.5),
         physics=PhysicStateType.RIGIDBODY,
-        usd_path="metasim/example/example_assets/bbq_sauce/usd/bbq_sauce.usd",
-        urdf_path="metasim/example/example_assets/bbq_sauce/urdf/bbq_sauce.urdf",
-        mjcf_path="metasim/example/example_assets/bbq_sauce/mjcf/bbq_sauce.xml",
+        usd_path="roboverse_data/assets/libero/COMMON/stable_hope_objects/bbq_sauce/usd/bbq_sauce.usd",
+        urdf_path="roboverse_data/assets/libero/COMMON/stable_hope_objects/bbq_sauce/urdf/bbq_sauce.urdf",
+        mjcf_path="roboverse_data/assets/libero/COMMON/stable_hope_objects/bbq_sauce/mjcf/bbq_sauce.xml",
     ),
 ]
 
@@ -181,7 +180,8 @@ def move_to_pose(
     q[ik_succ, :curobo_n_dof] = result.solution[ik_succ, 0].clone()
     q[:, -ee_n_dof:] = 0.04 if open_gripper else 0.0
     actions = [
-        {"dof_pos_target": dict(zip(robot.actuators.keys(), q[i_env].tolist()))} for i_env in range(scenario.num_envs)
+        {"franka": {"dof_pos_target": dict(zip(robot.actuators.keys(), q[i_env].tolist()))}}
+        for i_env in range(scenario.num_envs)
     ]
     for i in range(steps):
         env.set_dof_targets(actions)
@@ -221,9 +221,8 @@ for step in range(1):
     gsnet = GSNet()
     gg = gsnet.inference(np.array(pcd.points))
     # gsnet.visualize(pcd, gg)
-    gsnet.visualize(pcd, gg[:1], image_only=True)
+    gsnet.visualize(pcd, gg[:1], image_only=False)
     # filter gg
-    # # import pdb; pdb.set_trace()
     # mask = [0.0 <= -gg_i.translation[2] <= 0.1 for gg_i in gg]
     # gg = gg[mask]
     # gsnet.visualize(pcd, gg[:1])
@@ -251,7 +250,6 @@ for step in range(1):
     gripper_long = torch.tensor(gripper_long)
     # rotation = np.dot(rotation, delta_m)
 
-    # breakpoint()
     rotation_transform_for_franka = torch.tensor(
         [
             [0.0, 0.0, 1.0],
@@ -259,7 +257,7 @@ for step in range(1):
             [1.0, 0.0, 0.0],
         ],
     )
-    # import pdb; pdb.set_trace()
+
     rotation_target = torch.stack(
         [
             gripper_out + 1e-4,
