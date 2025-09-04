@@ -117,7 +117,7 @@ class LeggedWalkingTask(LeggedRobot):
         ) * self.cfg.normalization.obs_scales.dof_pos
         dq = dof_vel_tensor(envstate, self.robot.name) * self.cfg.normalization.obs_scales.dof_vel
 
-        self.obs_buf = torch.cat(
+        obs_buf = torch.cat(
             (
                 self.commands[:, :3] * self.commands_scale,
                 self.base_lin_vel * self.cfg.normalization.obs_scales.lin_vel,  # 3
@@ -133,4 +133,6 @@ class LeggedWalkingTask(LeggedRobot):
         # add perceptive inputs if not blind
         # add noise if needed
         if self.add_noise:
-            self.obs_buf += (2 * torch.rand_like(self.obs_buf) - 1) * self.noise_scale_vec
+            obs_buf += (2 * torch.rand_like(obs_buf) - 1) * self.noise_scale_vec
+
+        return obs_buf, None

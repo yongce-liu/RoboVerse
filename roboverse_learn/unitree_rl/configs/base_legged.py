@@ -16,8 +16,8 @@ from metasim.cfg.simulator_params import SimParamCfg
 from metasim.cfg.tasks.base_task_cfg import BaseTaskCfg
 from metasim.sim import BaseSimHandler
 from metasim.utils import configclass
-from metasim.utils.humanoid_robot_util import contact_forces_tensor, get_euler_xyz_tensor, robot_rotation_tensor
 from metasim.utils.tensor_util import torch_rand_float
+from roboverse_learn.unitree_rl.helper.utils import get_euler_xyz
 
 from .base_terrain import TerrainConfig
 
@@ -267,11 +267,11 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
             """Check if the contact forces are above threshold threshold."""
 
             states = handler.get_states()
-            contact_forces = contact_forces_tensor(states, handler.robot.name)
+            contact_forces = states.robots[handler.robot.name].extra["contact_forces"]
             reset_buf = torch.any(
                 torch.norm(contact_forces[:, handler.task.termination_contact_indices, :], dim=-1) > 1.0, dim=1
             )
-            rpy = get_euler_xyz_tensor(robot_rotation_tensor(states, handler.robot.name))
+            rpy = get_euler_xyz(states.robots[handler.robot.name].root_state[:, 3:7])
             reset_buf |= torch.logical_or(torch.abs(rpy[:, 1]) > 1.0, torch.abs(rpy[:, 0]) > 0.8)
             return reset_buf
 
@@ -398,6 +398,10 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
         }
     ]
     """Initial states for the environment. Only used for legged robots, e.g., go2-12dof"""
+    """missing items, it will be filled in the corresponding env class according to the robot model"""
+    default_dof_pos: torch.Tensor = MISSING
+    frame_stack: int = MISSING
+    c_frame_stack: int = MISSING
 
     def __post_init__(self):
         super().__post_init__()

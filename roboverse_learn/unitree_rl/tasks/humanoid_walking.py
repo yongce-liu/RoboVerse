@@ -353,9 +353,6 @@ class HumanoidWalkingTask(Humanoid):
 
         # add noise if needed
         if self.add_noise:
-            self.obs_buf += (2 * torch.rand_like(self.obs_buf) - 1) * self.noise_scale_vec
+            obs_buf += (2 * torch.rand_like(obs_buf) - 1) * self.noise_scale_vec
 
-        self.obs_history.append(obs_buf)
-        self.critic_history.append(privileged_obs_buf)
-        self.obs_buf = torch.cat(list(self.obs_history), dim=1)
-        self.privileged_obs_buf = torch.cat(list(self.critic_history), dim=1)
+        return obs_buf, privileged_obs_buf
