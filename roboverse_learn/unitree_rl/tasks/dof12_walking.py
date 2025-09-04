@@ -45,12 +45,11 @@ class Dof12WalkingCfg(BaseLeggedTaskCfg):
     c_frame_stack = 1
 
     reward_cfg = BaseLeggedTaskCfg.RewardCfg(
-        base_height_target=0.78,
+        base_height_target=0.8,
         soft_dof_pos_limit=0.9,
         feet_cycle_time=0.8,
         feet_full_contact_time=0.05,
-        feet_contact_threshold=1.0,
-        target_feet_height=0.08,
+        target_feet_height=0.1,
     )
 
     reward_functions: str = "roboverse_learn.unitree_rl.configs.reward_funcs"
@@ -215,8 +214,4 @@ class Dof12WalkingTask(Humanoid):
         if self.add_noise:
             obs_buf += (2 * torch.rand_like(obs_buf) - 1) * self.noise_scale_vec
 
-        # Frame stacking (reuse existing obs_history)
-        self.obs_history.append(obs_buf)
-        self.critic_history.append(privileged_obs_buf)
-        self.obs_buf = torch.cat(list(self.obs_history), dim=1)
-        self.privileged_obs_buf = torch.cat(list(self.critic_history), dim=1)
+        return obs_buf, privileged_obs_buf
