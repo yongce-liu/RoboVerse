@@ -202,8 +202,6 @@ class BaseLeggedTaskCfg(BaseTaskCfg):
         """cycle time"""
         feet_full_contact_time: float = 0.05
         """the phase that all feet contact with the ground"""
-        feet_contact_threshold: float = 1.0
-        """the contact force threshold"""
 
         only_positive_rewards: bool = True
         """whether to use only positive rewards"""

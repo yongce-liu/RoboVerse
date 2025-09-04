@@ -3,14 +3,10 @@ from __future__ import annotations
 import torch
 
 from metasim.cfg.scenario import ScenarioCfg
-from metasim.utils.humanoid_robot_util import contact_forces_tensor, gait_phase_tensor
 from metasim.utils.state import TensorState
 from roboverse_learn.unitree_rl.configs.base_legged import BaseLeggedTaskCfg
 from roboverse_learn.unitree_rl.envs.base_legged import LeggedRobot
-from roboverse_learn.unitree_rl.helper.utils import (
-    get_body_reindexed_indices_from_substring,
-    get_joint_reindexed_indices_from_substring,
-)
+from roboverse_learn.unitree_rl.helper.utils import get_indices_from_substring
 
 
 class Humanoid(LeggedRobot):
@@ -32,24 +28,17 @@ class Humanoid(LeggedRobot):
         """
         # parse for foot. termination_contact, penalised_contact
         super()._parse_rigid_body_indices(robot)
+        body_names_sorted = self.env.handler.get_body_names(robot.name, sort=True)
         knee_names = robot.knee_links
         elbow_names = robot.elbow_links
         wrist_names = robot.wrist_links
         torso_names = robot.torso_links
 
         # get sorted indices for specific body links
-        self.knee_indices = get_body_reindexed_indices_from_substring(
-            self.env.handler, robot.name, knee_names, device=self.device
-        )
-        self.elbow_indices = get_body_reindexed_indices_from_substring(
-            self.env.handler, robot.name, elbow_names, device=self.device
-        )
-        self.wrist_indices = get_body_reindexed_indices_from_substring(
-            self.env.handler, robot.name, wrist_names, device=self.device
-        )
-        self.torso_indices = get_body_reindexed_indices_from_substring(
-            self.env.handler, robot.name, torso_names, device=self.device
-        )
+        self.knee_indices = get_indices_from_substring(knee_names, body_names_sorted).to(self.device)
+        self.elbow_indices = get_indices_from_substring(elbow_names, body_names_sorted).to(self.device)
+        self.wrist_indices = get_indices_from_substring(wrist_names, body_names_sorted).to(self.device)
+        self.torso_indices = get_indices_from_substring(torso_names, body_names_sorted).to(self.device)
 
         # attach to cfg for reward computation.
         self.cfg.knee_indices = self.knee_indices
@@ -61,22 +50,24 @@ class Humanoid(LeggedRobot):
         """
         Parse joint indices.
         """
+        joint_names_sorted = self.env.handler.get_joint_names(robot.name, sort=True)
         left_yaw_roll_names = robot.left_yaw_roll_joints
         right_yaw_roll_names = robot.right_yaw_roll_joints
         upper_body_names = robot.upper_body_joints
-        self.cfg.left_yaw_roll_joint_indices = get_joint_reindexed_indices_from_substring(
-            self.env.handler, robot.name, left_yaw_roll_names, device=self.device
+
+        self.cfg.left_yaw_roll_joint_indices = get_indices_from_substring(left_yaw_roll_names, joint_names_sorted).to(
+            self.device
         )
-        self.cfg.right_yaw_roll_joint_indices = get_joint_reindexed_indices_from_substring(
-            self.env.handler, robot.name, right_yaw_roll_names, device=self.device
+        self.cfg.right_yaw_roll_joint_indices = get_indices_from_substring(right_yaw_roll_names, joint_names_sorted).to(
+            self.device
         )
-        self.cfg.upper_body_joint_indices = get_joint_reindexed_indices_from_substring(
-            self.env.handler, robot.name, upper_body_names, device=self.device
+        self.cfg.upper_body_joint_indices = get_indices_from_substring(upper_body_names, joint_names_sorted).to(
+            self.device
         )
         # keep the waist stable
         if hasattr(robot, "waist_joints"):
-            self.cfg.waist_joint_indices = get_joint_reindexed_indices_from_substring(
-                self.env.handler, robot.name, robot.waist_joints, device=self.device
+            self.cfg.waist_joint_indices = get_indices_from_substring(robot.waist_joints, joint_names_sorted).to(
+                self.device
             )
 
     # endregion
@@ -86,26 +77,24 @@ class Humanoid(LeggedRobot):
         """
         Parse all the states to prepare for reward computation, legged_robot level reward computation.
         """
-        self._parse_gait_phase(envstate)
-        # envstate.robots[self.robot.name].extra["gait_phase"] = self._get_gait_phase()
+        envstate.robots[self.robot.name].extra["gait_phase"] = self._get_gait_phase()
+        # self._parse_gait_phase(envstate)
         self._parse_feet_clearance(envstate)
         super()._parse_state_for_reward(envstate)
 
-    def _parse_gait_phase(self, envstate: TensorState):
-        period = self.cfg.reward_cfg.feet_cycle_time
-        offset = 0.5
-        phase = (self.episode_length_buf * self.dt) % period / period
-        phase_left = phase
-        phase_right = (phase + offset) % 1
-        envstate.robots[self.robot.name].extra["leg_phase"] = torch.cat(
-            [phase_left.unsqueeze(1), phase_right.unsqueeze(1)], dim=-1
-        )
-        envstate.robots[self.robot.name].extra["gait_phase"] = self._get_gait_phase()
+    # def _parse_gait_phase(self, envstate: TensorState):
+    #     offset = 0.5
+    #     phase = self._get_phase()
+    #     phase_left = phase
+    #     phase_right = (phase + offset) % 1
+    #     envstate.robots[self.robot.name].extra["gait_phase"] = torch.cat(
+    #         [phase_left.unsqueeze(1), phase_right.unsqueeze(1)], dim=-1
+    #     )
 
     # NOTE: A Rewritten Function
     def _parse_feet_air_time(self, envstate: TensorState):
-        contact = contact_forces_tensor(envstate, self.robot.name)[:, self.feet_indices, 2] > 1.0
-        stance_mask = gait_phase_tensor(envstate, self.robot.name)
+        contact = envstate.robots[self.robot.name].extra["contact_forces"][:, self.feet_indices, 2] > 1.0
+        stance_mask = envstate.robots[self.robot.name].extra["gait_phase"]
         contact_filt = torch.logical_or(torch.logical_or(contact, stance_mask), self.last_contacts)
         self.last_contacts = contact
         first_contact = (self.feet_air_time > 0.0) * contact_filt
@@ -124,7 +113,7 @@ class Humanoid(LeggedRobot):
 
         Directly calculates reward since no intermediate variables are reused for other reward.
         """
-        contact = contact_forces_tensor(envstate, self.robot.name)[:, self.feet_indices, 2] > 5.0
+        contact = envstate.robots[self.robot.name].extra["contact_forces"][:, self.feet_indices, 2] > 5.0
         feet_z = envstate.robots[self.robot.name].body_state[:, self.feet_indices, 2] - 0.05
         delta_z = feet_z - self.last_feet_z
         self.feet_height += delta_z
@@ -159,7 +148,7 @@ class Humanoid(LeggedRobot):
 
     def _get_phase(self):
         feet_cycle_time = self.cfg.reward_cfg.feet_cycle_time
-        phase = self.episode_length_buf * self.dt % feet_cycle_time / feet_cycle_time
+        phase = (self.episode_length_buf * self.dt) % feet_cycle_time / feet_cycle_time
         return phase
 
     # endregion
