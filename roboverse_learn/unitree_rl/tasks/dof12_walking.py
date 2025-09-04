@@ -45,11 +45,11 @@ class Dof12WalkingCfg(BaseLeggedTaskCfg):
     c_frame_stack = 1
 
     reward_cfg = BaseLeggedTaskCfg.RewardCfg(
-        base_height_target=0.8,
+        base_height_target=0.78,
         soft_dof_pos_limit=0.9,
-        feet_cycle_time=0.7,
+        feet_cycle_time=0.78,
         feet_full_contact_time=0.05,
-        target_feet_height=0.1,
+        target_feet_height=0.08,
     )
 
     reward_functions: str = "roboverse_learn.unitree_rl.configs.reward_funcs"
