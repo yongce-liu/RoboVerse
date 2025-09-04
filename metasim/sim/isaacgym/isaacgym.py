@@ -336,8 +336,8 @@ class IsaacgymHandler(BaseSimHandler):
                 # FIXME: hard code for 0-1 action space, should remove all the scale stuff later
 
                 robot_dof_props["driveMode"][i] = gymapi.DOF_MODE_EFFORT
-                robot_dof_props["stiffness"][i] = i_actuator_cfg.stiffness
-                robot_dof_props["damping"][i] = i_actuator_cfg.damping
+                # robot_dof_props["stiffness"][i] = i_actuator_cfg.stiffness
+                # robot_dof_props["damping"][i] = i_actuator_cfg.damping
 
             # built-in position mode
             elif i_control_mode == "position":
@@ -725,7 +725,8 @@ class IsaacgymHandler(BaseSimHandler):
 
     def refresh_render(self) -> None:
         # Step the physics
-        self.gym.simulate(self.sim)
+        # This line would cause weird resetting other robot's states
+        # self.gym.simulate(self.sim)
         self.gym.fetch_results(self.sim, True)
         self._render()
 

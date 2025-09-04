@@ -193,6 +193,8 @@ class LeggedRobot(RslRlWrapper):
                 send_action = effort
             else:
                 send_action = actions
+            # reverse_reindex = self.handler.get_joint_reindex(obj_name=self.handler.robots[0].name, inverse=True)
+            # self.handler.gym.set_dof_position_target_tensor(self.handler.sim, gymtorch.unwrap_tensor(actions[:, reverse_reindex]))
             env_states, _, terminated, self.time_out_buf, _ = BaseTaskEnv.step(self, send_action)
         self.reset_buf = torch.logical_or(terminated, self.time_out_buf)
         return env_states

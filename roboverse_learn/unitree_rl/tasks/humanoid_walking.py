@@ -98,7 +98,7 @@ class HumanoidWalkingCfg(BaseLeggedTaskCfg):
                     },
                 },
                 "g1_dex3": {
-                    "pos": torch.tensor([0.0, 0.0, 0.735]),
+                    "pos": torch.tensor([0.0, 0.0, 0.76]),
                     "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
                     "dof_pos": {
                         # Hips & legs

@@ -7,8 +7,6 @@ from dataclasses import MISSING
 from typing import Callable, Literal
 
 import torch
-from roboverse_pack.tasks.maniskill.checkers import EmptyChecker
-from roboverse_pack.randomization import FrictionRandomCfg, MassRandomCfg
 from metasim.scenario.robot import RobotCfg
 from metasim.scenario.simulator_params import SimParamCfg
 
@@ -125,9 +123,9 @@ class LeggedRobotDomainRandCfg:
     """Randomization level"""
 
     # New-style randomization configs (require robot name via obj_name)
-    friction: FrictionRandomCfg | None = None
+    friction = None
     """Friction randomization config (new API). Must set obj_name later."""
-    mass: MassRandomCfg | None = None
+    mass = None
     """Mass randomization config (new API). Must set obj_name later."""
 
     def sample_uniform_buckets(params_dict: dict) -> torch.Tensor:
@@ -291,22 +289,6 @@ class BaseLeggedTaskCfg:
     commands = CommandsConfig()
     """Configuration for command generation with command ranges."""
 
-    @configclass
-    class BaseLeggedRobotChecker(EmptyChecker):
-        def check(self, handler: BaseSimHandler):
-            """Check if the contact forces are above threshold threshold."""
-
-            states = handler.get_states()
-            contact_forces = contact_forces_tensor(states, handler.robot.name)
-            reset_buf = torch.any(
-                torch.norm(contact_forces[:, handler.task.termination_contact_indices, :], dim=-1) > 1.0, dim=1
-            )
-            rpy = get_euler_xyz_tensor(robot_rotation_tensor(states, handler.robot.name))
-            reset_buf |= torch.logical_or(torch.abs(rpy[:, 1]) > 1.0, torch.abs(rpy[:, 0]) > 0.8)
-            return reset_buf
-
-    checker: BaseLeggedRobotChecker = BaseLeggedRobotChecker()
-    """Checker for resetting the environment."""
 
     @configclass
     class Normalization:
@@ -466,36 +448,4 @@ class BaseLeggedTaskCfg:
             self.num_actions = self.robots[0].num_joints
         assert self.num_actions is not None, "num_actions must be set in the task config"
 
-        # Populate domain randomization configs that require robot name
-        try:
-            robot_name = None
-            if self.robots is not None and len(self.robots) > 0:
-                robot_name = getattr(self.robots[0], "name", None)
-            if robot_name:
-                # Friction: absolute assignment with uniform sampling
-                if self.random.friction is None:
-                    self.random.friction = FrictionRandomCfg(
-                        obj_name=robot_name,
-                        range=(0.1, 1.25),
-                        distribution="uniform",
-                        operation="abs",
-                    )
-                else:
-                    # Ensure robot name is set if provided externally
-                    if getattr(self.random.friction, "obj_name", None) is None:
-                        self.random.friction.obj_name = robot_name
-
-                # Mass: scale with a mild uniform factor around 1.0
-                if self.random.mass is None:
-                    self.random.mass = MassRandomCfg(
-                        obj_name=robot_name,
-                        range=(0.8, 1.2),  # conservative scaling
-                        distribution="uniform",
-                        operation="scale",
-                    )
-                else:
-                    if getattr(self.random.mass, "obj_name", None) is None:
-                        self.random.mass.obj_name = robot_name
-        except Exception:
-            # Be robust if robots are not provided at construction time
-            pass
+        # TODO: Populate domain randomization configs that require robot name
