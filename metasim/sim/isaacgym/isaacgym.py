@@ -141,7 +141,6 @@ class IsaacgymHandler(BaseSimHandler):
         sim_params.physx.default_buffer_size_multiplier = self.scenario.sim_params.default_buffer_size_multiplier
         # sim_params.physx.contact_collection = gymapi.ContactCollection.CC_ALL_SUBSTEPS
         # sim_params.physx.max_gpu_contact_pairs = 2**23
-
         compute_device_id = 0
         graphics_device_id = 0
         if self.headless:
@@ -275,29 +274,14 @@ class IsaacgymHandler(BaseSimHandler):
         asset_root = "."
         robot_asset_file = self.robot.mjcf_path if self.robot.isaacgym_read_mjcf else self.robot.urdf_path
         asset_options = gymapi.AssetOptions()
-
-        asset_options.default_dof_drive_mode = 3
-        asset_options.collapse_fixed_joints = True
-        asset_options.replace_cylinder_with_capsule = True
-        asset_options.flip_visual_attachments = False
-        asset_options.fix_base_link = False
-        asset_options.density = 0.001
-        asset_options.angular_damping = 0.0
-        asset_options.linear_damping = 0.0
-        asset_options.max_angular_velocity = 1000.0
-        asset_options.max_linear_velocity = 1000.0
-        asset_options.armature = 0.0
-        asset_options.thickness = 0.01
-        asset_options.disable_gravity = False
-
-        # asset_options.armature = getattr(self.robot, "dof_armature", 0.01)
-        # asset_options.fix_base_link = self.robot.fix_base_link
-        # asset_options.disable_gravity = not self.robot.enabled_gravity
-        # asset_options.flip_visual_attachments = self.robot.isaacgym_flip_visual_attachments
-        # asset_options.collapse_fixed_joints = self.robot.collapse_fixed_joints
-        # asset_options.default_dof_drive_mode = gymapi.DOF_MODE_NONE
-        # # Defaults are set to free movement and will be updated based on the configuration in actuator_cfg below.
-        # asset_options.replace_cylinder_with_capsule = self.scenario.sim_params.replace_cylinder_with_capsule
+        asset_options.armature = getattr(self.robot, "dof_armature", 0.01)
+        asset_options.fix_base_link = self.robot.fix_base_link
+        asset_options.disable_gravity = not self.robot.enabled_gravity
+        asset_options.flip_visual_attachments = self.robot.isaacgym_flip_visual_attachments
+        asset_options.collapse_fixed_joints = self.robot.collapse_fixed_joints
+        asset_options.default_dof_drive_mode = gymapi.DOF_MODE_NONE
+        # Defaults are set to free movement and will be updated based on the configuration in actuator_cfg below.
+        asset_options.replace_cylinder_with_capsule = self.scenario.sim_params.replace_cylinder_with_capsule
         robot_asset = self.gym.load_asset(self.sim, asset_root, robot_asset_file, asset_options)
         # configure robot dofs
         robot_num_dofs = self.gym.get_asset_dof_count(robot_asset)
@@ -400,7 +384,7 @@ class IsaacgymHandler(BaseSimHandler):
         num_per_row = int(math.sqrt(self.num_envs))
         spacing = self.scenario.env_spacing
         env_lower = gymapi.Vec3(-spacing, -spacing, 0.0)
-        env_upper = gymapi.Vec3(spacing, spacing, 0.0)
+        env_upper = gymapi.Vec3(spacing, spacing, spacing)
         log.info("Creating %d environments" % self.num_envs)
 
         robot_pose = gymapi.Transform()
@@ -661,7 +645,7 @@ class IsaacgymHandler(BaseSimHandler):
 
     # @property
     # def episode_length_buf(self) -> list[int]:
-    # return self._episode_length_buf
+    #     return self._episode_length_buf
 
     ############################################################
     ## Gymnasium main methods
