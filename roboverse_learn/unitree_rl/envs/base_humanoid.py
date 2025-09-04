@@ -109,7 +109,7 @@ class Humanoid(LeggedRobot):
         contact_filt = torch.logical_or(torch.logical_or(contact, stance_mask), self.last_contacts)
         self.last_contacts = contact
         first_contact = (self.feet_air_time > 0.0) * contact_filt
-        self.feet_air_time += self.dt
+        self.feet_air_time += self.dt * self.decimation
         # rew_airTime = torch.sum((self.feet_air_time - 0.5) * first_contact, dim=1)
         # rew_airTime *= torch.norm(self.commands[:, :2], dim=1) > 0.1
         air_time = self.feet_air_time.clamp(0, 0.5) * first_contact
@@ -159,6 +159,7 @@ class Humanoid(LeggedRobot):
 
     def _get_phase(self):
         feet_cycle_time = self.cfg.reward_cfg.feet_cycle_time
+        # ep
         phase = self._episode_steps * self.dt % feet_cycle_time / feet_cycle_time
         return phase
 

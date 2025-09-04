@@ -390,7 +390,8 @@ class LeggedRobot(RslRlWrapper):
     # region: Parse configs & Get the necessary parametres
     def _parse_cfg(self, scenario):
         super()._parse_cfg(scenario)
-        self.dt = self.cfg.dt = scenario.decimation * self.cfg.sim_params.dt
+        self.decimation = self.cfg.decimation = scenario.decimation
+        self.dt = self.cfg.dt = self.cfg.sim_params.dt
         self.command_ranges = self.cfg.commands.ranges
         self.num_commands = self.cfg.commands.commands_dim
         self.use_vision = self.cfg.use_vision
@@ -642,7 +643,7 @@ class LeggedRobot(RslRlWrapper):
         contact_filt = torch.logical_or(contact, self.last_contacts)
         self.last_contacts = contact
         first_contact = (self.feet_air_time > 0.0) * contact_filt
-        self.feet_air_time += self.dt
+        self.feet_air_time += self.dt * self.decimation
         air_time = self.feet_air_time.clamp(0, 0.5) * first_contact
         self.feet_air_time *= ~contact_filt
         envstate.robots[self.robot.name].extra["feet_air_time"] = air_time
