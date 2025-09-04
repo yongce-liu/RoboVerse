@@ -47,7 +47,7 @@ class Dof12WalkingCfg(BaseLeggedTaskCfg):
     reward_cfg = BaseLeggedTaskCfg.RewardCfg(
         base_height_target=0.8,
         soft_dof_pos_limit=0.9,
-        feet_cycle_time=0.8,
+        feet_cycle_time=0.7,
         feet_full_contact_time=0.05,
         target_feet_height=0.1,
     )
