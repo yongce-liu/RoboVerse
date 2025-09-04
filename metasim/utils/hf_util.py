@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import os
-from multiprocessing import Pool
 
 from huggingface_hub import HfApi, hf_hub_download
 from loguru import logger as log
 
 from metasim.cfg.objects import BaseObjCfg, PrimitiveCubeCfg, PrimitiveCylinderCfg, PrimitiveSphereCfg
 
-from .parse_util import extract_mesh_paths_from_mjcf, extract_mesh_paths_from_urdf
+from .parse_util import extract_mesh_paths_from_urdf, extract_paths_from_mjcf
 
 ## This is to avoid circular import
 try:
@@ -76,8 +75,13 @@ def check_and_download_recursive(filepaths: list[str], n_processes: int = 16):
     if len(filepaths) == 0:
         return
 
-    with Pool(processes=n_processes) as p:
-        p.map(_check_and_download_single, filepaths)
+    ## Option 1: Use multiprocessing, but sometimes the program stuck here
+    # with Pool(processes=n_processes) as p:
+    #     p.map(_check_and_download_single, filepaths)
+
+    ## Option 2: Use single process, but could be slow
+    for filepath in filepaths:
+        _check_and_download_single(filepath)
 
     new_filepaths = []
     for filepath in filepaths:
@@ -85,9 +89,11 @@ def check_and_download_recursive(filepaths: list[str], n_processes: int = 16):
             mesh_paths = extract_mesh_paths_from_urdf(filepath)
             new_filepaths.extend(mesh_paths)
         elif filepath.endswith(".xml"):
-            mesh_paths = extract_mesh_paths_from_mjcf(filepath)
+            mesh_paths = extract_paths_from_mjcf(filepath)
             new_filepaths.extend(mesh_paths)
-    check_and_download_recursive(new_filepaths, n_processes)
+
+    if len(new_filepaths) > 0:
+        check_and_download_recursive(new_filepaths, n_processes)
 
 
 class FileDownloader:
