@@ -39,7 +39,7 @@ class HumanoidWalkingCfg(BaseLeggedTaskCfg):
     task_name = "humanoid_walking"
     env_spacing: float = 1.0
     max_episode_length_s: int = 24
-    control = BaseLeggedTaskCfg.ControlCfg(action_scale=0.25, action_offset=True, torque_limit_scale=0.85)
+    control = BaseLeggedTaskCfg.ControlCfg(action_scale=0.5, action_offset=True, torque_limit_scale=0.85)
 
     init_states = [
         {
@@ -163,32 +163,50 @@ class HumanoidWalkingCfg(BaseLeggedTaskCfg):
 
     reward_weights: dict[str, float] = {
         "termination": -0.0,
-        "feet_stumble": -0.0,
-        "tracking_lin_vel": 1.0,
-        "tracking_ang_vel": 0.5,
+        "ang_vel_xy": -0.2,  # Increased penalty for xy angular velocity to reduce waist waving
+        "base_height": 0.2,
         "lin_vel_z": -2.0,
-        "ang_vel_xy": -0.05,
-        # "orientation": -1.0,
-        "orientation_sq": -1.0,
-        # "base_height": 10.0,
-        "base_height_sq": -10.0,  # -10.0,
-        "upper_body_pos": 1.0,
-        "dof_acc": -2.5e-7,
-        "dof_vel": -1e-3,
+        # "feet_swing_height": -20.0,
         "feet_air_time": 0.0,
-        "collision": 0.0,
-        "action_rate": -0.01,
-        "waist_joint_stability": 4.0,
-        "dof_pos_limits": -5.0,
-        "alive": 0.15,
-        "hip_pos": -1.0,
-        "contact_no_vel": -0.2,
-        "feet_swing_height": -20.0,
-        # "feet_clearance": 2.0,
+        "orientation_sq": -1.0,
+        "base_height_sq": -5.0,
+        "collision": -1.0,
+        "feet_stumble": -0.0,
+        "stand_still": -0.0,
+        "joint_pos": 1.6,
+        "feet_clearance": 2.0,
+        "feet_contact_number": 2.4,
+        # gait
+        "foot_slip": -0.05,
+        "feet_distance": 0.3,
+        "knee_distance": 0.2,
+        # contact
+        "feet_contact_forces": -0.05,
         "contact": 0.18,
-        # "feet_contact_number": 2.4,
-        "torques": -0.00001,
-        "hip_upright_axis": 6.0,
+        # vel tracking
+        "tracking_lin_vel": 6.0,
+        "tracking_ang_vel": 3.0,
+        "vel_mismatch_exp": 0.5,
+        "low_speed": 0.2,
+        "track_vel_hard": 1.0,
+        # base pos
+        "default_joint_pos": 1.0,
+        "contact_no_vel": -0.2,
+        "upper_body_pos": 1.0,  # Increased to keep upper body more stable
+        "orientation": 1.0,
+        "base_acc": 0.4,  # Increased penalty for base acceleration to reduce jerkiness
+        "waist_joint_stability": 10.0,  # New reward for waist joint stability
+        "hip_upright_axis": 6.0,  # NEW: Reward for keeping hip axis pointing upward
+        # energy
+        "action_smoothness": -0.08,  # Increased penalty for jerky actions
+        "torques": -1e-5,
+        "dof_vel": -1e-3,
+        "dof_acc": -2e-6,  # Increased penalty for joint accelerations
+        "torque_limits": -0.001,
+        "hip_pos": -1.0,
+        "dof_pos_limits": -5,
+        # optional
+        "action_rate": -0.015,  # Increased penalty for action rate changes
     }
 
     def __post_init__(self):

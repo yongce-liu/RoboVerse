@@ -623,7 +623,6 @@ class IsaacgymHandler(BaseSimHandler):
 
         camera_states = {}
 
-        self.refresh_render()
         self.gym.start_access_image_tensors(self.sim)
 
         for cam_id, cam in enumerate(self.cameras):
@@ -724,16 +723,12 @@ class IsaacgymHandler(BaseSimHandler):
             self.gym.set_dof_position_target_tensor(self.sim, gymtorch.unwrap_tensor(action_input))
 
     def refresh_render(self) -> None:
-        # Step the physics
-        # This line would cause weird resetting other robot's states
-        # self.gym.simulate(self.sim)
         self.gym.fetch_results(self.sim, True)
         self._render()
 
     def _simulate_one_physics_step(self):
         self.gym.simulate(self.sim)
-        if self.device == "cpu":
-            self.gym.fetch_results(self.sim, True)
+        self.gym.fetch_results(self.sim, True)
         self.gym.refresh_dof_state_tensor(self.sim)
 
     def _simulate(self) -> None:
