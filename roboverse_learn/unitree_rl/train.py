@@ -59,7 +59,6 @@ def train(args):
         wandb.init(project=args.wandb, name=args.run_name)
 
     log_dir = get_log_dir(args, scenario, args.log_dir)
-    resume_dir = get_log_dir(args, scenario, args.load_run)
     task_wrapper = get_class(args.task, suffix="Task")
     task_env = task_wrapper(scenario)
 
@@ -89,6 +88,7 @@ def train(args):
             # args=args,
         )
     if args.load_run:
+        resume_dir = get_log_dir(args, scenario, args.load_run)
         ppo_runner.load(resume_dir + f"/model_{args.checkpoint}.pt")
     ppo_runner.learn(num_learning_iterations=task_config.ppo_cfg.runner.max_iterations, init_at_random_ep_len=True)
 
