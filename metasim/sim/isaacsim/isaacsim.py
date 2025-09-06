@@ -122,6 +122,7 @@ class IsaacsimHandler(BaseSimHandler):
                 raise ValueError(f"Unsupported camera type: {type(camera)}")
 
     def launch(self) -> None:
+        super().launch()
         self._init_scene()
         self._load_robots()
         self._load_sensors()
@@ -346,8 +347,15 @@ class IsaacsimHandler(BaseSimHandler):
                 quat_world=camera_inst.data.quat_w_world,
                 intrinsics=torch.tensor(camera.intrinsics, device=self.device)[None, ...].repeat(self.num_envs, 1, 1),
             )
-
-        return TensorState(objects=object_states, robots=robot_states, cameras=camera_states)
+        extras = self.get_extra()
+        for key, extra_value in extras.items():
+            if isinstance(extra_value, dict):
+                for rname, rvalue in extra_value.items():
+                    if hasattr(robot_states[rname], "extra"):
+                        robot_states[rname].extra[key] = rvalue
+                    else:
+                        robot_states[rname].extra = {key: rvalue}
+        return TensorState(objects=object_states, robots=robot_states, cameras=camera_states, extras=extras)
 
     def set_dof_targets(self, actions: torch.Tensor) -> None:
         # TODO: support set torque

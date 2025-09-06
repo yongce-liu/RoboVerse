@@ -14,8 +14,9 @@ from metasim.sim import BaseSimHandler
 from metasim.utils import configclass
 from metasim.utils.humanoid_robot_util import contact_forces_tensor, get_euler_xyz_tensor, robot_rotation_tensor
 from roboverse_learn.unitree_rl.helper.utils import torch_rand_float
-
-from .base_terrain import TerrainConfig
+from metasim.queries.base import BaseQueryType
+from roboverse_learn.unitree_rl.configs.optional_queries import NetContactForce
+from roboverse_learn.unitree_rl.configs.base_terrain import TerrainConfig
 
 
 # Training Config
@@ -433,6 +434,8 @@ class BaseLeggedTaskCfg:
         }
     ]
     """Initial states for the environment. Only used for legged robots, e.g., go2-12dof, g1-12dof, h1-12dof."""
+    extra_spec: dict[str, BaseQueryType] = {"contact_forces": NetContactForce()}
+
 
     def __post_init__(self):
         # super().__post_init__()

@@ -55,6 +55,8 @@ class IsaaclabHandler(BaseSimHandler):
 
         # Always setup the environment (this handles both first run and subsequent runs)
         self._setup_environment()
+        # Bind optional queries if provided
+        super().launch()
 
     def _launch_simulation_app(self) -> None:
         """Launch the simulation application - only called once"""
@@ -466,6 +468,11 @@ class IsaaclabHandler(BaseSimHandler):
             )
 
         extras = self.get_extra()  # extra observation
+        # Attach per-robot extra information to robot_states
+        for key, extra_value in extras.items():
+            if isinstance(extra_value, dict):
+                for rname, rvalue in extra_value.items():
+                    robot_states[rname].extra[key] = rvalue
         return TensorState(objects=object_states, robots=robot_states, cameras=camera_states, extras=extras)
 
     def get_pos(self, obj_name: str, env_ids: list[int] | None = None) -> torch.FloatTensor:

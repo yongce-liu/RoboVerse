@@ -197,7 +197,7 @@ class G1Dof29WalkingTask(Humanoid):
         sin_pos_l = sin_pos.clone()
         sin_pos_r = sin_pos.clone()
         self.ref_dof_pos = torch.zeros(
-            self.num_envs, self.handler.robot_num_dof, device=self.device, requires_grad=False
+            self.num_envs, self.robot.num_joints, device=self.device, requires_grad=False
         )
 
         # Scale gait amplitude by command magnitude so zero command => no gait

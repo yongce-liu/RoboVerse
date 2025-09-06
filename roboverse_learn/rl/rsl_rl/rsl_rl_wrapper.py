@@ -28,7 +28,7 @@ class RslRlWrapper(BaseTaskEnv, VecEnv):
 
 
 
-        if SimType(scenario.simulator) not in [SimType.ISAACGYM,SimType.ISAACLAB, SimType.GENESIS]:
+        if SimType(scenario.simulator) not in [SimType.ISAACGYM,SimType.ISAACLAB, SimType.ISAACSIM, SimType.GENESIS]:
             raise NotImplementedError(
                 f"RslRlWrapper in Roboverse now only supports {SimType.ISAACGYM}, but got {scenario.simulator}"
             )

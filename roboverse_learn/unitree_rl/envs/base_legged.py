@@ -16,13 +16,14 @@ from metasim.utils.humanoid_robot_util import (
     robot_rotation_tensor,
     robot_velocity_tensor,
 )
+from metasim.queries.base import BaseQueryType
 from metasim.utils.math import quat_apply, quat_rotate_inverse, wrap_to_pi
 from metasim.utils.state import TensorState
 from metasim.task.base import BaseTaskEnv
 from roboverse_learn.rl.rsl_rl.rsl_rl_wrapper import RslRlWrapper
 from roboverse_learn.unitree_rl.configs.base_legged import BaseLeggedTaskCfg
 from roboverse_learn.unitree_rl.helper.utils import get_body_reindexed_indices_from_substring, torch_rand_float
-
+from metasim.constants import SimType
 
 class LeggedRobot(RslRlWrapper):
     """
@@ -118,15 +119,11 @@ class LeggedRobot(RslRlWrapper):
         - Base roll/pitch exceeds configured thresholds (approximately fall-over).
         """
         # Contact-based termination
-        try:
-            contact_forces = contact_forces_tensor(env_states, self.robot.name)
-            # termination_contact_indices is computed from robot config in _parse_rigid_body_indices
-            term_idx = self.termination_contact_indices
-            contact_mag = torch.norm(contact_forces[:, term_idx, :], dim=-1)  # [N, K]
-            contact_violation = torch.any(contact_mag > 1.0, dim=1)  # [N]
-        except Exception:
-            # If contact forces are unavailable, skip this criterion
-            contact_violation = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
+        contact_forces = contact_forces_tensor(env_states, self.robot.name)
+        # termination_contact_indices is computed from robot config in _parse_rigid_body_indices
+        term_idx = self.termination_contact_indices
+        contact_mag = torch.norm(contact_forces[:, term_idx, :], dim=-1)  # [N, K]
+        contact_violation = torch.any(contact_mag > 1.0, dim=1)  # [N]
 
         # Orientation-based termination (roll/pitch)
         base_quat = robot_rotation_tensor(env_states, self.robot.name)
@@ -136,6 +133,9 @@ class LeggedRobot(RslRlWrapper):
         orient_violation = torch.logical_or(roll_excess, pitch_excess)
 
         return torch.logical_or(contact_violation, orient_violation)
+
+    def _extra_spec(self) -> dict[str, BaseQueryType]:
+        return self.cfg.extra_spec
 
     def compute_reward(self, envstate: TensorState):
         """Compute all the reward from the states provided."""
@@ -410,9 +410,18 @@ class LeggedRobot(RslRlWrapper):
         self.feet_indices = get_body_reindexed_indices_from_substring(
             self.handler, robot.name, feet_names, device=self.device
         )
-        self.termination_contact_indices = get_body_reindexed_indices_from_substring(
-            self.handler, robot.name, termination_contact_names, device=self.device
-        )
+        if SimType(self.scenario.simulator) is SimType.ISAACSIM:
+            names = self.handler.contact_sensor.body_names
+            termination_contact_indices = []
+            for i, body_name in enumerate(names):
+                for term_name in termination_contact_names:
+                    if term_name in body_name:
+                        termination_contact_indices.append(i)
+            self.termination_contact_indices = torch.tensor(termination_contact_indices, device=self.device)
+        elif SimType(self.scenario.simulator) is SimType.ISAACGYM:
+            self.termination_contact_indices = get_body_reindexed_indices_from_substring(
+                self.handler, robot.name, termination_contact_names, device=self.device
+            )
         self.penalised_contact_indices = get_body_reindexed_indices_from_substring(
             self.handler, robot.name, penalised_contact_names, device=self.device
         )

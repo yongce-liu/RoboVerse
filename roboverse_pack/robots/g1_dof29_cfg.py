@@ -16,7 +16,7 @@ class G1Dof29Cfg(RobotCfg):
     mjcf_path = xml_path
     enabled_gravity: bool = True
     fix_base_link: bool = False
-    enabled_self_collisions: bool = False
+    enabled_self_collisions: bool = True
     isaacgym_flip_visual_attachments: bool = False
     isaacgym_read_mjcf = False
     collapse_fixed_joints: bool = True
