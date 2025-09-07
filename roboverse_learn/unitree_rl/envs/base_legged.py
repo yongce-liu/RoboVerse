@@ -422,6 +422,8 @@ class LeggedRobot(RslRlWrapper):
             self.termination_contact_indices = get_body_reindexed_indices_from_substring(
                 self.handler, robot.name, termination_contact_names, device=self.device
             )
+        else:
+            raise NotImplementedError(f"Simulator {self.scenario.simulator} not supported yet.")
         self.penalised_contact_indices = get_body_reindexed_indices_from_substring(
             self.handler, robot.name, penalised_contact_names, device=self.device
         )

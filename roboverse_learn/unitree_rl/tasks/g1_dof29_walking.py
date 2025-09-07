@@ -37,7 +37,7 @@ class G1Dof29WalkingCfg(BaseLeggedTaskCfg):
     task_name = "g1_dof29_walking"
     env_spacing: float = 1.0
     max_episode_length_s: int = 24
-    control = BaseLeggedTaskCfg.ControlCfg(action_scale=0.5, action_offset=True, torque_limit_scale=0.85)
+    control = BaseLeggedTaskCfg.ControlCfg(action_scale=0.25, action_offset=True, torque_limit_scale=0.85)
 
     # Initial state for the specific robot (no hand joints)
     init_states = [

@@ -382,7 +382,9 @@ class IsaacsimHandler(BaseSimHandler):
         for i, robot in enumerate(self.robots):
             robot_inst = self.scene.articulations[robot.name]
             actionable_joint_ids = [
-                robot_inst.joint_names.index(jn) for jn in robot.actuators if robot.actuators[jn].fully_actuated
+                robot_inst.joint_names.index(jn)
+                for jn in self._get_joint_names(robot.name, sort=False)
+                if robot.actuators[jn].fully_actuated
             ]
             if self._manual_pd_on[i]:
                 robot_inst.set_joint_effort_target(
