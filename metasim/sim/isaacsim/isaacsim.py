@@ -52,6 +52,7 @@ class IsaacsimHandler(BaseSimHandler):
         self._step_counter = 0
         self._is_closed = False
         self.render_interval = 4  # TODO: fix hardcode
+        self._manual_pd_on = []
 
     def _init_scene(self) -> None:
         """
@@ -378,15 +379,21 @@ class IsaacsimHandler(BaseSimHandler):
 
         # Apply actions to all robots
         start_idx = 0
-        for robot in self.robots:
+        for i, robot in enumerate(self.robots):
             robot_inst = self.scene.articulations[robot.name]
             actionable_joint_ids = [
                 robot_inst.joint_names.index(jn) for jn in robot.actuators if robot.actuators[jn].fully_actuated
             ]
-            robot_inst.set_joint_position_target(
-                action_tensor_all[:, start_idx : start_idx + len(actionable_joint_ids)],
-                joint_ids=actionable_joint_ids,
-            )
+            if self._manual_pd_on[i]:
+                robot_inst.set_joint_effort_target(
+                    action_tensor_all[:, start_idx : start_idx + len(actionable_joint_ids)],
+                    joint_ids=actionable_joint_ids,
+                )
+            else:
+                robot_inst.set_joint_position_target(
+                    action_tensor_all[:, start_idx : start_idx + len(actionable_joint_ids)],
+                    joint_ids=actionable_joint_ids,
+                )
             start_idx += len(actionable_joint_ids)
 
     def _simulate(self):
@@ -418,12 +425,13 @@ class IsaacsimHandler(BaseSimHandler):
             actuators={
                 jn: ImplicitActuatorCfg(
                     joint_names_expr=[jn],
-                    stiffness=actuator.stiffness,
-                    damping=actuator.damping,
+                    stiffness=0.0,
+                    damping=0.0,
                 )
                 for jn, actuator in robot.actuators.items()
             },
         )
+        self._manual_pd_on.append(any(mode == "effort" for mode in robot.control_type.values()))
         cfg.prim_path = f"/World/envs/env_.*/{robot.name}"
         cfg.spawn.usd_path = os.path.abspath(robot.usd_path)
         cfg.spawn.rigid_props.disable_gravity = not robot.enabled_gravity
