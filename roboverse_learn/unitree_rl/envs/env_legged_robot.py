@@ -16,13 +16,6 @@ from roboverse_learn.unitree_rl.envs.env_base import AgentEnv, MasterSimulator
 from roboverse_learn.unitree_rl.helper.utils import get_euler_xyz, get_indices_from_substring
 
 
-@dataclass
-class HistoryBuffer:
-    actions: torch.Tensor | None = None
-    joint_pos: torch.Tensor | None = None
-    joint_vel: torch.Tensor | None = None
-
-
 class LeggedRobotEnv(AgentEnv):
     """A base task env for legged robots."""
     def __init__(self, config: BaseCfg, simulator: MasterSimulator, robot: RobotCfg) -> None:
@@ -136,7 +129,7 @@ class LeggedRobotEnv(AgentEnv):
 
         self.up_axis_idx = 2
         self.gravity_vec = torch.tensor(self.get_axis_params(-1.0, self.up_axis_idx), device=self.device, dtype=torch.float).repeat((self.num_envs, 1))
-        self.forward_vec = torch.tensor([1.0, 0.0, 0.0], dtype=torch.float32, device=self.device).repeat((self.num_envs, 1))
+        self.forward_vec = torch.tensor([1.0, 0.0, 0.0], dtype=torch.float, device=self.device).repeat((self.num_envs, 1))
         self.projected_gravity = quat_rotate_inverse(self.base_quat, self.gravity_vec)
 
         # self.obs_buf = torch.zeros(self.num_envs, self.num_obs, device=self.device, dtype=torch.float)
@@ -174,13 +167,9 @@ class LeggedRobotEnv(AgentEnv):
         # )
 
         # history buffer for reward computation
-        self.history_buffer = deque(maxlen=1)
-        for _ in range(self.history_buffer.maxlen):
-            self.history_buffer.append(
-                HistoryBuffer(
-                    actions=torch.zeros(self.num_envs, self.num_actions, dtype=torch.float, device=self.device, requires_grad=False),
-                    joint_vel=torch.zeros(self.num_envs, self.num_actions, dtype=torch.float, device=self.device, requires_grad=False))
-                )
+        self.history_buffer = {}
+        self.history_buffer['actions'] = deque([torch.zeros(self.num_envs, self.num_actions, dtype=torch.float, device=self.device, requires_grad=False)], maxlen=1)
+        self.history_buffer['joint_vel'] = deque([torch.zeros(self.num_envs, self.num_actions, dtype=torch.float, device=self.device, requires_grad=False)], maxlen=1)
 
         # self.last_contacts = torch.zeros(
             # self.num_envs, len(self.feet_indices), dtype=torch.bool, device=self.device, requires_grad=False
@@ -207,14 +196,15 @@ class LeggedRobotEnv(AgentEnv):
         self._resample_commands(env_ids)
 
         # reset state buffer in the wrapper
+        for _key, _val in self.history_buffer.items():
+            for _item in range(len(_val)):
+                _item[env_ids] = 0.0
+
         # self.actions[env_ids] = 0.0
-        self.last_actions[env_ids] = 0.0
-        self.last_last_actions[env_ids] = 0.0
-        self.last_dof_vel[env_ids] = 0.0
-        self.episode_length_buf[env_ids] = 0
+        self._episode_steps[env_ids] = 0
         # self.feet_air_time[env_ids] = 0.0
         # self.base_quat[env_ids] = (
-        #     torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device, dtype=torch.float32)
+        #     torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device, dtype=torch.float)
         #     .unsqueeze(0)
         #     .repeat(len(env_ids), 1)
         # )
