@@ -134,9 +134,9 @@ class LeggedRobotEnv(AgentEnv):
         # self._episode_steps = torch.zeros(self.num_envs, device=self.device, dtype=torch.int)
         self.actions = torch.zeros(size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device, requires_grad=False)
         self.obs_buf_history = deque([torch.zeros(size=(self.num_envs, self.cfg.num_obs_single), dtype=torch.float, device=self.device, requires_grad=False) for _ in range(self.cfg.obs_len_history)], maxlen=self.cfg.obs_len_history)
-        self.obs_buf = torch.stack(list(self.obs_buf_history), dim=1).to(self.device)
+        self.obs_buf = torch.cat(list(self.obs_buf_history), dim=1).to(self.device)
         self.priv_obs_buf_history = deque([torch.zeros(size=(self.num_envs, self.cfg.num_priv_obs_single), dtype=torch.float, device=self.device, requires_grad=False)], maxlen=self.cfg.priv_obs_len_history)
-        self.priv_obs_buf = None if self.cfg.num_priv_obs_single == 0 else torch.stack(list(self.priv_obs_buf_history), dim=1).to(self.device)
+        self.priv_obs_buf = None if self.cfg.num_priv_obs_single == 0 else torch.cat(list(self.priv_obs_buf_history), dim=1).to(self.device)
         self.rew_buf = torch.zeros(size=(self.num_envs,), device=self.device, dtype=torch.float)
         self.reset_buf = torch.ones(size=(self.num_envs,), device=self.device, dtype=torch.bool)
         self.time_out_buf = torch.zeros(size=(self.num_envs,), device=self.device, dtype=torch.bool)
@@ -299,8 +299,9 @@ class LeggedRobotEnv(AgentEnv):
         self.rew_buf[:] = self._reward(env_states)
         self.obs_buf_history.append(self._observation(env_states))
         self.priv_obs_buf_history.append(self._privileged_observation(env_states))
-        self.obs_buf[:] = torch.stack(list(self.obs_buf_history), dim=1).clip(-self.cfg.normalization.clip_observations, self.cfg.normalization.clip_observations).to(self.device)
-        self.priv_obs_buf[:] = torch.stack(list(self.priv_obs_buf_history), dim=1).clip(-self.cfg.normalization.clip_observations, self.cfg.normalization.clip_observations).to(self.device)
+        self.obs_buf[:] = torch.cat(list(self.obs_buf_history), dim=1).clip(-self.cfg.normalization.clip_observations, self.cfg.normalization.clip_observations).to(self.device)
+        if self.priv_obs_buf is not None:
+            self.priv_obs_buf[:] = torch.cat(list(self.priv_obs_buf_history), dim=1).clip(-self.cfg.normalization.clip_observations, self.cfg.normalization.clip_observations).to(self.device)
         self.time_out_buf[:] = self._time_out(env_states)
         self.reset_buf[:] = torch.logical_or(self._terminated(env_states), self.time_out_buf)
 
@@ -371,13 +372,12 @@ class LeggedRobotEnv(AgentEnv):
 
     def _terminated(self, env_states):
         reset_buf = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
-        for name in self.robots_name:
-            contact_forces = env_states.robots[name].extra["contact_forces"]
-            reset_buf |= torch.any(
-                torch.norm(contact_forces[:, self.termination_contact_indices[name], :], dim=-1) > 1.0, dim=1
-            )
-            rpy = get_euler_xyz(env_states.robots[name].root_state[:, 3:7])
-            reset_buf |= torch.logical_or(torch.abs(rpy[:, 1]) > 1.0, torch.abs(rpy[:, 0]) > 0.8)
+        contact_forces = env_states.robots[self.name].extra["contact_forces"]
+        reset_buf |= torch.any(
+            torch.norm(contact_forces[:, self.termination_contact_indices, :], dim=-1) > 1.0, dim=1
+        )
+        rpy = get_euler_xyz(env_states.robots[self.name].root_state[:, 3:7])
+        reset_buf |= torch.logical_or(torch.abs(rpy[:, 1]) > 1.0, torch.abs(rpy[:, 0]) > 0.8)
         return reset_buf
 
     def _resample_commands(self, env_ids):
