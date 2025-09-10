@@ -94,6 +94,10 @@ class LeggedRobotEnv(AgentEnv):
         self.reward_extras['base_height_target'] = self.cfg.rewards.extras.base_height_target
         self.reward_extras['dt'] = self.dt
         self.reward_extras['penalised_contact_indices'] = self.penalised_contact_indices
+        self.reward_extras['termination_contact_indices'] = self.termination_contact_indices
+        self.reward_extras["torque_limits"] = self.torque_limits
+        for _key, _val in class_to_dict(self.cfg.rewards.extras):
+            self.reward_extras[_key] = _val
 
     def _init_reward_function(self):
         """Prepares a list of reward functions, which will be called to compute the total reward."""
@@ -132,10 +136,12 @@ class LeggedRobotEnv(AgentEnv):
         self.gravity_vec = torch.tensor(self.get_axis_params(-1.0, self.up_axis_idx), device=self.device, dtype=torch.float).repeat((self.num_envs, 1))
         self.forward_vec = torch.tensor([1.0, 0.0, 0.0], dtype=torch.float, device=self.device).repeat((self.num_envs, 1))
         self.projected_gravity = quat_rotate_inverse(self.base_quat, self.gravity_vec)
+        self.contact_forces = torch.zeros(size=(self.num_envs, len(self.sorted_body_names), 3), device=self.device, dtype=torch.float)
 
         # self.common_step_counter = 0
         # self._episode_steps = torch.zeros(self.num_envs, device=self.device, dtype=torch.int)
         self.actions = torch.zeros(size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device, requires_grad=False)
+        self.torques = torch.zeros(size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device, requires_grad=False)
         self.obs_buf_history = deque([torch.zeros(size=(self.num_envs, self.cfg.num_obs_single), dtype=torch.float, device=self.device, requires_grad=False) for _ in range(self.cfg.obs_len_history)], maxlen=self.cfg.obs_len_history)
         self.obs_buf = torch.cat(list(self.obs_buf_history), dim=1).to(self.device)
         self.priv_obs_buf_history = deque([torch.zeros(size=(self.num_envs, self.cfg.num_priv_obs_single), dtype=torch.float, device=self.device, requires_grad=False)], maxlen=self.cfg.priv_obs_len_history)
@@ -153,7 +159,6 @@ class LeggedRobotEnv(AgentEnv):
                 self.cfg.normalization.obs_scales.ang_vel,
             ], device=self.device, requires_grad=False)
 
-        # self.contact_forces = torch.zeros(self.num_envs, device=self.device, dtype=torch.float)
         # self.feet_air_time = torch.zeros(
         #     self.num_envs, self.feet_indices.shape[0], dtype=torch.float, device=self.device, requires_grad=False
         # )
@@ -275,8 +280,8 @@ class LeggedRobotEnv(AgentEnv):
         self.actions[:] = actions.clip(-clip_actions_limit, clip_actions_limit).to(self.device)
         env_states = self.get_states()
         for _ in range(self.decimation):
-            torques = self._compute_torques(env_states, self.actions)
-            env_states = self._physics_step(torques)
+            self.torques[:] = self._compute_torques(env_states, self.actions)
+            env_states = self._physics_step(self.torques)
         self._post_physics_step(env_states)
         return self.obs_buf, self.priv_obs_buf, self.rew_buf, self.reset_buf, self.extras
 
@@ -293,6 +298,7 @@ class LeggedRobotEnv(AgentEnv):
         self.base_lin_vel[:] = quat_rotate_inverse(self.base_quat, robot_state.root_state[:, 7:10])
         self.base_ang_vel[:] = quat_rotate_inverse(self.base_quat, robot_state.root_state[:, 10:13])
         self.projected_gravity[:] = quat_rotate_inverse(self.base_quat, self.gravity_vec)
+        self.contact_forces[:] = robot_state.extra['contact_forces']
 
         self._post_physics_step_callback()
 
@@ -340,8 +346,13 @@ class LeggedRobotEnv(AgentEnv):
         self.reward_extras["base_lin_vel"] = self.base_lin_vel
         self.reward_extras["base_ang_vel"] = self.base_ang_vel
         self.reward_extras["projected_gravity"] = self.projected_gravity
-        self.reward_extras['contact_forces'] = env_states.robots[self.name].extra['contact_forces']
+        self.reward_extras['contact_forces'] = self.contact_forces
         self.reward_extras["history_buffer"] = self.history_buffer
+        self.reward_extras["torques"] = self.torques
+        self.reward_extras["actions"] = self.actions
+        self.reward_extras["reset_buf"] = self.reset_buf
+        self.reward_extras["time_out_buf"] = self.time_out_buf
+        self.reward_extras["commands"] = self.commands * self.commands_scale
 
     def _push_robots(self, env_states: TensorState):
         """Randomly set robot's root velocity to simulate a push."""
