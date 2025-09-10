@@ -82,7 +82,6 @@ class AgentEnv:
     def _register_initial_state(self, init_state: RobotState) -> None:
 
         self.simulator.initial_states.robots[self.name]
-        # 只更新 init_state 中非 None 的属性
         for key, value in vars(init_state).items():
             if value is not None:
                 setattr(self.simulator.initial_states.robots[self.name], key, value)

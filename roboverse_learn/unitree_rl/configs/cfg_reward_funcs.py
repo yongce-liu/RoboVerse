@@ -1,43 +1,30 @@
-"""Reward functions for legged robot"""
-
 from __future__ import annotations
 
 import torch
 from metasim.types import TensorState
 
-# =====================reward functions=====================
 def reward_lin_vel_z(states: TensorState, robot_name: str, extras: dict[str, torch.Tensor]) -> torch.Tensor:
     """Reward for z linear velocity."""
     return torch.square(extras["base_lin_vel"][:, 2])
 
-
 def reward_ang_vel_xy(states: TensorState, robot_name: str, extras: dict[str, torch.Tensor]) -> torch.Tensor:
-    # xy = torch.norm(states.robots[robot_name].extra["base_ang_vel"][:, :2], dim=1)
-    # db = getattr(cfg.reward_cfg, "angvel_xy_deadband", 0.25)
-    # k = getattr(cfg.reward_cfg, "angvel_xy_k", 1.0)
-    # return torch.square(torch.clamp(xy - db, min=0.0)) * k
-    return torch.sum(torch.square(states.robots[robot_name].extra["base_ang_vel"][:, :2]), dim=1)
+    return torch.sum(torch.square(extras["base_ang_vel"][:, :2]), dim=1)
 
-
-def reward_orientation(states, robot_name: str, cfg) -> torch.Tensor:
+def reward_orientation(states: TensorState, robot_name: str, extras: dict[str, torch.Tensor]) -> torch.Tensor:
     """
     Penalize deviation from flat base orientation.
     """
-    quat_mismatch = torch.exp(
-        -torch.sum(torch.abs(states.robots[robot_name].extra["base_euler_xyz"][:, :2]), dim=1) * 10
-    )
-    orientation = torch.exp(-torch.norm(states.robots[robot_name].extra["projected_gravity"][:, :2], dim=1) * 20)
-    allow_roll_gate = _vy_gate(states.robots[robot_name], getattr(cfg.reward_cfg, "upright_gate_vy", 0.12))
-    return (quat_mismatch + orientation) / 2.0 * allow_roll_gate
+    quat_mismatch = torch.exp(-torch.sum(torch.abs(extras["base_euler_xyz"][:, :2]), dim=1) * 10)
+    orientation = torch.exp(-torch.norm(extras["projected_gravity"][:, :2], dim=1) * 20)
+    return (quat_mismatch + orientation) / 2.0
 
-
-def reward_orientation_sq(states, robot_name: str, cfg) -> torch.Tensor:
+def reward_orientation_sq(states: TensorState, robot_name: str, extras: dict[str, torch.Tensor]) -> torch.Tensor:
     """
     Penalize deviation from flat base orientation.
     """
-    return torch.sum(torch.square(states.robots[robot_name].extra["projected_gravity"][:, :2]), dim=1)
+    return torch.sum(torch.square(extras["projected_gravity"][:, :2]), dim=1)
 
-
+"""
 def reward_base_height(states, robot_name: str, cfg):
     base = states.robots[robot_name]
     z_root = base.root_state[:, 2]
@@ -70,49 +57,47 @@ def reward_base_height(states, robot_name: str, cfg):
     err_db = torch.clamp(torch.abs(err) - db, min=0.0)
     sigma = getattr(cfg.reward_cfg, "base_height_sigma", 0.04)  # 4 cm scale
     return torch.exp(-(err_db**2) / (2 * sigma**2))
+"""
 
-
-def reward_base_height_sq(states, robot_name: str, cfg) -> torch.Tensor:
+def reward_base_height_sq(states: TensorState, robot_name: str, extras: dict[str, torch.Tensor]) -> torch.Tensor:
     # Penalize base height away from target
     base_height = states.robots[robot_name].root_state[:, 2]
-    return torch.square(base_height - cfg.reward_cfg.base_height_target)
+    return torch.square(base_height - extras["base_height_target"])
 
-
-def reward_torques(states, robot_name: str, cfg) -> torch.Tensor:
+def reward_torques(states: TensorState, robot_name: str, extras: dict[str, torch.Tensor]) -> torch.Tensor:
     """
     Penalize high torques.
     """
     return torch.sum(torch.square(states.robots[robot_name].joint_effort_target), dim=1)
 
-
-def reward_dof_vel(states, robot_name: str, cfg) -> torch.Tensor:
+def reward_dof_vel(states: TensorState, robot_name: str, extras: dict[str, torch.Tensor]) -> torch.Tensor:
     """
     Penalize high DOF velocities.
     """
     return torch.sum(torch.square(states.robots[robot_name].joint_vel), dim=1)
 
 
-def reward_dof_acc(states, robot_name: str, cfg) -> torch.Tensor:
+def reward_dof_acc(states: TensorState, robot_name: str, extras: dict[str, torch.Tensor]) -> torch.Tensor:
     """
     Penalize high DOF accelerations.
     """
     return torch.sum(
-        torch.square((states.robots[robot_name].extra["last_dof_vel"] - states.robots[robot_name].joint_vel) / cfg.dt),
+        torch.square((extras["history_buffer"]["joint_vel"][-1] - states.robots[robot_name].joint_vel) / extras["dt"]),
         dim=1,
     )
 
 
-def reward_action_rate(states, robot_name: str, cfg) -> torch.Tensor:
+def reward_action_rate(states: TensorState, robot_name: str, extras: dict[str, torch.Tensor]) -> torch.Tensor:
     """
     Penalize high action rate.
     """
     return torch.sum(
-        torch.square(states.robots[robot_name].extra["last_actions"] - states.robots[robot_name].extra["actions"]),
+        torch.square(extras["last_actions"] - extras["actions"]),
         dim=1,
     )
 
 
-def reward_collision(states, robot_name: str, cfg) -> torch.Tensor:
+def reward_collision(states: TensorState, robot_name: str, extras: dict[str, torch.Tensor]) -> torch.Tensor:
     """
     Penalize collisions.
     """
@@ -120,7 +105,7 @@ def reward_collision(states, robot_name: str, cfg) -> torch.Tensor:
         1.0
         * (
             torch.norm(
-                states.robots[robot_name].extra["contact_forces"][:, cfg.penalised_contact_indices, :],
+                extras["contact_forces"][:, extras["penalised_contact_indices"], :],
                 dim=-1,
             )
             > 0.1
@@ -130,14 +115,14 @@ def reward_collision(states, robot_name: str, cfg) -> torch.Tensor:
 
 
 # FIXME, Here the reset buf has been logical OR using time_out_buf
-# def reward_termination(states, robot_name: str, cfg) -> torch.Tensor:
+# def reward_termination(states: TensorState, robot_name: str, extras: dict[str, torch.Tensor]) -> torch.Tensor:
 #     """
 #     Reward for termination, used to reset the environment.
 #     """
-#     return states.robots[robot_name].extra["reset_buf"] * ~states.robots[robot_name].extra["time_out_buf"]
+#     return extras["reset_buf"] * ~extras["time_out_buf"]
 
 
-def reward_dof_pos_limits(states, robot_name: str, cfg) -> torch.Tensor:
+def reward_dof_pos_limits(states: TensorState, robot_name: str, extras: dict[str, torch.Tensor]) -> torch.Tensor:
     """
     Penalize DOF positions that are out of limits.
     """
@@ -146,20 +131,20 @@ def reward_dof_pos_limits(states, robot_name: str, cfg) -> torch.Tensor:
     return torch.sum(out_of_limits, dim=1)
 
 
-def reward_dof_vel_limits(states, robot_name: str, cfg) -> torch.Tensor:
+def reward_dof_vel_limits(states: TensorState, robot_name: str, extras: dict[str, torch.Tensor]) -> torch.Tensor:
     """
     Penalize high DOF velocities.
     """
     return torch.sum(
         (
             torch.abs(states.robots[robot_name].dof_vel)
-            - states.robots[robot_name].extra["dof_vel_limits"] * cfg.reward_cfg.soft_dof_vel_limit
+            - extras["dof_vel_limits"] * cfg.reward_cfg.soft_dof_vel_limit
         ).clip(min=0.0, max=1.0),
         dim=1,
     )
 
 
-def reward_torque_limits(states, robot_name: str, cfg) -> torch.Tensor:
+def reward_torque_limits(states: TensorState, robot_name: str, extras: dict[str, torch.Tensor]) -> torch.Tensor:
     """
     Penalize high torques.
     """
@@ -172,12 +157,12 @@ def reward_torque_limits(states, robot_name: str, cfg) -> torch.Tensor:
     )
 
 
-def reward_tracking_lin_vel(states, robot_name: str, cfg) -> torch.Tensor:
+def reward_tracking_lin_vel(states: TensorState, robot_name: str, extras: dict[str, torch.Tensor]) -> torch.Tensor:
     """
     Track linear velocity commands (xy axes).
     """
     lin_vel_diff = (
-        states.robots[robot_name].extra["command"][:, :2] - states.robots[robot_name].extra["base_lin_vel"][:, :2]
+        extras["command"][:, :2] - extras["base_lin_vel"][:, :2]
     )
     lin_vel_error = torch.sum(torch.square(lin_vel_diff), dim=1)
     return torch.exp(-lin_vel_error * cfg.reward_cfg.tracking_sigma), torch.mean(torch.abs(lin_vel_diff), dim=1)
@@ -189,55 +174,55 @@ def _vy_gate(base, thresh=0.12):
     return (torch.abs(base.extra["command"][:, 1]) < thresh).float()
 
 
-def reward_tracking_ang_vel(states, robot_name: str, cfg) -> torch.Tensor:
+def reward_tracking_ang_vel(states: TensorState, robot_name: str, extras: dict[str, torch.Tensor]) -> torch.Tensor:
     """
     Track angular velocity commands (yaw).
     """
     ang_vel_diff = (
-        states.robots[robot_name].extra["command"][:, 2] - states.robots[robot_name].extra["base_ang_vel"][:, 2]
+        extras["command"][:, 2] - extras["base_ang_vel"][:, 2]
     )
     ang_vel_error = torch.square(ang_vel_diff)
     return torch.exp(-ang_vel_error * cfg.reward_cfg.tracking_sigma), torch.abs(ang_vel_diff)
 
 
 # FIXME
-def reward_feet_air_time(states, robot_name: str, cfg) -> torch.Tensor:
+def reward_feet_air_time(states: TensorState, robot_name: str, extras: dict[str, torch.Tensor]) -> torch.Tensor:
     """
     Calculates the reward for feet air time.
     """
-    air_time = states.robots[robot_name].extra["feet_air_time"]
-    return air_time.sum(dim=1) * (torch.norm(states.robots[robot_name].extra["command"][:, :2], dim=1) > 0.1)
+    air_time = extras["feet_air_time"]
+    return air_time.sum(dim=1) * (torch.norm(extras["command"][:, :2], dim=1) > 0.1)
 
 
-def reward_stumble(states, robot_name: str, cfg) -> torch.Tensor:
+def reward_stumble(states: TensorState, robot_name: str, extras: dict[str, torch.Tensor]) -> torch.Tensor:
     """
     Penalize stumbling based on contact forces.
     """
     return torch.any(
-        torch.norm(states.robots[robot_name].extra["contact_forces"][:, cfg.feet_indices, :2], dim=2)
-        > 5 * torch.abs(states.robots[robot_name].extra["contact_forces"][:, cfg.feet_indices, 2]),
+        torch.norm(extras["contact_forces"][:, cfg.feet_indices, :2], dim=2)
+        > 5 * torch.abs(extras["contact_forces"][:, cfg.feet_indices, 2]),
         dim=1,
     )
 
 
 # FIXME place default dof pos better
-def reward_stand_still(states, robot_name: str, cfg) -> torch.Tensor:
+def reward_stand_still(states: TensorState, robot_name: str, extras: dict[str, torch.Tensor]) -> torch.Tensor:
     """
     Reward for standing still, penalizing deviation from default joint positions.
     """
     return torch.sum(torch.abs(states.robots[robot_name].joint_pos - cfg.default_dof_pos), dim=1) * (
-        torch.norm(states.robots[robot_name].extra["command"][:, :2], dim=1) < 0.1
+        torch.norm(extras["command"][:, :2], dim=1) < 0.1
     )
 
 
-def reward_feet_contact_forces(states, robot_name: str, cfg) -> torch.Tensor:
+def reward_feet_contact_forces(states: TensorState, robot_name: str, extras: dict[str, torch.Tensor]) -> torch.Tensor:
     """
     Penalize high contact forces on feet.
     """
     return torch.sum(
         (
             torch.norm(
-                states.robots[robot_name].extra["contact_forces"][:, cfg.feet_indices, :],
+                extras["contact_forces"][:, cfg.feet_indices, :],
                 dim=-1,
             )
             - cfg.reward_cfg.max_contact_force
@@ -246,16 +231,16 @@ def reward_feet_contact_forces(states, robot_name: str, cfg) -> torch.Tensor:
     )
 
 
-def reward_contact(states, robot_name: str, cfg) -> torch.Tensor:
-    is_stance = states.robots[robot_name].extra["gait_phase"]
-    contact = states.robots[robot_name].extra["contact_forces"][:, cfg.feet_indices, 2] > 1.0
+def reward_contact(states: TensorState, robot_name: str, extras: dict[str, torch.Tensor]) -> torch.Tensor:
+    is_stance = extras["gait_phase"]
+    contact = extras["contact_forces"][:, cfg.feet_indices, 2] > 1.0
     res = torch.sum(contact == is_stance, dim=1, dtype=torch.float32)
     return res
 
 
-def reward_feet_swing_height(states, robot_name: str, cfg) -> torch.Tensor:
-    contact = torch.norm(states.robots[robot_name].extra["contact_forces"][:, cfg.feet_indices, :3], dim=2) > 1.0
-    # leg_phase = states.robots[robot_name].extra["leg_phase"]
+def reward_feet_swing_height(states: TensorState, robot_name: str, extras: dict[str, torch.Tensor]) -> torch.Tensor:
+    contact = torch.norm(extras["contact_forces"][:, cfg.feet_indices, :3], dim=2) > 1.0
+    # leg_phase = extras["leg_phase"]
     # contact = leg_phase < 0.5 + cfg.reward_cfg.feet_full_contact_time
     feet_state = states.robots[robot_name].body_state[:, cfg.feet_indices, :]
     feet_pos = feet_state[:, :, :3]
@@ -263,14 +248,14 @@ def reward_feet_swing_height(states, robot_name: str, cfg) -> torch.Tensor:
     return torch.sum(pos_error, dim=(1))
 
 
-def reward_alive(states, robot_name: str, cfg) -> torch.Tensor:
+def reward_alive(states: TensorState, robot_name: str, extras: dict[str, torch.Tensor]) -> torch.Tensor:
     # Reward for staying alive
     return 1.0
 
 
-def reward_contact_no_vel(states, robot_name: str, cfg) -> torch.Tensor:
+def reward_contact_no_vel(states: TensorState, robot_name: str, extras: dict[str, torch.Tensor]) -> torch.Tensor:
     # Penalize contact with no velocity
-    contact = torch.norm(states.robots[robot_name].extra["contact_forces"][:, cfg.feet_indices, :3], dim=2) > 1.0
+    contact = torch.norm(extras["contact_forces"][:, cfg.feet_indices, :3], dim=2) > 1.0
     feet_state = states.robots[robot_name].body_state[:, cfg.feet_indices, :]
     feet_vel = feet_state[:, :, 7:10]
     contact_feet_vel = feet_vel * contact.unsqueeze(-1)
@@ -288,18 +273,18 @@ def reward_hip_pos(states, robot_name, cfg):
 
 
 # ==========================h1 walking========================
-def reward_joint_pos(states, robot_name: str, cfg) -> torch.Tensor:
+def reward_joint_pos(states: TensorState, robot_name: str, extras: dict[str, torch.Tensor]) -> torch.Tensor:
     """
     Calculates the reward based on the difference between the current joint positions and the target joint positions.
     """
     joint_pos = states.robots[robot_name].joint_pos.clone()
-    pos_target = states.robots[robot_name].extra["ref_dof_pos"].clone()
+    pos_target = extras["ref_dof_pos"].clone()
     diff = joint_pos - pos_target
     r = torch.exp(-2 * torch.norm(diff, dim=1)) - 0.2 * torch.norm(diff, dim=1).clamp(0, 0.5)
     return r, torch.mean(torch.abs(diff), dim=1)
 
 
-def reward_feet_distance(states, robot_name: str, cfg) -> torch.Tensor:
+def reward_feet_distance(states: TensorState, robot_name: str, extras: dict[str, torch.Tensor]) -> torch.Tensor:
     base = states.robots[robot_name]
     feet_y = base.body_state[:, cfg.feet_indices, 1]  # (B, 2)
     step_width = torch.abs(feet_y[:, 0] - feet_y[:, 1])  # (B,)
@@ -341,7 +326,7 @@ def reward_feet_distance(states, robot_name: str, cfg) -> torch.Tensor:
     return reward, step_width
 
 
-def reward_knee_distance(states, robot_name: str, cfg) -> torch.Tensor:
+def reward_knee_distance(states: TensorState, robot_name: str, extras: dict[str, torch.Tensor]) -> torch.Tensor:
     """
     Calculates the reward based on the distance between the knee of the humanoid.
     """
@@ -354,7 +339,7 @@ def reward_knee_distance(states, robot_name: str, cfg) -> torch.Tensor:
     return (torch.exp(-torch.abs(d_min) * 100) + torch.exp(-torch.abs(d_max) * 100)) / 2, knee_dist
 
 
-def reward_elbow_distance(states, robot_name: str, cfg) -> torch.Tensor:
+def reward_elbow_distance(states: TensorState, robot_name: str, extras: dict[str, torch.Tensor]) -> torch.Tensor:
     """
     Calculates the reward based on the distance between the elbow of the humanoid.
     """
@@ -367,28 +352,28 @@ def reward_elbow_distance(states, robot_name: str, cfg) -> torch.Tensor:
     return (torch.exp(-torch.abs(d_min) * 100) + torch.exp(-torch.abs(d_max) * 100)) / 2, elbow_dist
 
 
-def reward_foot_slip(states, robot_name: str, cfg) -> torch.Tensor:
+def reward_foot_slip(states: TensorState, robot_name: str, extras: dict[str, torch.Tensor]) -> torch.Tensor:
     """
     Calculates the reward for minimizing foot slip.
     """
-    contact = states.robots[robot_name].extra["contact_forces"][:, cfg.feet_indices, 2] > 5.0
+    contact = extras["contact_forces"][:, cfg.feet_indices, 2] > 5.0
     foot_speed_norm = torch.norm(states.robots[robot_name].body_state[:, cfg.feet_indices, 10:12], dim=2)
     rew = torch.sqrt(foot_speed_norm)
     rew *= contact
     return torch.sum(rew, dim=1)
 
 
-def reward_feet_contact_number(states, robot_name: str, cfg) -> torch.Tensor:
+def reward_feet_contact_number(states: TensorState, robot_name: str, extras: dict[str, torch.Tensor]) -> torch.Tensor:
     """
     Reward based on feet contact matching gait phase.
     """
-    contact = states.robots[robot_name].extra["contact_forces"][:, cfg.feet_indices, 2] > 5.0
-    stance_mask = states.robots[robot_name].extra["gait_phase"]
+    contact = extras["contact_forces"][:, cfg.feet_indices, 2] > 5.0
+    stance_mask = extras["gait_phase"]
     reward = torch.where(contact == stance_mask, 1.0, -0.3)
     return torch.mean(reward, dim=1)
 
 
-def reward_default_joint_pos(states, robot_name: str, cfg) -> torch.Tensor:
+def reward_default_joint_pos(states: TensorState, robot_name: str, extras: dict[str, torch.Tensor]) -> torch.Tensor:
     """
     Keep joint positions close to defaults (penalize yaw/roll).
     """
@@ -400,7 +385,7 @@ def reward_default_joint_pos(states, robot_name: str, cfg) -> torch.Tensor:
     return torch.exp(-yaw_roll * 100) - 0.01 * torch.norm(joint_diff, dim=1)
 
 
-def reward_upper_body_pos(states, robot_name: str, cfg) -> torch.Tensor:
+def reward_upper_body_pos(states: TensorState, robot_name: str, extras: dict[str, torch.Tensor]) -> torch.Tensor:
     """
     Keep upper body joints close to default positions.
     """
@@ -410,89 +395,89 @@ def reward_upper_body_pos(states, robot_name: str, cfg) -> torch.Tensor:
     return torch.exp(-4 * upper_body_error), upper_body_error
 
 
-def reward_base_acc(states, robot_name: str, cfg) -> torch.Tensor:
+def reward_base_acc(states: TensorState, robot_name: str, extras: dict[str, torch.Tensor]) -> torch.Tensor:
     """
     Penalize base acceleration.
     """
-    root_acc = states.robots[robot_name].extra["last_root_vel"] - states.robots[robot_name].root_state[:, 7:13]
+    root_acc = extras["last_root_vel"] - states.robots[robot_name].root_state[:, 7:13]
     rew = torch.exp(-torch.norm(root_acc, dim=1) * 3)
     return rew
 
 
-def reward_vel_mismatch_exp(states, robot_name: str, cfg) -> torch.Tensor:
+def reward_vel_mismatch_exp(states: TensorState, robot_name: str, extras: dict[str, torch.Tensor]) -> torch.Tensor:
     """
     Penalize velocity mismatch.
     """
-    lin_mismatch = torch.exp(-torch.square(states.robots[robot_name].extra["base_lin_vel"][:, 2]) * 10)
-    ang_mismatch = torch.exp(-torch.norm(states.robots[robot_name].extra["base_ang_vel"][:, :2], dim=1) * 5.0)
+    lin_mismatch = torch.exp(-torch.square(extras["base_lin_vel"][:, 2]) * 10)
+    ang_mismatch = torch.exp(-torch.norm(extras["base_ang_vel"][:, :2], dim=1) * 5.0)
     return (lin_mismatch + ang_mismatch) / 2.0
 
 
-def reward_track_vel_hard(states, robot_name: str, cfg) -> torch.Tensor:
+def reward_track_vel_hard(states: TensorState, robot_name: str, extras: dict[str, torch.Tensor]) -> torch.Tensor:
     """
     Track linear and angular velocity commands.
     """
     lin_vel_error = torch.norm(
-        states.robots[robot_name].extra["command"][:, :2] - states.robots[robot_name].extra["base_lin_vel"][:, :2],
+        extras["command"][:, :2] - extras["base_lin_vel"][:, :2],
         dim=1,
     )
     lin_vel_error_exp = torch.exp(-lin_vel_error * 10)
     ang_vel_error = torch.abs(
-        states.robots[robot_name].extra["command"][:, 2] - states.robots[robot_name].extra["base_ang_vel"][:, 2]
+        extras["command"][:, 2] - extras["base_ang_vel"][:, 2]
     )
     ang_vel_error_exp = torch.exp(-ang_vel_error * 10)
     linear_error = 0.2 * (lin_vel_error + ang_vel_error)
     return (lin_vel_error_exp + ang_vel_error_exp) / 2.0 - linear_error
 
 
-def reward_feet_clearance(states, robot_name: str, cfg) -> torch.Tensor:
+def reward_feet_clearance(states: TensorState, robot_name: str, extras: dict[str, torch.Tensor]) -> torch.Tensor:
     """
     Reward swing leg clearance.
     """
-    return states.robots[robot_name].extra["feet_clearance"]
+    return extras["feet_clearance"]
 
 
-def reward_low_speed(states, robot_name: str, cfg) -> torch.Tensor:
+def reward_low_speed(states: TensorState, robot_name: str, extras: dict[str, torch.Tensor]) -> torch.Tensor:
     """
     Penalize speed mismatch with command.
     """
-    absolute_speed = torch.abs(states.robots[robot_name].extra["base_lin_vel"][:, 0])
-    absolute_command = torch.abs(states.robots[robot_name].extra["command"][:, 0])
+    absolute_speed = torch.abs(extras["base_lin_vel"][:, 0])
+    absolute_command = torch.abs(extras["command"][:, 0])
     speed_too_low = absolute_speed < 0.5 * absolute_command
     speed_too_high = absolute_speed > 1.2 * absolute_command
     speed_desired = ~(speed_too_low | speed_too_high)
-    sign_mismatch = torch.sign(states.robots[robot_name].extra["base_lin_vel"][:, 0]) != torch.sign(
-        states.robots[robot_name].extra["command"][:, 0]
+    sign_mismatch = torch.sign(extras["base_lin_vel"][:, 0]) != torch.sign(
+        extras["command"][:, 0]
     )
-    reward = torch.zeros_like(states.robots[robot_name].extra["base_lin_vel"][:, 0])
+    reward = torch.zeros_like(extras["base_lin_vel"][:, 0])
     reward[speed_too_low] = -1.0
     reward[speed_too_high] = 0.0
     reward[speed_desired] = 1.2
     reward[sign_mismatch] = -2.0
-    return reward * (states.robots[robot_name].extra["command"][:, 0].abs() > 0.1)
+    return reward * (extras["command"][:, 0].abs() > 0.1)
 
 
-def reward_action_smoothness(states, robot_name: str, cfg) -> torch.Tensor:
+def reward_action_smoothness(states: TensorState, robot_name: str, extras: dict[str, torch.Tensor]) -> torch.Tensor:
     """
     Penalize jerk in actions.
     """
     term_1 = torch.sum(
-        torch.square(states.robots[robot_name].extra["last_actions"] - states.robots[robot_name].extra["actions"]),
+        torch.square(extras["last_actions"] - extras["actions"]),
         dim=1,
     )
     term_2 = torch.sum(
         torch.square(
-            states.robots[robot_name].extra["actions"]
-            + states.robots[robot_name].extra["last_last_actions"]
-            - 2 * states.robots[robot_name].extra["last_actions"]
+            extras["actions"]
+            + extras["last_last_actions"]
+            - 2 * extras["last_actions"]
         ),
         dim=1,
     )
-    term_3 = 0.05 * torch.sum(torch.abs(states.robots[robot_name].extra["actions"]), dim=1)
+    term_3 = 0.05 * torch.sum(torch.abs(extras["actions"]), dim=1)
     return term_1 + term_2 + term_3
 
 
-def reward_waist_joint_stability(states, robot_name: str, cfg) -> torch.Tensor:
+def reward_waist_joint_stability(states: TensorState, robot_name: str, extras: dict[str, torch.Tensor]) -> torch.Tensor:
     """
     Reward for keeping waist joints (yaw, roll, pitch) stable and close to default positions.
     This directly penalizes waist joint deviations and velocities to prevent shaking.

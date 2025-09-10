@@ -90,7 +90,10 @@ class LeggedRobotEnv(AgentEnv):
         soft_dof_pos_limits = torch.zeros_like(self.dof_pos_limits)
         soft_dof_pos_limits[:, 0] = _mid - 0.5 * _diff * self.cfg.rewards.extras.soft_dof_pos_limit
         soft_dof_pos_limits[:, 1] = _mid + 0.5 * _diff * self.cfg.rewards.extras.soft_dof_pos_limit
-        self.reward_extras['soft_dof_pos_limits'] = soft_dof_pos_limits
+        self.reward_extras['dof_pos_limits'] = soft_dof_pos_limits
+        self.reward_extras['base_height_target'] = self.cfg.rewards.extras.base_height_target
+        self.reward_extras['dt'] = self.dt
+        self.reward_extras['penalised_contact_indices'] = self.penalised_contact_indices
 
     def _init_reward_function(self):
         """Prepares a list of reward functions, which will be called to compute the total reward."""
@@ -293,7 +296,7 @@ class LeggedRobotEnv(AgentEnv):
 
         self._post_physics_step_callback()
 
-        self._update_reward_extra(env_states)
+        self._update_rewards_extras(env_states)
 
         # gym-style return values
         self.rew_buf[:] = self._reward(env_states)
@@ -332,8 +335,13 @@ class LeggedRobotEnv(AgentEnv):
             heading = torch.atan2(forward[:, 1], forward[:, 0])
             self.commands[:, 2] = torch.clip(0.5 * wrap_to_pi(self.commands[:, 3] - heading), -1.0, 1.0)
 
-    def _update_reward_extra(self, env_states):
+    def _update_rewards_extras(self, env_states: TensorState):
+        self.reward_extras["base_euler_xyz"] = self.base_euler_xyz
         self.reward_extras["base_lin_vel"] = self.base_lin_vel
+        self.reward_extras["base_ang_vel"] = self.base_ang_vel
+        self.reward_extras["projected_gravity"] = self.projected_gravity
+        self.reward_extras['contact_forces'] = env_states.robots[self.name].extra['contact_forces']
+        self.reward_extras["history_buffer"] = self.history_buffer
 
     def _push_robots(self, env_states: TensorState):
         """Randomly set robot's root velocity to simulate a push."""
