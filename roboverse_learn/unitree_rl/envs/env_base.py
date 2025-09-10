@@ -5,7 +5,7 @@ import torch
 from metasim.constants import SimType
 from metasim.scenario.scenario import ScenarioCfg
 from metasim.sim.base import BaseSimHandler
-from metasim.types import Action, Info, TensorState, Reward, Success, Termination, TimeOut
+from metasim.types import Action, Info, TensorState, Reward, Success, Termination, TimeOut, RobotState
 from metasim.scenario.robot import RobotCfg
 from metasim.utils.setup_util import get_sim_handler_class
 
@@ -24,6 +24,8 @@ class MasterSimulator:
         """
         self.device : str = str(device) if device is not None else ("cuda" if torch.cuda.is_available() else "cpu")
         self._instantiate_env(scenario)
+        self.initial_states: TensorState = self.handler.get_states()
+        assert isinstance(self.initial_states, TensorState), "initial_states should be of type TensorState"
 
     def _instantiate_env(self, scenario: ScenarioCfg) -> None:
         """Instantiate the environment.
@@ -74,10 +76,16 @@ class AgentEnv:
         self.robot = robot
         self.name = robot.name
         self.num_actions = len(self.robot.actuators)
+        self.sorted_body_names = self.simulator.handler.get_body_names(self.name, sort=True)
+        self.sorted_joint_names = self.simulator.handler.get_joint_names(self.name, sort=True)
 
-    def _get_initial_state(self) -> TensorState:
-        """Return per-env initial states (override in subclasses)."""
-        raise NotImplementedError
+    def _register_initial_state(self, init_state: RobotState) -> None:
+
+        self.simulator.initial_states.robots[self.name]
+        # 只更新 init_state 中非 None 的属性
+        for key, value in vars(init_state).items():
+            if value is not None:
+                setattr(self.simulator.initial_states.robots[self.name], key, value)
 
     def get_states(self) -> TensorState:
         """Get the current state of the environment."""
@@ -92,7 +100,7 @@ class AgentEnv:
         """
         self.simulator.handler.set_states(states=states, env_ids=env_ids)
 
-    def reset(self, env_ids: list[int] = None, states: TensorState = None) -> TensorState:
+    def reset(self, env_ids: list[int] = None) -> TensorState:
         """Reset the environment.
 
         Args:
@@ -110,7 +118,7 @@ class AgentEnv:
         if len(env_ids) == 0:
             return self.simulator.handler.get_states()
 
-        states_to_set = self._get_initial_state() if states is None else states
+        states_to_set = self.simulator.initial_states
         self.simulator.handler.set_states(states=states_to_set, env_ids=env_ids)
         env_states = self.simulator.handler.get_states(env_ids=env_ids)
 
@@ -132,7 +140,7 @@ class AgentEnv:
 
     def _privileged_observation(self, env_states: TensorState) -> torch.Tensor:
         """Get the privileged Observation of the environment."""
-        return torch.tensor([], device=self.device)
+        return None
 
     def _reward(self, env_states: TensorState) -> Reward:
         """Get the reward of the environment."""

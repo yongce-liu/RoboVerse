@@ -32,23 +32,23 @@ class BaseCfg:
 
     class rewards:
         only_positive_rewards = True # if true negative total rewards are clipped at zero (avoids early termination problems)
-        functions: list[Callable] | str = "roboverse_learn.unitree_rl.configs.reward_funcs"
+        functions: list[Callable] | str = "roboverse_learn.unitree_rl.configs.cfg_reward_funcs"
         class scales:
-            termination = -0.0
-            tracking_lin_vel = 1.0
-            tracking_ang_vel = 0.5
+            # termination = -0.0
+            # tracking_lin_vel = 1.0
+            # tracking_ang_vel = 0.5
             lin_vel_z = -2.0
-            ang_vel_xy = -0.05
-            orientation = -0.
-            torques = -0.00001
-            dof_vel = -0.
-            dof_acc = -2.5e-7
-            base_height = -0.
-            feet_air_time =  1.0
-            collision = -1.
-            feet_stumble = -0.0
-            action_rate = -0.01
-            stand_still = -0.
+            # ang_vel_xy = -0.05
+            # orientation = -0.
+            # torques = -0.00001
+            # dof_vel = -0.
+            # dof_acc = -2.5e-7
+            # base_height = -0.
+            # feet_air_time =  1.0
+            # collision = -1.
+            # feet_stumble = -0.0
+            # action_rate = -0.01
+            # stand_still = -0.
 
         class extras:
             tracking_sigma = 0.25 # tracking reward = exp(-error^2/sigma)
@@ -76,3 +76,26 @@ class BaseCfg:
         push_robots = True
         push_interval_s = 15
         max_push_vel_xy = 1.
+
+    class initial_states:
+        objects = {}
+        robots = {"g1_dof12":
+                    {"pos": [0.0, 0.0, 0.8],
+                     "rot": [1.0, 0.0, 0.0, 0.0],
+                     "joint_pos": {
+                            # Hips & legs
+                            "left_hip_yaw_joint": 0.0,
+                            "left_hip_roll_joint": 0.0,
+                            "left_hip_pitch_joint": -0.1,
+                            "left_knee_joint": 0.3,
+                            "left_ankle_pitch_joint": -0.2,
+                            "left_ankle_roll_joint": 0.0,
+                            "right_hip_yaw_joint": 0.0,
+                            "right_hip_roll_joint": 0.0,
+                            "right_hip_pitch_joint": -0.1,
+                            "right_knee_joint": 0.3,
+                            "right_ankle_pitch_joint": -0.2,
+                            "right_ankle_roll_joint": 0.0,
+                        },
+                    },
+                }
