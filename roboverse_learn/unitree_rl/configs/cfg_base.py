@@ -1,11 +1,14 @@
+from __future__ import annotations
 from metasim.utils import configclass
 from typing import Callable
 
 @configclass
 class BaseCfg:
     episode_length_s = 20.0
-    obs_len = 1 # number of past + current observations to include in the observation
-    priv_obs_len = None # number of past + current privileged observations to include in the privileged observation
+    num_obs_single = 20
+    obs_len_history = 5 # number of past + current observations to include in the observation
+    num_priv_obs_single = 0
+    priv_obs_len_history = 0 # number of past + current privileged observations to include in the privileged observation
     class control:
         control_type = 'P' # P: position, V: velocity, T: torques
         action_scale = 0.5
@@ -64,3 +67,12 @@ class BaseCfg:
             height_measurements = 5.0
         clip_observations = 100.
         clip_actions = 100.
+
+    class domain_rand:
+        randomize_friction = True
+        friction_range = [0.5, 1.25]
+        randomize_base_mass = False
+        added_mass_range = [-1., 1.]
+        push_robots = True
+        push_interval_s = 15
+        max_push_vel_xy = 1.

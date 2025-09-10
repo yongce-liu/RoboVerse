@@ -391,7 +391,8 @@ class IsaacgymHandler(BaseSimHandler):
         )  # x, y, z, w order for gymapi.Quat
 
         # add ground plane
-        _height_measure, _horizontal_scale = self._add_ground(if_random=self.scenario.random.ground)
+        # _height_measure, _horizontal_scale = self._add_ground(if_random=self.scenario.random.ground)
+        _height_measure, _horizontal_scale = self._add_ground(if_random=False)
 
         # get object and robot asset
         obj_assets_list = [self._load_object_asset(obj) for obj in self.objects]
@@ -1045,9 +1046,12 @@ class IsaacgymHandler(BaseSimHandler):
         else:
             plane_params = gymapi.PlaneParams()
             plane_params.normal = gymapi.Vec3(0, 0, 1)
-            plane_params.static_friction = getattr(self.scenario.random.terrain_cfg, "static_friction", 1.0)
-            plane_params.dynamic_friction = getattr(self.scenario.random.terrain_cfg, "dynamic_friction", 1.0)
-            plane_params.restitution = getattr(self.scenario.random.terrain_cfg, "restitution", 0.0)
+            # plane_params.static_friction = getattr(self.scenario.random.terrain_cfg, "static_friction", 1.0)
+            # plane_params.dynamic_friction = getattr(self.scenario.random.terrain_cfg, "dynamic_friction", 1.0)
+            # plane_params.restitution = getattr(self.scenario.random.terrain_cfg, "restitution", 0.0)
+            plane_params.static_friction = 1.0
+            plane_params.dynamic_friction = 1.0
+            plane_params.restitution = 0.0
             self.gym.add_ground(self.sim, plane_params)
             height_measure, horizontal_scale = None, None
         return (height_measure, horizontal_scale)

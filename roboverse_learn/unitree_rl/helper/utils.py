@@ -9,7 +9,7 @@ import os
 import torch
 from loguru import logger as log
 
-from metasim.cfg.scenario import ScenarioCfg
+from metasim.scenario.scenario import ScenarioCfg
 from metasim.utils import is_camel_case, is_snake_case, to_camel_case
 from metasim.utils.math import copysign
 from metasim.utils.setup_util import get_robot
