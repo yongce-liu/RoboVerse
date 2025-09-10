@@ -36,9 +36,7 @@ class Args:
     """Arguments for the static scene."""
 
     ## Handlers
-    sim: Literal["isaaclab", "isaacsim", "isaacgym", "genesis", "pybullet", "sapien2", "sapien3", "mujoco", "mjx"] = (
-        "mujoco"
-    )
+    sim: Literal["isaacsim", "isaacgym", "genesis", "pybullet", "sapien2", "sapien3", "mujoco", "mjx"] = "mujoco"
 
     ## Others
     num_envs: int = 1
@@ -279,7 +277,8 @@ for _ in range(100):
     ]
     env.set_dof_targets(actions)
     env.simulate()
-    obs = env.get_states(mode="dict")
+    obs = env.get_states(mode="dict")  # get dict type states
+    obs_tensor = env.get_states(mode="tensor")  # get tensor type states
     obs_saver.add(obs)
     extras = env.get_extra()
     print("Extras:", extras)  # noqa: T201

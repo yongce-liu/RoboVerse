@@ -24,7 +24,7 @@ class Args:
     """Robot name"""
     num_envs: int = 1
     """Number of parallel environments, find a proper number for best performance on your machine"""
-    sim: Literal["isaaclab", "isaacsim", "mujoco", "isaacgym", "genesis", "pybullet", "sapien2", "sapien3"] = "isaacsim"
+    sim: Literal["isaaclab", "isaacsim", "mujoco", "isaacgym", "genesis", "pybullet", "sapien2", "sapien3"] = "mujoco"
     """Simulator backend"""
     demo_start_idx: int | None = None
     """The index of the first demo to collect, None for all demos"""
@@ -53,7 +53,7 @@ class Args:
     renderer: Literal["isaaclab", "mujoco", "isaacgym", "genesis", "pybullet", "sapien2", "sapien3"] = "mujoco"
 
     ## Domain randomization options
-    enable_randomization: bool = True
+    enable_randomization: bool = False
     """Enable domain randomization during demo collection"""
     randomize_materials: bool = True
     """Enable material randomization (when randomization is enabled)"""
@@ -67,8 +67,6 @@ class Args:
     """When to apply randomization: per_demo (once at start) or per_episode (every episode)"""
     randomization_seed: int | None = None
     """Seed for reproducible randomization. If None, uses random seed"""
-    include_ee_state: bool = True
-    """Include end-effector state in collected observations"""
 
     def __post_init__(self):
         assert self.run_all or self.run_unfinished or self.run_failed, (
@@ -122,7 +120,6 @@ from metasim.scenario.robot import RobotCfg
 from metasim.sim import BaseSimHandler
 from metasim.task.registry import get_task_class
 from metasim.utils.demo_util import get_traj
-from metasim.utils.kinematics_utils import get_ee_state
 from metasim.utils.setup_util import get_robot
 from metasim.utils.state import state_tensor_to_nested
 from metasim.utils.tensor_util import tensor_to_cpu
@@ -424,14 +421,14 @@ def get_run_out(all_actions, env, demo_idxs: list[int]) -> list[bool]:
     return run_out
 
 
-def save_demo_mp(save_req_queue: mp.Queue):
+def save_demo_mp(save_req_queue: mp.Queue, robot_cfg: RobotCfg, task_desc: str):
     from metasim.utils.save_util import save_demo
 
     while (save_request := save_req_queue.get()) is not None:
         demo = save_request["demo"]
         save_dir = save_request["save_dir"]
         log.info(f"Received save request, saving to {save_dir}")
-        save_demo(save_dir, demo)
+        save_demo(save_dir, demo, robot_cfg=robot_cfg, task_desc=task_desc)
 
 
 def ensure_clean_state(handler, expected_state=None):
@@ -545,12 +542,14 @@ global_step = 0
 
 
 class DemoCollector:
-    def __init__(self, handler):
+    def __init__(self, handler, robot_cfg, task_desc=""):
         assert isinstance(handler, BaseSimHandler)
         self.handler = handler
+        self.robot_cfg = robot_cfg
+        self.task_desc = task_desc
         self.cache: dict[int, list[dict]] = {}
         self.save_request_queue = mp.Queue()
-        self.save_proc = mp.Process(target=save_demo_mp, args=(self.save_request_queue,))
+        self.save_proc = mp.Process(target=save_demo_mp, args=(self.save_request_queue, robot_cfg, task_desc))
         self.save_proc.start()
 
         TaskName = args.task
@@ -585,7 +584,7 @@ class DemoCollector:
 
         from metasim.utils.save_util import save_demo
 
-        save_demo(save_dir, self.cache[demo_idx])
+        save_demo(save_dir, self.cache[demo_idx], self.robot_cfg, self.task_desc)
 
         ## Option 2: Save in a separate process, non-blocking, not friendly to KeyboardInterrupt
         # self.save_request_queue.put({"demo": self.cache[demo_idx], "save_dir": save_dir})
@@ -708,7 +707,9 @@ def main():
     ## CollectingDemo -> Timeout -> Retry/GiveUp -> NextDemo
 
     ## Setup
-    collector = DemoCollector(env.handler)
+    # Get task description from environment
+    task_desc = getattr(env, "task_desc", "")
+    collector = DemoCollector(env.handler, robot, task_desc)
     pbar = tqdm(total=max_demo - args.demo_start_idx, desc="Collecting demos")
 
     ## State variables
@@ -752,9 +753,6 @@ def main():
     ## Now record the clean, stabilized initial state
     obs = env.handler.get_states()
     obs = state_tensor_to_nested(env.handler, obs)
-    if args.include_ee_state:
-        ee_state = get_ee_state(obs, robot)
-        obs["ee_state"] = ee_state
     for env_id, demo_idx in enumerate(demo_idxs):
         log.info(f"Starting Demo {demo_idx} in Env {env_id}")
         collector.create(demo_idx, obs[env_id])
@@ -765,9 +763,6 @@ def main():
         actions = get_actions(all_actions, env, demo_idxs, robot)
         obs, reward, success, time_out, extras = env.step(actions)
         obs = state_tensor_to_nested(env.handler, obs)
-        if args.include_ee_state:
-            ee_state = get_ee_state(obs, robot)
-            obs["ee_state"] = ee_state
         run_out = get_run_out(all_actions, env, demo_idxs)
 
         for env_id in range(env.handler.num_envs):
@@ -828,9 +823,6 @@ def main():
 
                 obs = env.handler.get_states()
                 obs = state_tensor_to_nested(env.handler, obs)
-                if args.include_ee_state:
-                    ee_state = get_ee_state(obs, robot)
-                    obs["ee_state"] = ee_state
                 collector.create(demo_idx, obs[env_id])
             else:
                 log.error(f"Demo {demo_idx} failed too many times, giving up")
@@ -847,9 +839,6 @@ def main():
 
                     obs = env.handler.get_states()
                     obs = state_tensor_to_nested(env.handler, obs)
-                    if args.include_ee_state:
-                        ee_state = get_ee_state(obs, robot)
-                        obs["ee_state"] = ee_state
                     collector.create(new_demo_idx, obs[env_id])
                     demo_indexer.move_on()
                 else:

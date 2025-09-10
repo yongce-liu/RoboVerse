@@ -65,7 +65,7 @@ This workflow ensures tasks are:
 
 ```python
 """Train PPO for a reaching task using RLTaskEnv."""
-from roboverse_learn.registry import get_task_class
+from metasim.task.registry import get_task_class
 import torch
 task_cls = get_task_class(args.task)  # e.g., "example.my_task"
 
@@ -177,7 +177,7 @@ class MyExampleTask(BaseTaskEnv):
   5. `post_physics_step_callback(env_states)`
   6. Compute `reward`, `terminated`, `timeout` and return `(obs, reward, terminated, timeout, info)` with `privileged_observation`.
 * **Reset flow**: can use external `states` or fall back to `_initial_states`. Calls `handler.set_states(...)`, fetches `env_states`, and resets episode counters.
-* **Methods typically not overridden**: `step`, `reset`, `close`.
+* **Flexible override**: You can also override `step()` and `reset()` functions directly, bypassing the callback system entirely.
 
 ### RLTaskEnv (RL‑friendly extension)
 
