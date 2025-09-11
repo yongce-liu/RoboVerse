@@ -25,7 +25,6 @@ class LeggedRobotEnv(AgentEnv):
         super().__init__(simulator, robot)
         self._instantiate_cfg(config)
         self._init_reward_function()
-        self._init_reward_extra()
         self._init_buffers()
         self._init_initial_state()
 
@@ -88,23 +87,12 @@ class LeggedRobotEnv(AgentEnv):
         sorted_joint_pos = [default_joint_pos[name] for name in sorted_joint_names]
         self.default_dof_pos = torch.tensor(sorted_joint_pos, device=self.device) # (n_dof,)
 
-    def _init_reward_extra(self):
-        self.reward_extras = {}
-        # soft constraints
         _mid = (self.dof_pos_limits[:, 0] + self.dof_pos_limits[:, 1]) / 2.0
         _diff = self.dof_pos_limits[:, 1] - self.dof_pos_limits[:, 0]
         soft_dof_pos_limits = torch.zeros_like(self.dof_pos_limits)
         soft_dof_pos_limits[:, 0] = _mid - 0.5 * _diff * self.cfg.rewards.extras.soft_dof_pos_limit
         soft_dof_pos_limits[:, 1] = _mid + 0.5 * _diff * self.cfg.rewards.extras.soft_dof_pos_limit
-        self.reward_extras['dof_pos_limits'] = soft_dof_pos_limits
-        self.reward_extras['base_height_target'] = self.cfg.rewards.extras.base_height_target
-        self.reward_extras['dt'] = self.dt
-        self.reward_extras['penalised_contact_indices'] = self.penalised_contact_indices
-        self.reward_extras['termination_contact_indices'] = self.termination_contact_indices
-        self.reward_extras["torque_limits"] = self.torque_limits
-        _tmp_extras = class_to_dict(self.cfg.rewards.extras)
-        for _key, _val in _tmp_extras.items():
-            self.reward_extras[_key] = _val
+        self.dof_pos_limits = soft_dof_pos_limits
 
     def _init_reward_function(self):
         """Prepares a list of reward functions, which will be called to compute the total reward."""
@@ -131,8 +119,8 @@ class LeggedRobotEnv(AgentEnv):
         }
 
     def _init_buffers(self):
-        self.joint_pos = torch.zeros(size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device, requires_grad=False)
-        self.joint_vel = torch.zeros(size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device, requires_grad=False)
+        # self.joint_pos = torch.zeros(size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device, requires_grad=False)
+        # self.joint_vel = torch.zeros(size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device, requires_grad=False)
         self.base_pos = torch.zeros(size=(self.num_envs, 3), dtype=torch.float, device=self.device, requires_grad=False)
         self.base_quat = torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device).unsqueeze(0).repeat(self.num_envs, 1)
         self.base_euler_xyz = get_euler_xyz(self.base_quat)
@@ -297,8 +285,8 @@ class LeggedRobotEnv(AgentEnv):
         self._episode_steps += 1
 
         # update tensors from env_states
-        self.joint_pos[:] = robot_state.joint_pos
-        self.joint_vel[:] = robot_state.joint_vel
+        # self.joint_pos[:] = robot_state.joint_pos
+        # self.joint_vel[:] = robot_state.joint_vel
         self.base_pos[:] = robot_state.root_state[:, 0:3]
         self.base_quat[:] = robot_state.root_state[:, 3:7]
         self.base_euler_xyz = get_euler_xyz(self.base_quat)
@@ -308,8 +296,6 @@ class LeggedRobotEnv(AgentEnv):
         self.contact_forces[:] = robot_state.extra['contact_forces']
 
         self._post_physics_step_callback()
-
-        self._update_rewards_extras()
 
         # gym-style return values
         self.rew_buf[:] = self._reward(env_states)
@@ -348,19 +334,6 @@ class LeggedRobotEnv(AgentEnv):
             heading = torch.atan2(forward[:, 1], forward[:, 0])
             self.commands[:, 2] = torch.clip(0.5 * wrap_to_pi(self.commands[:, 3] - heading), -1.0, 1.0)
 
-    def _update_rewards_extras(self):
-        self.reward_extras["base_euler_xyz"] = self.base_euler_xyz
-        self.reward_extras["base_lin_vel"] = self.base_lin_vel
-        self.reward_extras["base_ang_vel"] = self.base_ang_vel
-        self.reward_extras["projected_gravity"] = self.projected_gravity
-        self.reward_extras['contact_forces'] = self.contact_forces
-        self.reward_extras["history_buffer"] = self.history_buffer
-        self.reward_extras["torques"] = self.torques
-        self.reward_extras["actions"] = self.actions
-        self.reward_extras["reset_buf"] = self.reset_buf
-        self.reward_extras["time_out_buf"] = self.time_out_buf
-        self.reward_extras["commands"] = self.commands * self.commands_scale
-
     def _push_robots(self, env_states: TensorState):
         """Randomly set robot's root velocity to simulate a push."""
         env_ids = torch.arange(self.num_envs, device=self.device)
@@ -386,7 +359,7 @@ class LeggedRobotEnv(AgentEnv):
         rew_buf = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
         for i in range(len(self.reward_functions)):
             name = self.reward_names[i]
-            unscaled_rew = self.reward_functions[i](env_states, self.name, self.reward_extras)
+            unscaled_rew = self.reward_functions[i](self, env_states)
             rew = unscaled_rew * self.reward_scales[name]
             rew_buf += rew
             self.episode_sums[name] += rew
