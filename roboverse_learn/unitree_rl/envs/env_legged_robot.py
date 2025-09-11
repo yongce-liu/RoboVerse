@@ -301,10 +301,11 @@ class LeggedRobotEnv(AgentEnv):
 
         # gym-style return values
         self.rew_buf[:] = self._reward(env_states)
-        self.obs_buf_history.append(self._observation(env_states))
+        _tmp_obs_buf, _tmp_priv_obs_buf = self._observation(env_states)
+        self.obs_buf_history.append(_tmp_obs_buf)
         self.obs_buf[:] = torch.cat(list(self.obs_buf_history), dim=1).clip(-self.cfg.normalization.clip_observations, self.cfg.normalization.clip_observations).to(self.device)
         if self.priv_obs_buf is not None:
-            self.priv_obs_buf_history.append(self._privileged_observation(env_states))
+            self.priv_obs_buf_history.append(_tmp_priv_obs_buf)
             self.priv_obs_buf[:] = torch.cat(list(self.priv_obs_buf_history), dim=1).clip(-self.cfg.normalization.clip_observations, self.cfg.normalization.clip_observations).to(self.device)
         self.time_out_buf[:] = self._time_out(env_states)
         self.reset_buf[:] = torch.logical_or(self._terminated(env_states), self.time_out_buf)

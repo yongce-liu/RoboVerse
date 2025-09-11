@@ -81,6 +81,17 @@ class BaseCfg:
         push_interval_s = 15
         max_push_vel_xy = 1.
 
+    class noise:
+        add_noise = True
+        noise_level = 1.0 # scales other values
+        class scales:
+            dof_pos = 0.01
+            dof_vel = 1.5
+            lin_vel = 0.1
+            ang_vel = 0.2
+            gravity = 0.05
+            height_measurements = 0.1
+
     class initial_states:
         objects = {}
         robots = {"g1_dof12":

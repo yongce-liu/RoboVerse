@@ -129,12 +129,8 @@ class AgentEnv:
         return self.simulator._physics_step(actions)
 
     def _observation(self, env_states: TensorState) -> torch.Tensor:
-        """Get the Observation of the environment."""
+        """Get the Observation & Privileged Observation of the environment."""
         raise NotImplementedError
-
-    def _privileged_observation(self, env_states: TensorState) -> torch.Tensor:
-        """Get the privileged Observation of the environment."""
-        return None
 
     def _reward(self, env_states: TensorState) -> Reward:
         """Get the reward of the environment."""
