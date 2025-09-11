@@ -1,5 +1,16 @@
 import torch
+from metasim.utils import configclass
+from roboverse_learn.unitree_rl.configs.cfg_base import BaseEnvCfg
 from roboverse_learn.unitree_rl.envs.env_humanoid import HumanoidEnv
+
+@configclass
+class WalkingDof12Cfg(BaseEnvCfg):
+    num_obs_single = 6 + 3 + 3 * 12 + 2
+    obs_len_history = 1
+    num_priv_obs_single = 9 + 3 + 3 * 12 + 2
+    priv_obs_len_history = 1
+
+
 
 class WalkingDof12Env(HumanoidEnv):
     def _init_buffers(self):
@@ -16,7 +27,7 @@ class WalkingDof12Env(HumanoidEnv):
         Returns:
             [torch.Tensor]: Vector of scales used to multiply a uniform distribution in [-1, 1]
         """
-        noise_vec = torch.zeros(size=(self.num_envs, self.cfg.num_obs_single), dtype=torch.float, device=self.device)
+        noise_vec = torch.zeros(size=(self.cfg.num_obs_single,), dtype=torch.float, device=self.device)
         self.add_noise = self.cfg.noise.add_noise
         noise_scales = self.cfg.noise.scales
         noise_level = self.cfg.noise.noise_level

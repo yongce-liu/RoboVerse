@@ -14,14 +14,14 @@ from metasim.utils.math import quat_apply, quat_rotate_inverse, wrap_to_pi
 from metasim.utils.dict import class_to_dict
 
 from roboverse_pack.robots import G1Dof12Cfg, Go2Cfg
-from roboverse_learn.unitree_rl.configs.cfg_base import BaseCfg
+from roboverse_learn.unitree_rl.configs.cfg_base import BaseEnvCfg
 from roboverse_learn.unitree_rl.envs.env_base import AgentEnv, MasterSimulator
 from roboverse_learn.unitree_rl.helper.utils import get_euler_xyz, get_indices_from_substring
 
 
 class LeggedRobotEnv(AgentEnv):
     """A base task env for legged robots."""
-    def __init__(self, config: BaseCfg, simulator: MasterSimulator, robot: RobotCfg) -> None:
+    def __init__(self, config: BaseEnvCfg, simulator: MasterSimulator, robot: RobotCfg) -> None:
         super().__init__(simulator, robot)
         self._instantiate_cfg(config)
         self._init_rigid_body_indices() # parse rigid body indices
@@ -30,7 +30,7 @@ class LeggedRobotEnv(AgentEnv):
         self._init_buffers()
         self._init_initial_state()
 
-    def _instantiate_cfg(self, config: BaseCfg | None):
+    def _instantiate_cfg(self, config: BaseEnvCfg | None):
         self.cfg = config
         # value assignments from configs
         self.decimation = self.cfg.control.decimation
