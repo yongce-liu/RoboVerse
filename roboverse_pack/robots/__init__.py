@@ -17,6 +17,7 @@ from .g1_cfg import G1Cfg
 from .g1_dex3_cfg import G1Dex3Cfg
 from .g1_dof12_cfg import G1Dof12Cfg
 from .g1_dof29_cfg import G1Dof29Cfg
+from .gen3_cfg import Gen3Cfg
 from .google_robot_static_cfg import GoogleRobotStaticCfg
 from .h1_2_without_hand_cfg import H12WithoutHandCfg
 from .h1_body_collision import H1BodyCollisionCfg
@@ -24,13 +25,19 @@ from .h1_cfg import H1Cfg
 from .h1_hand_cfg import H1HandCfg
 from .h1_simple_hand_cfg import H1SimpleHandCfg
 from .h1_wrist_cfg import H1WristCfg
+from .iiwa14_cfg import Iiwa14Cfg
 from .iiwa_cfg import IiwaCfg
 from .kinova_gen3_cfg import KinovaGen3Cfg
 from .kinova_gen3_robotiq_2f85 import KinovaGen3Robotiq2f85Cfg
+from .koch_mjcf_cfg import KochCfg
+from .lite6_mjcf_cfg import Lite6Cfg
 from .sawyer_cfg import SawyerCfg
 from .sawyer_mujoco_cfg import SawyerMujocoCfg
 from .shadow_hand_cfg import ShadowHandCfg
+from .so_arm100_mjcf_cfg import SoArm100Cfg
 from .unitree_dex3_1_cfg import UnitreeDex31LeftCfg
 from .ur5e_2f85_cfg import Ur5E2F85Cfg
+from .ur5e_cfg import Ur5ECfg
+from .ur10e_cfg import Ur10ECfg
 from .walker_cfg import WalkerCfg
 from .xhand_cfg import XhandRightCfg

@@ -54,6 +54,11 @@ class IsaacsimHandler(BaseSimHandler):
         self.render_interval = 4  # TODO: fix hardcode
         self._manual_pd_on = []
 
+        if self.headless:
+            self._render_viewport = False
+        else:
+            self._render_viewport = True
+
     def _init_scene(self) -> None:
         """
         Initializes the isaacsim simulation environment.
@@ -93,6 +98,9 @@ class IsaacsimHandler(BaseSimHandler):
         )
         self.scene = InteractiveScene(scene_config)
 
+        if self.sim.has_gui():
+            self._init_keyboard()
+
     def _load_robots(self) -> None:
         for robot in self.robots:
             self._add_robot(robot)
@@ -107,6 +115,21 @@ class IsaacsimHandler(BaseSimHandler):
                 self._add_pinhole_camera(camera)
             else:
                 raise ValueError(f"Unsupported camera type: {type(camera)}")
+
+    def _init_keyboard(self) -> None:
+        import weakref
+
+        import carb
+        import omni
+
+        self._appwindow = omni.appwindow.get_default_app_window()
+        self._input = carb.input.acquire_input_interface()
+        self._keyboard = self._appwindow.get_keyboard()
+        obj_proxy = weakref.proxy(self)
+        self._keyboard_sub = self._input.subscribe_to_keyboard_events(
+            self._keyboard,
+            lambda event, *args: obj_proxy._on_keyboard_event(event, *args),
+        )
 
     def _update_camera_pose(self) -> None:
         for camera in self.cameras:
@@ -166,6 +189,9 @@ class IsaacsimHandler(BaseSimHandler):
     def __del__(self):
         """Cleanup for the environment."""
         self.close()
+        self.simulation_app.close()
+        self._input.unsubscribe_from_keyboard_events(self._keyboard, self._keyboard_sub)
+        self._keyboard_sub = None
 
     def _set_states(self, states: list[DictEnvState] | TensorState, env_ids: list[int] | None = None) -> None:
         # if states is list[DictEnvState], iterate over it and set state
@@ -358,6 +384,22 @@ class IsaacsimHandler(BaseSimHandler):
                     else:
                         robot_states[rname].extra = {key: rvalue}
         return TensorState(objects=object_states, robots=robot_states, cameras=camera_states, extras=extras)
+
+    def _on_keyboard_event(self, event, *args, **kwargs):
+        import carb
+        from isaaclab.sim import SimulationContext
+
+        if event.input == carb.input.KeyboardInput.V:
+            if event.type == carb.input.KeyboardEventType.KEY_PRESS:
+                self._render_viewport = not self._render_viewport
+
+            if not self._render_viewport:
+                if self.sim.has_rtx_sensors():
+                    self.sim.set_render_mode(SimulationContext.RenderMode.PARTIAL_RENDERING)
+                else:
+                    self.sim.set_render_mode(SimulationContext.RenderMode.NO_RENDERING)
+            else:
+                self.sim.set_render_mode(SimulationContext.RenderMode.FULL_RENDERING)
 
     def set_dof_targets(self, actions: torch.Tensor) -> None:
         if isinstance(actions, torch.Tensor):

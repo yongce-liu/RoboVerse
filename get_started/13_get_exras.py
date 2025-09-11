@@ -36,9 +36,7 @@ class Args:
     """Arguments for the static scene."""
 
     ## Handlers
-    sim: Literal["isaaclab", "isaacsim", "isaacgym", "genesis", "pybullet", "sapien2", "sapien3", "mujoco", "mjx"] = (
-        "mujoco"
-    )
+    sim: Literal["isaacsim", "isaacgym", "genesis", "pybullet", "sapien2", "sapien3", "mujoco", "mjx"] = "mujoco"
 
     ## Others
     num_envs: int = 1
@@ -54,9 +52,9 @@ args = tyro.cli(Args)
 robot = RobotCfg(
     name="new_robot_h1",
     num_joints=26,
-    usd_path="metasim/example/example_assets/h1/usd/h1.usd",
-    mjcf_path="metasim/example/example_assets/h1/mjcf/h1.xml",
-    urdf_path="metasim/example/example_assets/h1/urdf/h1_wrist.urdf",
+    usd_path="roboverse_data/robots/h1/usd/h1.usd",
+    mjcf_path="roboverse_data/robots/h1/mjcf/h1.xml",
+    urdf_path="roboverse_data/robots/h1/urdf/h1.urdf",
     enabled_gravity=True,
     fix_base_link=False,
     enabled_self_collisions=False,
@@ -279,7 +277,8 @@ for _ in range(100):
     ]
     env.set_dof_targets(actions)
     env.simulate()
-    obs = env.get_states(mode="dict")
+    obs = env.get_states(mode="dict")  # get dict type states
+    obs_tensor = env.get_states(mode="tensor")  # get tensor type states
     obs_saver.add(obs)
     extras = env.get_extra()
     print("Extras:", extras)  # noqa: T201

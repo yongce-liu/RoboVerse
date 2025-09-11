@@ -11,8 +11,6 @@ if TYPE_CHECKING:
 class BaseQueryType:
     """Base class for all query types."""
 
-    supported_handlers = []
-
     def __init__(self, **kwargs):
         self.handler = None
         self.query_options = kwargs
@@ -27,9 +25,6 @@ class BaseQueryType:
         You can also pass locals() to bind_handler() to access local variables in the handler.
         """
         self.handler = handler
-        assert self.handler.__class__.__module__ in self.supported_handlers, (
-            f"Query {self} does not support handler type: {type(self.handler)}"
-        )
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         """Performing the query.
