@@ -63,8 +63,6 @@ class AgentEnv:
         In this environment, we share the env_states for all robots, you can choose to do all/partial/no other robots' obs.
         """
         self._copy_shared_values(simulator, robot)
-        self._episode_steps = torch.zeros(self.num_envs, dtype=torch.int32, device=self.device)
-        self.max_episode_steps = -1 # no limit by default
 
     def _copy_shared_values(self, simulator: MasterSimulator, robot: RobotCfg) -> None:
         # for simulator values
@@ -122,10 +120,6 @@ class AgentEnv:
         self.simulator.handler.set_states(states=states_to_set, env_ids=env_ids)
         env_states = self.simulator.handler.get_states(env_ids=env_ids)
 
-        # reset episode step counters for reset envs
-        ids = torch.tensor(env_ids, dtype=torch.long, device=self.device)
-        self._episode_steps[ids] = 0
-
         return env_states
 
     def step(self, actions: Action) -> tuple[TensorState, Reward, Success, TimeOut, Info | None]:
@@ -151,8 +145,4 @@ class AgentEnv:
         raise NotImplementedError
 
     def _time_out(self, env_states: TensorState | None) -> torch.BoolTensor:
-        """
-        Timeout flags.
-        Note that max_episode_steps is set to -1 by default (no timeout).
-        """
-        return self._episode_steps >= self.max_episode_steps
+        raise NotImplementedError

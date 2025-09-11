@@ -24,6 +24,8 @@ class LeggedRobotEnv(AgentEnv):
     def __init__(self, config: BaseCfg, simulator: MasterSimulator, robot: RobotCfg) -> None:
         super().__init__(simulator, robot)
         self._instantiate_cfg(config)
+        self._init_rigid_body_indices() # parse rigid body indices
+        self._init_joint_cfg() # parse joint indices
         self._init_reward_function()
         self._init_buffers()
         self._init_initial_state()
@@ -40,10 +42,6 @@ class LeggedRobotEnv(AgentEnv):
         self.num_commands = self.cfg.commands.num_commands
         self.reward_scales = class_to_dict(self.cfg.rewards.scales)
         # self.command_ranges = class_to_dict(self.cfg.commands.ranges)
-        # parse rigid body indices
-        self._init_rigid_body_indices()
-        # parse joint indices
-        self._init_joint_cfg()
 
     def _init_rigid_body_indices(self):
         """
@@ -83,16 +81,16 @@ class LeggedRobotEnv(AgentEnv):
         sorted_dof_pos_limits = [dof_pos_limits[joint] for joint in sorted_joint_names]
         self.dof_pos_limits = torch.tensor(sorted_dof_pos_limits, device=self.device) * self.cfg.control.scales.dof_pos_limits # (n_dof, 2)
 
-        default_joint_pos = robot.default_joint_positions
-        sorted_joint_pos = [default_joint_pos[name] for name in sorted_joint_names]
-        self.default_dof_pos = torch.tensor(sorted_joint_pos, device=self.device) # (n_dof,)
-
         _mid = (self.dof_pos_limits[:, 0] + self.dof_pos_limits[:, 1]) / 2.0
         _diff = self.dof_pos_limits[:, 1] - self.dof_pos_limits[:, 0]
         soft_dof_pos_limits = torch.zeros_like(self.dof_pos_limits)
         soft_dof_pos_limits[:, 0] = _mid - 0.5 * _diff * self.cfg.rewards.extras.soft_dof_pos_limit
         soft_dof_pos_limits[:, 1] = _mid + 0.5 * _diff * self.cfg.rewards.extras.soft_dof_pos_limit
         self.dof_pos_limits = soft_dof_pos_limits
+
+        default_joint_pos = robot.default_joint_positions
+        sorted_joint_pos = [default_joint_pos[name] for name in sorted_joint_names]
+        self.default_dof_pos = torch.tensor(sorted_joint_pos, device=self.device) # (n_dof,)
 
     def _init_reward_function(self):
         """Prepares a list of reward functions, which will be called to compute the total reward."""
@@ -120,7 +118,7 @@ class LeggedRobotEnv(AgentEnv):
 
     def _init_buffers(self):
         # self.joint_pos = torch.zeros(size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device, requires_grad=False)
-        # self.joint_vel = torch.zeros(size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device, requires_grad=False)
+        self.joint_vel = torch.zeros(size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device, requires_grad=False)
         self.base_pos = torch.zeros(size=(self.num_envs, 3), dtype=torch.float, device=self.device, requires_grad=False)
         self.base_quat = torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device).unsqueeze(0).repeat(self.num_envs, 1)
         self.base_euler_xyz = get_euler_xyz(self.base_quat)
@@ -134,7 +132,7 @@ class LeggedRobotEnv(AgentEnv):
         self.contact_forces = torch.zeros(size=(self.num_envs, len(self.sorted_body_names), 3), device=self.device, dtype=torch.float)
 
         # self.common_step_counter = 0
-        # self._episode_steps = torch.zeros(self.num_envs, device=self.device, dtype=torch.int)
+        self.episode_steps = torch.zeros(size=(self.num_envs,), dtype=torch.int, device=self.device)
         self.actions = torch.zeros(size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device, requires_grad=False)
         self.torques = torch.zeros(size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device, requires_grad=False)
         self.obs_buf_history = deque([torch.zeros(size=(self.num_envs, self.cfg.num_obs_single), dtype=torch.float, device=self.device, requires_grad=False) for _ in range(self.cfg.obs_len_history)], maxlen=self.cfg.obs_len_history)
@@ -220,6 +218,11 @@ class LeggedRobotEnv(AgentEnv):
     def reset(self, env_ids: list[int] = None):
         if env_ids is None:
             env_ids = list(range(self.num_envs))
+
+        if len(env_ids) == 0:
+            return self.get_states()
+
+        # randomize initial state
         state = copy.deepcopy(self.init_state)
         state.joint_pos[env_ids] = self.default_dof_pos * torch_rand_float(
             0.5, 1.5, (len(env_ids), self.num_actions), device=self.device
@@ -239,6 +242,7 @@ class LeggedRobotEnv(AgentEnv):
             for _item in _val:
                 _item[env_ids] = 0.0
 
+        self.episode_steps[env_ids] = 0
         self.actions[env_ids] = 0.0
         # self.feet_air_time[env_ids] = 0.0
         # self.base_quat[env_ids] = (
@@ -248,19 +252,17 @@ class LeggedRobotEnv(AgentEnv):
         # )
         # self.base_euler_xyz = get_euler_xyz(self.base_quat)
         # self.projected_gravity[env_ids] = quat_rotate_inverse(self.base_quat[env_ids], self.gravity_vec[env_ids])
-        self.reset_buf[env_ids] = True
+        self.reset_buf[env_ids] = 1
 
-        # self.extras["episode"] = {}
-        # for key in self.episode_sums.keys():
-        #     self.extras["episode"]["rew_" + key] = (
-        #         torch.mean(self.episode_sums[key][env_ids]) / self.cfg.episode_length_s
-        #     )
-        #     self.episode_sums[key][env_ids] = 0.0
-        # if self.cfg.commands.curriculum:
-        #     self.extras["episode"]["max_command_x"] = self.command_ranges["lin_vel_x"][1]
-        # # send timeout info to the algorithm
-        # if self.cfg.send_timeouts:
-        #     self.extras["time_outs"] = self.time_out_buf
+        self.extras["episode"] = {}
+        for key in self.episode_sums.keys():
+            self.extras["episode"]["rew_" + key] = (torch.mean(self.episode_sums[key][env_ids]) / self.cfg.episode_length_s)
+            self.episode_sums[key][env_ids] = 0.0
+        if self.cfg.commands.curriculum:
+            self.extras["episode"]["max_command_x"] = self.command_ranges["lin_vel_x"][1]
+        # send timeout info to the algorithm
+        if self.cfg.rewards.send_timeouts:
+            self.extras["time_outs"] = self.time_out_buf
 
         # reset env handler state buffer
         for i in range(self.cfg.obs_len_history):
@@ -281,12 +283,12 @@ class LeggedRobotEnv(AgentEnv):
         return self.obs_buf, self.priv_obs_buf, self.rew_buf, self.reset_buf, self.extras
 
     def _post_physics_step(self, env_states: TensorState):
-        robot_state = env_states.robots[self.name]
-        self._episode_steps += 1
+        self.episode_steps += 1
 
+        robot_state = env_states.robots[self.name]
         # update tensors from env_states
         # self.joint_pos[:] = robot_state.joint_pos
-        # self.joint_vel[:] = robot_state.joint_vel
+        self.joint_vel[:] = robot_state.joint_vel
         self.base_pos[:] = robot_state.root_state[:, 0:3]
         self.base_quat[:] = robot_state.root_state[:, 3:7]
         self.base_euler_xyz = get_euler_xyz(self.base_quat)
@@ -300,9 +302,9 @@ class LeggedRobotEnv(AgentEnv):
         # gym-style return values
         self.rew_buf[:] = self._reward(env_states)
         self.obs_buf_history.append(self._observation(env_states))
-        self.priv_obs_buf_history.append(self._privileged_observation(env_states))
         self.obs_buf[:] = torch.cat(list(self.obs_buf_history), dim=1).clip(-self.cfg.normalization.clip_observations, self.cfg.normalization.clip_observations).to(self.device)
         if self.priv_obs_buf is not None:
+            self.priv_obs_buf_history.append(self._privileged_observation(env_states))
             self.priv_obs_buf[:] = torch.cat(list(self.priv_obs_buf_history), dim=1).clip(-self.cfg.normalization.clip_observations, self.cfg.normalization.clip_observations).to(self.device)
         self.time_out_buf[:] = self._time_out(env_states)
         self.reset_buf[:] = torch.logical_or(self._terminated(env_states), self.time_out_buf)
@@ -323,7 +325,7 @@ class LeggedRobotEnv(AgentEnv):
         Default behaviour: Compute ang vel command based on target and heading, compute measured terrain heights and randomly push robots
         """
         env_ids = (
-            (self._episode_steps % int(self.cfg.commands.resampling_time / self.dt) == 0)
+            (self.episode_steps % int(self.cfg.commands.resampling_time / self.dt) == 0)
             .nonzero(as_tuple=False)
             .flatten()
         )
@@ -337,7 +339,7 @@ class LeggedRobotEnv(AgentEnv):
     def _push_robots(self, env_states: TensorState):
         """Randomly set robot's root velocity to simulate a push."""
         env_ids = torch.arange(self.num_envs, device=self.device)
-        push_env_ids = env_ids[self._episode_steps[env_ids] % int(self.cfg.domain_rand.push_interval_s) == 0]
+        push_env_ids = env_ids[self.episode_steps[env_ids] % int(self.cfg.domain_rand.push_interval_s) == 0]
         if len(push_env_ids) == 0:
             return
 
@@ -378,6 +380,13 @@ class LeggedRobotEnv(AgentEnv):
         rpy = get_euler_xyz(env_states.robots[self.name].root_state[:, 3:7])
         reset_buf |= torch.logical_or(torch.abs(rpy[:, 1]) > 1.0, torch.abs(rpy[:, 0]) > 0.8)
         return reset_buf
+
+    def _time_out(self, env_states: TensorState | None) -> torch.BoolTensor:
+        """
+        Timeout flags.
+        Note that max_episode_steps is set to -1 by default (no timeout).
+        """
+        return self.episode_steps >= self.max_episode_steps
 
     def _resample_commands(self, env_ids):
         """Randommly select commands of some environments

@@ -190,15 +190,12 @@ def reward_feet_contact_forces(env: EnvTypes, states: TensorState) -> torch.Tens
 '''
 
 def reward_contact(env: EnvTypes, states: TensorState) -> torch.Tensor:
-    is_stance = env.gait_phase
     contact = env.contact_forces[:, env.feet_indices, 2] > 1.0
-    res = torch.sum(contact == is_stance, dim=1, dtype=torch.float32)
+    res = torch.sum(contact == env.leg_phase, dim=1, dtype=torch.float32)
     return res
 
 def reward_feet_swing_height(env: EnvTypes, states: TensorState) -> torch.Tensor:
     contact = torch.norm(env.contact_forces[:, env.feet_indices, :3], dim=2) > 1.0
-    # leg_phase = env.leg_phase
-    # contact = leg_phase < 0.5 + env.cfg.reward_env.cfg.feet_full_contact_time
     feet_state = states.robots[env.name].body_state[:, env.feet_indices, :]
     feet_pos = feet_state[:, :, :3]
     pos_error = torch.square(feet_pos[:, :, 2] - env.cfg.rewards.extras.target_feet_height) * ~contact
@@ -307,7 +304,7 @@ def reward_foot_slip(env: EnvTypes, states: TensorState) -> torch.Tensor:
     """
     Calculates the reward for minimizing foot slip.
     """
-    contact = env.contact_forces"][:, env.feet_indices, 2] > 5.0
+    contact = env.contact_forces[:, env.feet_indices, 2] > 5.0
     foot_speed_norm = torch.norm(states.robots[env.name].body_state[:, env.feet_indices, 10:12], dim=2)
     rew = torch.sqrt(foot_speed_norm)
     rew *= contact
@@ -318,8 +315,8 @@ def reward_feet_contact_number(env: EnvTypes, states: TensorState) -> torch.Tens
     """
     Reward based on feet contact matching gait phase.
     """
-    contact = env.contact_forces"][:, env.feet_indices, 2] > 5.0
-    stance_mask = env.gait_phase"]
+    contact = env.contact_forces[:, env.feet_indices, 2] > 5.0
+    stance_mask = env.gait_phase
     reward = torch.where(contact == stance_mask, 1.0, -0.3)
     return torch.mean(reward, dim=1)
 
@@ -350,7 +347,7 @@ def reward_base_acc(env: EnvTypes, states: TensorState) -> torch.Tensor:
     """
     Penalize base acceleration.
     """
-    root_acc = env.last_root_vel"] - states.robots[env.name].root_state[:, 7:13]
+    root_acc = env.last_root_vel - states.robots[env.name].root_state[:, 7:13]
     rew = torch.exp(-torch.norm(root_acc, dim=1) * 3)
     return rew
 
@@ -359,8 +356,8 @@ def reward_vel_mismatch_exp(env: EnvTypes, states: TensorState) -> torch.Tensor:
     """
     Penalize velocity mismatch.
     """
-    lin_mismatch = torch.exp(-torch.square(env.base_lin_vel"][:, 2]) * 10)
-    ang_mismatch = torch.exp(-torch.norm(env.base_ang_vel"][:, :2], dim=1) * 5.0)
+    lin_mismatch = torch.exp(-torch.square(env.base_lin_vel[:, 2]) * 10)
+    ang_mismatch = torch.exp(-torch.norm(env.base_ang_vel[:, :2], dim=1) * 5.0)
     return (lin_mismatch + ang_mismatch) / 2.0
 
 
@@ -369,12 +366,12 @@ def reward_track_vel_hard(env: EnvTypes, states: TensorState) -> torch.Tensor:
     Track linear and angular velocity commands.
     """
     lin_vel_error = torch.norm(
-        env.command"][:, :2] - env.base_lin_vel"][:, :2],
+        env.command[:, :2] - env.base_lin_vel[:, :2],
         dim=1,
     )
     lin_vel_error_exp = torch.exp(-lin_vel_error * 10)
     ang_vel_error = torch.abs(
-        env.command"][:, 2] - env.base_ang_vel"][:, 2]
+        env.command[:, 2] - env.base_ang_vel[:, 2]
     )
     ang_vel_error_exp = torch.exp(-ang_vel_error * 10)
     linear_error = 0.2 * (lin_vel_error + ang_vel_error)
@@ -385,27 +382,27 @@ def reward_feet_clearance(env: EnvTypes, states: TensorState) -> torch.Tensor:
     """
     Reward swing leg clearance.
     """
-    return env.feet_clearance"]
+    return env.feet_clearance
 
 
 def reward_low_speed(env: EnvTypes, states: TensorState) -> torch.Tensor:
     """
     Penalize speed mismatch with command.
     """
-    absolute_speed = torch.abs(env.base_lin_vel"][:, 0])
-    absolute_command = torch.abs(env.command"][:, 0])
+    absolute_speed = torch.abs(env.base_lin_vel[:, 0])
+    absolute_command = torch.abs(env.command[:, 0])
     speed_too_low = absolute_speed < 0.5 * absolute_command
     speed_too_high = absolute_speed > 1.2 * absolute_command
     speed_desired = ~(speed_too_low | speed_too_high)
-    sign_mismatch = torch.sign(env.base_lin_vel"][:, 0]) != torch.sign(
-        env.command"][:, 0]
+    sign_mismatch = torch.sign(env.base_lin_vel[:, 0]) != torch.sign(
+        env.command[:, 0]
     )
-    reward = torch.zeros_like(env.base_lin_vel"][:, 0])
+    reward = torch.zeros_like(env.base_lin_vel[:, 0])
     reward[speed_too_low] = -1.0
     reward[speed_too_high] = 0.0
     reward[speed_desired] = 1.2
     reward[sign_mismatch] = -2.0
-    return reward * (env.command"][:, 0].abs() > 0.1)
+    return reward * (env.command[:, 0].abs() > 0.1)
 
 
 def reward_action_smoothness(env: EnvTypes, states: TensorState) -> torch.Tensor:
@@ -413,18 +410,18 @@ def reward_action_smoothness(env: EnvTypes, states: TensorState) -> torch.Tensor
     Penalize jerk in actions.
     """
     term_1 = torch.sum(
-        torch.square(env.last_actions"] - env.actions"]),
+        torch.square(env.last_actions - env.actions),
         dim=1,
     )
     term_2 = torch.sum(
         torch.square(
-            env.actions"]
-            + env.last_last_actions"]
-            - 2 * env.last_actions"]
+            env.actions
+            + env.last_last_actions
+            - 2 * env.last_actions
         ),
         dim=1,
     )
-    term_3 = 0.05 * torch.sum(torch.abs(env.actions"]), dim=1)
+    term_3 = 0.05 * torch.sum(torch.abs(env.actions), dim=1)
     return term_1 + term_2 + term_3
 
 
