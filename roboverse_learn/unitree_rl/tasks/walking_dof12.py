@@ -16,7 +16,7 @@ class WalkingDof12Env(HumanoidEnv):
         Returns:
             [torch.Tensor]: Vector of scales used to multiply a uniform distribution in [-1, 1]
         """
-        noise_vec = torch.zeros_like(self.obs_buf[0])
+        noise_vec = torch.zeros(size=(self.num_envs, self.cfg.num_obs_single), dtype=torch.float, device=self.device)
         self.add_noise = self.cfg.noise.add_noise
         noise_scales = self.cfg.noise.scales
         noise_level = self.cfg.noise.noise_level
@@ -35,7 +35,7 @@ class WalkingDof12Env(HumanoidEnv):
         return noise_vec
 
     def _observation(self, env_states):
-        phase = self._get_phase()
+        phase = self._get_feet_phase()
         sin_phase = torch.sin(2 * torch.pi * phase).unsqueeze(1)
         cos_phase = torch.cos(2 * torch.pi * phase).unsqueeze(1)
 

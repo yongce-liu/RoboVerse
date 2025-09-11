@@ -7,9 +7,6 @@ from roboverse_learn.unitree_rl.helper.utils import get_indices_from_substring
 from .env_legged_robot import LeggedRobotEnv
 
 class HumanoidEnv(LeggedRobotEnv):
-    def __init__(self, simulator, robot):
-        super().__init__(simulator, robot)
-
     def _init_rigid_body_indices(self):
         robot: Union[G1Dof12Cfg] = self.robot
         sorted_body_names: list[str] = self.sorted_body_names
@@ -38,7 +35,7 @@ class HumanoidEnv(LeggedRobotEnv):
 
     def _update_feet_gait(self):
         """Add phase into states"""
-        phase = self._get_phase()
+        phase = self._get_feet_phase()
         sin_pos = torch.sin(2 * torch.pi * phase)
         # left foot stance
         self.leg_phase[:, 0] = sin_pos >= 0

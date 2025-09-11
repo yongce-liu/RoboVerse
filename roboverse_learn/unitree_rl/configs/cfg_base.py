@@ -5,8 +5,8 @@ from typing import Callable
 @configclass
 class BaseCfg:
     episode_length_s = 20.0
-    num_obs_single = 20
-    obs_len_history = 5 # number of past + current observations to include in the observation
+    num_obs_single = 0
+    obs_len_history = 0 # number of past + current observations to include in the observation
     num_priv_obs_single = 0
     priv_obs_len_history = 0 # number of past + current privileged observations to include in the privileged observation
     class control:
