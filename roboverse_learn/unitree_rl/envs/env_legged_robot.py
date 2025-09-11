@@ -383,7 +383,7 @@ class LeggedRobotEnv(AgentEnv):
         self.set_states(env_states, push_env_ids.tolist())
 
     def _reward(self, env_states):
-        rew_buf = 0.0 * self.rew_buf.clone()
+        rew_buf = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
         for i in range(len(self.reward_functions)):
             name = self.reward_names[i]
             unscaled_rew = self.reward_functions[i](env_states, self.name, self.reward_extras)
