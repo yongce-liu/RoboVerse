@@ -85,6 +85,7 @@ class AgentEnv:
         for key, value in vars(init_state).items():
             if value is not None:
                 setattr(self.simulator.initial_states.robots[self.name], key, value)
+        return self.simulator.initial_states
 
     def get_states(self) -> TensorState:
         """Get the current state of the environment."""
@@ -99,7 +100,7 @@ class AgentEnv:
         """
         self.simulator.handler.set_states(states=states, env_ids=env_ids)
 
-    def reset(self, env_ids: list[int] = None) -> TensorState:
+    def reset(self, env_ids: list[int] = None, states: TensorState | None = None) -> TensorState:
         """Reset the environment.
 
         Args:
@@ -117,7 +118,7 @@ class AgentEnv:
         if len(env_ids) == 0:
             return self.simulator.handler.get_states()
 
-        states_to_set = self.simulator.initial_states
+        states_to_set = self.simulator.initial_states if states is None else states
         self.simulator.handler.set_states(states=states_to_set, env_ids=env_ids)
         env_states = self.simulator.handler.get_states(env_ids=env_ids)
 

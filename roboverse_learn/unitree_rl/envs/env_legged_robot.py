@@ -42,44 +42,50 @@ class LeggedRobotEnv(AgentEnv):
         self.reward_scales = class_to_dict(self.cfg.rewards.scales)
         # self.command_ranges = class_to_dict(self.cfg.commands.ranges)
         # parse rigid body indices
-        self._init_rigid_body_indices(self.robot)
+        self._init_rigid_body_indices()
         # parse joint indices
-        self._init_joint_cfg(self.robot)
+        self._init_joint_cfg()
 
-    def _init_rigid_body_indices(self, robot: Union[G1Dof12Cfg, Go2Cfg]):
+    def _init_rigid_body_indices(self):
         """
         Parse rigid body indices from robot cfg.
         """
-        self.feet_indices = get_indices_from_substring(robot.feet_links, self.sorted_body_names).to(self.device)
-        self.termination_contact_indices = get_indices_from_substring(robot.terminate_contacts_links, self.sorted_body_names).to(self.device)
-        self.penalised_contact_indices = get_indices_from_substring(robot.penalized_contacts_links, self.sorted_body_names).to(self.device)
+        robot: Union[G1Dof12Cfg, Go2Cfg] = self.robot
+        sorted_body_names: list[str] = self.sorted_body_names
 
-    def _init_joint_cfg(self, robot: Union[G1Dof12Cfg, Go2Cfg]):
+        self.feet_indices = get_indices_from_substring(robot.feet_links, sorted_body_names).to(self.device)
+        self.termination_contact_indices = get_indices_from_substring(robot.terminate_contacts_links, sorted_body_names).to(self.device)
+        self.penalised_contact_indices = get_indices_from_substring(robot.penalized_contacts_links, sorted_body_names).to(self.device)
+
+    def _init_joint_cfg(self):
         """
         parse default joint positions and torque limits from cfg.
         """
+        robot: Union[G1Dof12Cfg, Go2Cfg] = self.robot
+        sorted_joint_names: list[str] = self.sorted_joint_names
+
         torque_limits = (
             robot.torque_limits
             if hasattr(robot, "torque_limits")
             else {name: actuator_cfg.torque_limit for name, actuator_cfg in robot.actuators.items()}
         )
 
-        sorted_p_gains = [robot.actuators[name].stiffness for name in self.sorted_joint_names]
-        sorted_limits = [torque_limits[name] for name in self.sorted_joint_names]
+        sorted_p_gains = [robot.actuators[name].stiffness for name in sorted_joint_names]
+        sorted_limits = [torque_limits[name] for name in sorted_joint_names]
         self.torque_limits = torch.tensor(sorted_limits, device=self.device) * self.cfg.control.scales.torque_limits # (n_dof,)
 
-        sorted_p_gains = [robot.actuators[name].stiffness for name in self.sorted_joint_names]
+        sorted_p_gains = [robot.actuators[name].stiffness for name in sorted_joint_names]
         self.p_gains = torch.tensor(sorted_p_gains, device=self.device) # (n_dof,)
 
-        sorted_d_gains = [robot.actuators[name].damping for name in self.sorted_joint_names]
+        sorted_d_gains = [robot.actuators[name].damping for name in sorted_joint_names]
         self.d_gains = torch.tensor(sorted_d_gains, device=self.device) # (n_dof,)
 
         dof_pos_limits = robot.joint_limits
-        sorted_dof_pos_limits = [dof_pos_limits[joint] for joint in self.sorted_joint_names]
+        sorted_dof_pos_limits = [dof_pos_limits[joint] for joint in sorted_joint_names]
         self.dof_pos_limits = torch.tensor(sorted_dof_pos_limits, device=self.device) * self.cfg.control.scales.dof_pos_limits # (n_dof, 2)
 
         default_joint_pos = robot.default_joint_positions
-        sorted_joint_pos = [default_joint_pos[name] for name in self.sorted_joint_names]
+        sorted_joint_pos = [default_joint_pos[name] for name in sorted_joint_names]
         self.default_dof_pos = torch.tensor(sorted_joint_pos, device=self.device) # (n_dof,)
 
     def _init_reward_extra(self):
@@ -96,7 +102,8 @@ class LeggedRobotEnv(AgentEnv):
         self.reward_extras['penalised_contact_indices'] = self.penalised_contact_indices
         self.reward_extras['termination_contact_indices'] = self.termination_contact_indices
         self.reward_extras["torque_limits"] = self.torque_limits
-        for _key, _val in class_to_dict(self.cfg.rewards.extras):
+        _tmp_extras = class_to_dict(self.cfg.rewards.extras)
+        for _key, _val in _tmp_extras.items():
             self.reward_extras[_key] = _val
 
     def _init_reward_function(self):
@@ -204,7 +211,7 @@ class LeggedRobotEnv(AgentEnv):
                                      joint_pos_target=None,
                                      joint_vel_target=None,
                                      joint_effort_target=None)
-        self._register_initial_state(self.init_state)
+        _ = self._register_initial_state(self.init_state)
 
     def _compute_torques(self, env_states: TensorState, actions: torch.Tensor) -> torch.Tensor:
         dof_pos = env_states.robots[self.name].joint_pos
@@ -234,8 +241,8 @@ class LeggedRobotEnv(AgentEnv):
             -0.5, 0.5, (len(env_ids), 6), device=self.device
         )
 
-        self._register_initial_state(state)
-        env_states: TensorState =  super().reset(env_ids)
+        states_to_set = self._register_initial_state(state)
+        env_states: TensorState =  super().reset(env_ids, states_to_set)
 
         self._resample_commands(env_ids)
 
@@ -302,7 +309,7 @@ class LeggedRobotEnv(AgentEnv):
 
         self._post_physics_step_callback()
 
-        self._update_rewards_extras(env_states)
+        self._update_rewards_extras()
 
         # gym-style return values
         self.rew_buf[:] = self._reward(env_states)
@@ -341,7 +348,7 @@ class LeggedRobotEnv(AgentEnv):
             heading = torch.atan2(forward[:, 1], forward[:, 0])
             self.commands[:, 2] = torch.clip(0.5 * wrap_to_pi(self.commands[:, 3] - heading), -1.0, 1.0)
 
-    def _update_rewards_extras(self, env_states: TensorState):
+    def _update_rewards_extras(self):
         self.reward_extras["base_euler_xyz"] = self.base_euler_xyz
         self.reward_extras["base_lin_vel"] = self.base_lin_vel
         self.reward_extras["base_ang_vel"] = self.base_ang_vel
