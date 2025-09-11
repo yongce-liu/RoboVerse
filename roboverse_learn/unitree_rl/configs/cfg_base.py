@@ -58,7 +58,7 @@ class BaseEnvCfg:
             soft_torque_limit = 1.
             base_height_target = 1.
             target_feet_height = 0.06
-            feet_cycle_time = 0.8
+            feet_cycle_time = 0.7
             all_feet_contact_time = 0.05
             max_contact_force = 100. # forces above this value are penalized
 
