@@ -42,7 +42,6 @@ def play(args):
     )
     if args.sim == "mujoco":
         scenario.decimation = 10
-    scenario.num_envs = 1
     task.commands.curriculum = False
     task.ppo_cfg.runner.resume = True
     # Disable object property randomization in play mode by unsetting configs

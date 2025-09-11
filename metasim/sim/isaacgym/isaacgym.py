@@ -336,8 +336,8 @@ class IsaacgymHandler(BaseSimHandler):
                 # FIXME: hard code for 0-1 action space, should remove all the scale stuff later
 
                 robot_dof_props["driveMode"][i] = gymapi.DOF_MODE_EFFORT
-                # robot_dof_props["stiffness"][i] = i_actuator_cfg.stiffness
-                # robot_dof_props["damping"][i] = i_actuator_cfg.damping
+                robot_dof_props["stiffness"][i] = 0.0
+                robot_dof_props["damping"][i] = 0.0
 
             # built-in position mode
             elif i_control_mode == "position":

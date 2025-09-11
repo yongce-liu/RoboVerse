@@ -81,6 +81,7 @@ class IsaacsimHandler(BaseSimHandler):
                 max_position_iteration_count=self.scenario.sim_params.num_position_iterations,
                 max_velocity_iteration_count=self.scenario.sim_params.num_velocity_iterations,
                 friction_correlation_distance=self.scenario.sim_params.friction_correlation_distance,
+                friction_offset_threshold=self.scenario.sim_params.friction_offset_threshold,
             ),
         )
         if self.scenario.sim_params.dt is not None:
@@ -359,7 +360,6 @@ class IsaacsimHandler(BaseSimHandler):
         return TensorState(objects=object_states, robots=robot_states, cameras=camera_states, extras=extras)
 
     def set_dof_targets(self, actions: torch.Tensor) -> None:
-        # TODO: support set torque
         if isinstance(actions, torch.Tensor):
             reverse_reindex = self.get_joint_reindex(self.robots[0].name, inverse=True)
             action_tensor_all = actions[:, reverse_reindex]
@@ -421,8 +421,16 @@ class IsaacsimHandler(BaseSimHandler):
             spawn=sim_utils.UsdFileCfg(
                 usd_path=robot.usd_path,
                 activate_contact_sensors=True,
-                rigid_props=sim_utils.RigidBodyPropertiesCfg(),
+                rigid_props=sim_utils.RigidBodyPropertiesCfg(
+                    max_depenetration_velocity=getattr(
+                        robot, "max_depenetration_velocity", self.scenario.sim_params.max_depenetration_velocity
+                    )
+                ),
                 articulation_props=sim_utils.ArticulationRootPropertiesCfg(fix_root_link=robot.fix_base_link),
+                collision_props=sim_utils.CollisionPropertiesCfg(
+                    contact_offset=getattr(robot, "contact_offset", self.scenario.sim_params.contact_offset),
+                    rest_offset=getattr(robot, "rest_offset", self.scenario.sim_params.rest_offset),
+                ),
             ),
             actuators={
                 jn: ImplicitActuatorCfg(
@@ -469,11 +477,25 @@ class IsaacsimHandler(BaseSimHandler):
             return
 
         if obj.fix_base_link:
-            rigid_props = sim_utils.RigidBodyPropertiesCfg(disable_gravity=True, kinematic_enabled=True)
+            rigid_props = sim_utils.RigidBodyPropertiesCfg(
+                disable_gravity=True,
+                kinematic_enabled=True,
+                max_depenetration_velocity=getattr(
+                    obj, "max_depenetration_velocity", self.scenario.sim_params.max_depenetration_velocity
+                ),
+            )
         else:
-            rigid_props = sim_utils.RigidBodyPropertiesCfg()
+            rigid_props = sim_utils.RigidBodyPropertiesCfg(
+                max_depenetration_velocity=getattr(
+                    obj, "max_depenetration_velocity", self.scenario.sim_params.max_depenetration_velocity
+                )
+            )
         if obj.collision_enabled:
-            collision_props = sim_utils.CollisionPropertiesCfg(collision_enabled=True)
+            collision_props = sim_utils.CollisionPropertiesCfg(
+                collision_enabled=True,
+                contact_offset=getattr(obj, "contact_offset", self.scenario.sim_params.contact_offset),
+                rest_offset=getattr(obj, "rest_offset", self.scenario.sim_params.rest_offset),
+            )
         else:
             collision_props = None
 
