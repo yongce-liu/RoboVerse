@@ -136,7 +136,7 @@ class LeggedRobotEnv(AgentEnv):
         self.actions = torch.zeros(size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device, requires_grad=False)
         self.torques = torch.zeros(size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device, requires_grad=False)
         self.obs_buf_history = deque([torch.zeros(size=(self.num_envs, self.cfg.num_obs_single), dtype=torch.float, device=self.device, requires_grad=False) for _ in range(self.cfg.obs_len_history)], maxlen=self.cfg.obs_len_history)
-        self.obs_buf = torch.cat(list(self.obs_buf_history), dim=1).to(self.device)
+        self.obs_buf = None if self.cfg.num_obs_single == 0 else torch.cat(list(self.obs_buf_history), dim=1).to(self.device)
         self.priv_obs_buf_history = deque([torch.zeros(size=(self.num_envs, self.cfg.num_priv_obs_single), dtype=torch.float, device=self.device, requires_grad=False)], maxlen=self.cfg.priv_obs_len_history)
         self.priv_obs_buf = None if self.cfg.num_priv_obs_single == 0 else torch.cat(list(self.priv_obs_buf_history), dim=1).to(self.device)
         self.rew_buf = torch.zeros(size=(self.num_envs,), device=self.device, dtype=torch.float)
