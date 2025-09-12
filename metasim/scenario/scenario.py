@@ -60,7 +60,7 @@ class ScenarioCfg:
     num_envs: int = 1
     headless: bool = False
     env_spacing: float = 1.0
-    decimation: int = 4
+    decimation: int = 25
 
     def __post_init__(self) -> None:
         """Resolve strings & fetch assets; skip until `simulator` is set."""

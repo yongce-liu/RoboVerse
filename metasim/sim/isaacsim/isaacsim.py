@@ -477,8 +477,8 @@ class IsaacsimHandler(BaseSimHandler):
             actuators={
                 jn: ImplicitActuatorCfg(
                     joint_names_expr=[jn],
-                    stiffness=0.0,
-                    damping=0.0,
+                    stiffness=0.0,  # for torque control
+                    damping=0.0,  # for torque control
                 )
                 for jn, actuator in robot.actuators.items()
             },

@@ -333,7 +333,7 @@ class IsaacgymHandler(BaseSimHandler):
                 default_dof_pos.append(robot_upper_limits[i])
             # pd control effort mode
             if i_control_mode == "effort":
-                # FIXME: hard code for 0-1 action space, should remove all the scale stuff later
+                # effort control should set all to zeros
 
                 robot_dof_props["driveMode"][i] = gymapi.DOF_MODE_EFFORT
                 robot_dof_props["stiffness"][i] = 0.0

@@ -39,6 +39,7 @@ def play(args):
         simulator=args.sim,
         headless=args.headless,
         cameras=[],
+        decimation=args.decimation,
     )
     if args.sim == "mujoco":
         scenario.decimation = 10

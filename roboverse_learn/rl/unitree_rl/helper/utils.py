@@ -101,6 +101,7 @@ def get_args(test=False):
         {"name": "--use_wandb", "action": "store_true", "default": True, "help": "Use wandb for logging"},
         {"name": "--wandb", "type": str, "default": "g1_walking", "help": "Wandb project name"},
         {"name": "--jit_load", "type": bool, "default": False, "help": "Whether to load the JIT model"},
+        {"name": "--decimation", "type": int, "default": 4, "help": "Control decimation factor for the simulation"},
         {
             "name": "--reindex_actions",
             "type": bool,

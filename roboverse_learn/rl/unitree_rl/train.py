@@ -51,6 +51,7 @@ def train(args):
         simulator=args.sim,
         headless=args.headless,
         cameras=[],
+        decimation=args.decimation,
     )
 
     use_wandb = args.use_wandb
