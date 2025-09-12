@@ -284,7 +284,7 @@ class IsaacgymHandler(BaseSimHandler):
         assert len(self.robots) == 1, "Only support one robot for now"
         robot_asset_file = self.robots[0].mjcf_path if self.robots[0].isaacgym_read_mjcf else self.robots[0].urdf_path
         asset_options = gymapi.AssetOptions()
-        asset_options.armature = getattr(self.robots[0], "armature", 0.01)
+        asset_options.armature = getattr(self.robots[0], "armature", 0.0)
         asset_options.fix_base_link = self.robots[0].fix_base_link
         asset_options.disable_gravity = not self.robots[0].enabled_gravity
         asset_options.flip_visual_attachments = self.robots[0].isaacgym_flip_visual_attachments
@@ -340,8 +340,8 @@ class IsaacgymHandler(BaseSimHandler):
                 # FIXME: hard code for 0-1 action space, should remove all the scale stuff later
 
                 robot_dof_props["driveMode"][i] = gymapi.DOF_MODE_EFFORT
-                robot_dof_props["stiffness"][i] = i_actuator_cfg.stiffness
-                robot_dof_props["damping"][i] = i_actuator_cfg.damping
+                robot_dof_props["stiffness"][i] = 0.0
+                robot_dof_props["damping"][i] = 0.0
 
             # built-in position mode
             elif i_control_mode == "position":

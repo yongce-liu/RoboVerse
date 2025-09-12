@@ -57,7 +57,7 @@ class BaseEnvCfg:
             soft_dof_vel_limit = 1.
             soft_torque_limit = 1.
             base_height_target = 1.
-            target_feet_height = 0.06
+            target_feet_height = 0.08
             feet_cycle_time = 0.7
             all_feet_contact_time = 0.05
             max_contact_force = 100. # forces above this value are penalized
@@ -80,6 +80,7 @@ class BaseEnvCfg:
         push_robots = True
         push_interval_s = 15
         max_push_vel_xy = 1.
+        randomize_initial_state = True
 
     class noise:
         add_noise = True
@@ -91,29 +92,6 @@ class BaseEnvCfg:
             ang_vel = 0.2
             gravity = 0.05
             height_measurements = 0.1
-
-    class initial_states:
-        objects = {}
-        robots = {"g1_dof12":
-                    {"pos": [0.0, 0.0, 0.8],
-                     "rot": [1.0, 0.0, 0.0, 0.0],
-                     "joint_pos": {
-                            # Hips & legs
-                            "left_hip_yaw_joint": 0.0,
-                            "left_hip_roll_joint": 0.0,
-                            "left_hip_pitch_joint": -0.1,
-                            "left_knee_joint": 0.3,
-                            "left_ankle_pitch_joint": -0.2,
-                            "left_ankle_roll_joint": 0.0,
-                            "right_hip_yaw_joint": 0.0,
-                            "right_hip_roll_joint": 0.0,
-                            "right_hip_pitch_joint": -0.1,
-                            "right_knee_joint": 0.3,
-                            "right_ankle_pitch_joint": -0.2,
-                            "right_ankle_roll_joint": 0.0,
-                        },
-                    },
-                }
 
 class RslTrainCfg:
     seed = 1

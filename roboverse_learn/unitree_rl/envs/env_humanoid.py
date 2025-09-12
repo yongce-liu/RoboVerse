@@ -30,12 +30,12 @@ class HumanoidEnv(LeggedRobotEnv):
         return super()._init_buffers()
 
     def _post_physics_step_callback(self):
-        self._update_feet_gait()
+        self._update_leg_phase()
         return super()._post_physics_step_callback()
 
-    def _update_feet_gait(self):
+    def _update_leg_phase(self):
         """Add phase into states"""
-        phase = self._get_feet_phase()
+        phase = self._get_leg_phase()
         sin_pos = torch.sin(2 * torch.pi * phase)
         # left foot stance
         self.leg_phase[:, 0] = sin_pos >= 0
@@ -44,7 +44,7 @@ class HumanoidEnv(LeggedRobotEnv):
         # Double support phase
         self.leg_phase[torch.abs(sin_pos) < self.cfg.rewards.extras.all_feet_contact_time / 2.0] = True
 
-    def _get_feet_phase(self):
+    def _get_leg_phase(self):
         feet_cycle_time = self.cfg.rewards.extras.feet_cycle_time
         phase = (self.episode_steps * self.dt) % feet_cycle_time / feet_cycle_time
         return phase

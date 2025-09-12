@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import MISSING
 from typing import Literal
 
 from metasim.scenario.robot import BaseActuatorCfg, RobotCfg
@@ -11,7 +10,7 @@ from metasim.utils import configclass
 class G1Dex3Cfg(RobotCfg):
     name: str = "g1_dex3"
     num_joints: int = 43
-    usd_path: str = MISSING
+    usd_path: str = "roboverse_data/robots/g1/usd/29dof_dex3/g1_29dof_with_dex3_rev_1_0.usd"
     xml_path: str = "roboverse_data/robots/g1/xml/g1_29dof_with_hand_rev_1_0.xml"
     urdf_path: str = "roboverse_data/robots/g1/urdf/g1_29dof_with_hand_rev_1_0.urdf"
     mjcf_path = xml_path

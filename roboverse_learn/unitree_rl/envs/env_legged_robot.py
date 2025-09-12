@@ -21,7 +21,7 @@ from roboverse_learn.unitree_rl.helper.utils import get_euler_xyz, get_indices_f
 
 class LeggedRobotEnv(AgentEnv):
     """A base task env for legged robots."""
-    def __init__(self, config: BaseEnvCfg, simulator: MasterSimulator, robot: RobotCfg) -> None:
+    def __init__(self, simulator: MasterSimulator, robot: RobotCfg, config: BaseEnvCfg) -> None:
         super().__init__(simulator, robot)
         self._instantiate_cfg(config)
         self._init_rigid_body_indices() # parse rigid body indices
@@ -126,10 +126,10 @@ class LeggedRobotEnv(AgentEnv):
         self.base_ang_vel = torch.zeros(size=(self.num_envs, 3), dtype=torch.float, device=self.device, requires_grad=False)
 
         self.up_axis_idx = 2
-        self.gravity_vec = torch.tensor(self.get_axis_params(-1.0, self.up_axis_idx), device=self.device, dtype=torch.float).repeat((self.num_envs, 1))
+        self.gravity_vec = torch.tensor(self.get_axis_params(-1.0, self.up_axis_idx), dtype=torch.float, device=self.device).repeat((self.num_envs, 1))
         self.forward_vec = torch.tensor([1.0, 0.0, 0.0], dtype=torch.float, device=self.device).repeat((self.num_envs, 1))
         self.projected_gravity = quat_rotate_inverse(self.base_quat, self.gravity_vec)
-        self.contact_forces = torch.zeros(size=(self.num_envs, len(self.sorted_body_names), 3), device=self.device, dtype=torch.float)
+        self.contact_forces = torch.zeros(size=(self.num_envs, len(self.sorted_body_names), 3), dtype=torch.float, device=self.device)
 
         # self.common_step_counter = 0
         self.episode_steps = torch.zeros(size=(self.num_envs,), dtype=torch.int, device=self.device)
@@ -139,7 +139,7 @@ class LeggedRobotEnv(AgentEnv):
         self.obs_buf = None if self.cfg.num_obs_single == 0 else torch.cat(list(self.obs_buf_history), dim=1).to(self.device)
         self.priv_obs_buf_history = deque([torch.zeros(size=(self.num_envs, self.cfg.num_priv_obs_single), dtype=torch.float, device=self.device, requires_grad=False)], maxlen=self.cfg.priv_obs_len_history)
         self.priv_obs_buf = None if self.cfg.num_priv_obs_single == 0 else torch.cat(list(self.priv_obs_buf_history), dim=1).to(self.device)
-        self.rew_buf = torch.zeros(size=(self.num_envs,), device=self.device, dtype=torch.float)
+        self.rew_buf = torch.zeros(size=(self.num_envs,), dtype=torch.float, device=self.device)
         self.reset_buf = torch.ones(size=(self.num_envs,), device=self.device, dtype=torch.bool)
         self.time_out_buf = torch.zeros(size=(self.num_envs,), device=self.device, dtype=torch.bool)
         self.extras = {}
@@ -179,9 +179,9 @@ class LeggedRobotEnv(AgentEnv):
     def _init_initial_state(self):
         # objects = self.cfg.initial_states.objects
         robots = self.cfg.initial_states.robots
-        pos = torch.tensor(robots[self.name]["pos"], device=self.device, dtype=torch.float).unsqueeze(0).repeat(self.num_envs, 1)
-        rot = torch.tensor(robots[self.name]["rot"], device=self.device, dtype=torch.float).unsqueeze(0).repeat(self.num_envs, 1)
-        root_state = torch.zeros(size=(self.num_envs, 13), device=self.device, dtype=torch.float)
+        pos = torch.tensor(robots[self.name]["pos"], dtype=torch.float, device=self.device).unsqueeze(0).repeat(self.num_envs, 1)
+        rot = torch.tensor(robots[self.name]["rot"], dtype=torch.float, device=self.device).unsqueeze(0).repeat(self.num_envs, 1)
+        root_state = torch.zeros(size=(self.num_envs, 13), dtype=torch.float, device=self.device)
         root_state[:, 0:3] = pos
         root_state[:, 3:7] = rot
         joint_pos = torch.tensor(
@@ -189,27 +189,26 @@ class LeggedRobotEnv(AgentEnv):
             device=self.device,
             dtype=torch.float,
         ).unsqueeze(0).repeat(self.num_envs, 1)
-        self.init_state = RobotState(root_state=root_state,
+        self.initial_state = RobotState(root_state=root_state,
                                      joint_pos=joint_pos,
                                      joint_vel=joint_pos.clone()*0.0,
-                                     body_names=None,
-                                     body_state=None,
-                                     joint_pos_target=None,
-                                     joint_vel_target=None,
-                                     joint_effort_target=None)
-        _ = self._register_initial_state(self.init_state)
+                                     body_names=self.sorted_body_names,
+                                     body_state=torch.zeros(size=(self.num_envs, len(self.sorted_body_names), 13), dtype=torch.float, device=self.device),
+                                     joint_pos_target=torch.zeros(size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device),
+                                     joint_vel_target=torch.zeros(size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device),
+                                     joint_effort_target=torch.zeros(size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device))
+        _ = self._register_initial_state(self.initial_state)
 
     def _compute_torques(self, env_states: TensorState, actions: torch.Tensor) -> torch.Tensor:
         dof_pos = env_states.robots[self.name].joint_pos
         dof_vel = env_states.robots[self.name].joint_vel
         #pd controller
         actions_scaled = actions * self.cfg.control.action_scale
-        control_type = self.cfg.control.control_type
-        if control_type=="P":
+        if self.control_type=="P":
             torques = self.p_gains*(actions_scaled + self.default_dof_pos - dof_pos) - self.d_gains*dof_vel
-        elif control_type=="V":
+        elif self.control_type=="V":
             torques = self.p_gains*(actions_scaled - dof_vel) - self.d_gains*(dof_vel - self.history_buffer['last_dof_vel']) / self.sim_dt
-        elif control_type=="T":
+        elif self.control_type=="T":
             torques = actions_scaled
         else:
             raise NameError(f"Unknown controller type: {control_type}")
@@ -223,16 +222,16 @@ class LeggedRobotEnv(AgentEnv):
             return self.get_states()
 
         # randomize initial state
-        state = copy.deepcopy(self.init_state)
-        state.joint_pos[env_ids] = self.default_dof_pos * torch_rand_float(
-            0.5, 1.5, (len(env_ids), self.num_actions), device=self.device
-        )
-        state.joint_vel[env_ids] = 0.0
-        state.root_state[env_ids, 7:13] = torch_rand_float(
-            -0.5, 0.5, (len(env_ids), 6), device=self.device
-        )
-
-        states_to_set = self._register_initial_state(state)
+        # state = copy.deepcopy(self.initial_state)
+        if self.cfg.domain_rand.randomize_initial_state:
+            self.initial_state.joint_pos[env_ids] = self.default_dof_pos * torch_rand_float(
+                0.5, 1.5, (len(env_ids), self.num_actions), device=self.device
+            )
+            self.initial_state.joint_vel[env_ids] = 0.0
+            self.initial_state.root_state[env_ids, 7:13] = torch_rand_float(
+                -0.5, 0.5, (len(env_ids), 6), device=self.device
+            )
+        states_to_set = self._register_initial_state(self.initial_state)
         env_states: TensorState =  super().reset(env_ids, states_to_set)
 
         self._resample_commands(env_ids)
@@ -246,7 +245,7 @@ class LeggedRobotEnv(AgentEnv):
         self.actions[env_ids] = 0.0
         # self.feet_air_time[env_ids] = 0.0
         # self.base_quat[env_ids] = (
-        #     torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device, dtype=torch.float)
+        #     torch.tensor([1.0, 0.0, 0.0, 0.0], dtype=torch.float, device=self.device)
         #     .unsqueeze(0)
         #     .repeat(len(env_ids), 1)
         # )
@@ -301,12 +300,13 @@ class LeggedRobotEnv(AgentEnv):
 
         # gym-style return values
         self.rew_buf[:] = self._reward(env_states)
-        _tmp_obs_buf, _tmp_priv_obs_buf = self._observation(env_states)
-        self.obs_buf_history.append(_tmp_obs_buf)
-        self.obs_buf[:] = torch.cat(list(self.obs_buf_history), dim=1).clip(-self.cfg.normalization.clip_observations, self.cfg.normalization.clip_observations).to(self.device)
-        if self.priv_obs_buf is not None:
-            self.priv_obs_buf_history.append(_tmp_priv_obs_buf)
-            self.priv_obs_buf[:] = torch.cat(list(self.priv_obs_buf_history), dim=1).clip(-self.cfg.normalization.clip_observations, self.cfg.normalization.clip_observations).to(self.device)
+        clip_obs_limit = self.cfg.normalization.clip_observations
+        _tmp_obs_buf_single, _tmp_priv_obs_buf_single = self._observation(env_states)
+        self.obs_buf_history.append(_tmp_obs_buf_single)
+        self.obs_buf[:] = torch.cat(list(self.obs_buf_history), dim=1).clip(-clip_obs_limit, clip_obs_limit).to(self.device)
+        if _tmp_priv_obs_buf_single is not None:
+            self.priv_obs_buf_history.append(_tmp_priv_obs_buf_single)
+            self.priv_obs_buf[:] = torch.cat(list(self.priv_obs_buf_history), dim=1).clip(-clip_obs_limit, clip_obs_limit).to(self.device)
         self.time_out_buf[:] = self._time_out(env_states)
         self.reset_buf[:] = torch.logical_or(self._terminated(env_states), self.time_out_buf)
 
@@ -387,7 +387,7 @@ class LeggedRobotEnv(AgentEnv):
         Timeout flags.
         Note that max_episode_steps is set to -1 by default (no timeout).
         """
-        return self.episode_steps >= self.max_episode_steps
+        return self.episode_steps > self.max_episode_steps
 
     def _resample_commands(self, env_ids):
         """Randommly select commands of some environments

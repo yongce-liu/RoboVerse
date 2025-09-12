@@ -79,10 +79,13 @@ class AgentEnv:
 
     def _register_initial_state(self, init_state: RobotState) -> None:
 
-        self.simulator.initial_states.robots[self.name]
+        # self.simulator.initial_states.robots[self.name]
         for key, value in vars(init_state).items():
             if value is not None:
                 setattr(self.simulator.initial_states.robots[self.name], key, value)
+            # else:
+            #     default_value = getattr(self.simulator.initial_states.robots[self.name], key)
+            #     setattr(self.simulator.initial_states.robots[self.name], key, default_value*0.0)
         return self.simulator.initial_states
 
     def get_states(self) -> TensorState:
@@ -98,7 +101,7 @@ class AgentEnv:
         """
         self.simulator.handler.set_states(states=states, env_ids=env_ids)
 
-    def reset(self, env_ids: list[int] = None, states: TensorState | None = None) -> TensorState:
+    def reset(self, env_ids: list[int], states: TensorState | None = None) -> TensorState:
         """Reset the environment.
 
         Args:
@@ -110,12 +113,6 @@ class AgentEnv:
             priv_TensorState: The privileged TensorStateervation
             info: The info
         """
-        if env_ids is None:
-            env_ids = list(range(self.num_envs))
-
-        if len(env_ids) == 0:
-            return self.simulator.handler.get_states()
-
         states_to_set = self.simulator.initial_states if states is None else states
         self.simulator.handler.set_states(states=states_to_set, env_ids=env_ids)
         env_states = self.simulator.handler.get_states(env_ids=env_ids)
