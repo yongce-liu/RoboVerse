@@ -79,7 +79,6 @@ WORKDIR ${HOME}/RoboVerse
 ########################################################
 ## Install isaaclab, mujoco, sapien3, pybullet
 ########################################################
-RUN export UV_DEFAULT_INDEX="https://mirrors.aliyun.com/pypi/simple"
 ## Create conda environment
 RUN mamba create -n metasim python=3.10 -y \
     && mamba clean -a -y
