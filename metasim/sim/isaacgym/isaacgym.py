@@ -284,7 +284,7 @@ class IsaacgymHandler(BaseSimHandler):
         assert len(self.robots) == 1, "Only support one robot for now"
         robot_asset_file = self.robots[0].mjcf_path if self.robots[0].isaacgym_read_mjcf else self.robots[0].urdf_path
         asset_options = gymapi.AssetOptions()
-        asset_options.armature = 0.01
+        asset_options.armature = getattr(self.robots[0], "armature", 0.01)
         asset_options.fix_base_link = self.robots[0].fix_base_link
         asset_options.disable_gravity = not self.robots[0].enabled_gravity
         asset_options.flip_visual_attachments = self.robots[0].isaacgym_flip_visual_attachments
@@ -742,8 +742,8 @@ class IsaacgymHandler(BaseSimHandler):
 
     def _simulate(self) -> None:
         # Step the physics
-        for _ in range(self.decimation):
-            self._simulate_one_physics_step()
+        # for _ in range(self.decimation):
+        self._simulate_one_physics_step()
         self.gym.refresh_rigid_body_state_tensor(self.sim)
         self.gym.refresh_actor_root_state_tensor(self.sim)
         self.gym.refresh_jacobian_tensors(self.sim)

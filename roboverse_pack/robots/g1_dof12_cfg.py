@@ -116,4 +116,4 @@ class G1Dof12Cfg(RobotCfg):
     waist_joints = []
 
     # From default joint armature in XML
-    dof_armature: float = 0.0
+    armature: float = 0.0
