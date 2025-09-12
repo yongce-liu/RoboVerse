@@ -84,9 +84,6 @@ class IsaacgymHandler(BaseSimHandler):
             None  # for the configuration: desire_pos = action_scale * action + default_pos
         )
         self._action_offset: bool = False  # for configuration: desire_pos = action_scale * action + default_pos
-        self._p_gains: torch.Tensor | None = None  # parameter for PD controller in for pd effort control
-        self._d_gains: torch.Tensor | None = None
-        self._torque_limits: torch.Tensor | None = None
         self._effort: torch.Tensor | None = None  # output of pd controller, used for effort control
         self._pos_ctrl_dof_dix = []  # joint index in dof state, built-in position control mode
         self._manual_pd_on: bool = False  # turn on maunual pd controller if effort joint exist
@@ -296,10 +293,6 @@ class IsaacgymHandler(BaseSimHandler):
         # FIXME: hard code for 0-1 action space, should remove all the scale stuff later
         self._action_scale = torch.tensor(1.0, device=self.device)
         self._action_offset = torch.tensor(0.0, device=self.device)
-
-        self._torque_limits = torch.zeros(
-            self._num_envs, robot_num_dofs, dtype=torch.float, device=self.device, requires_grad=False
-        )
 
         robot_dof_props = self.gym.get_asset_dof_properties(robot_asset)
 
@@ -1032,11 +1025,6 @@ class IsaacgymHandler(BaseSimHandler):
     def default_dof_pos(self) -> torch.tensor:
         joint_reindex = self.get_joint_reindex(self.robot.name)
         return self._robot_default_dof_pos[:, joint_reindex]
-
-    @property
-    def torque_limits(self) -> torch.tensor:
-        joint_reindex = self.get_joint_reindex(self.robot.name)
-        return self._torque_limits[:, joint_reindex]
 
     @property
     def robot_num_dof(self) -> int:

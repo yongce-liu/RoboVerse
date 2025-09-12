@@ -47,14 +47,7 @@ class MujocoHandler(BaseSimHandler):
             self.cameras.append(camera)
         self._episode_length_buf = 0
 
-        # FIXME: hard code decimation for now
-        self.decimation = 25
-
         self._manual_pd_on = False
-        self._p_gains = None
-        self._d_gains = None
-        self._torque_limits = None
-        self._robot_default_dof_pos = None
         self._effort_controlled_joints = []
         self._position_controlled_joints = []
         self._current_action = None
@@ -520,46 +513,6 @@ class MujocoHandler(BaseSimHandler):
             force_vec = -gravity_vec * self.physics.model.body(body_name).mass
             self.physics.data.xfrc_applied[body_id, 0:3] = force_vec
             self.physics.data.xfrc_applied[body_id, 3:6] = 0
-
-    def _compute_effort(self, actions, robot_idx):
-        """Compute effort from actions using PD controller."""
-        # FIXME: hard code for 0-1 action space, should remove all the scale stuff later
-        action_scaled = self._action_scale * actions
-        joint_names = self._get_joint_names(self.robots[robot_idx].name, sort=True)
-        robot_dof_pos = np.array([
-            self.physics.data.joint(f"{self._mujoco_robot_names[robot_idx]}{jn}").qpos[0] for jn in joint_names
-        ])
-        robot_dof_vel = np.array([
-            self.physics.data.joint(f"{self._mujoco_robot_names[robot_idx]}{jn}").qvel[0] for jn in joint_names
-        ])
-
-        if self._action_offset:
-            effort = (
-                self._p_gains[robot_idx] * (action_scaled + self._robot_default_dof_pos[robot_idx] - robot_dof_pos)
-                - self._d_gains[robot_idx] * robot_dof_vel
-            )
-        else:
-            effort = (
-                self._p_gains[robot_idx] * (action_scaled - robot_dof_pos) - self._d_gains[robot_idx] * robot_dof_vel
-            )
-
-        effort = np.clip(effort, -self._torque_limits[robot_idx], self._torque_limits[robot_idx])
-
-        return effort
-
-    def _apply_pd_control(self, actions):
-        """Apply torque control using computed efforts."""
-        for robot_idx, robot in enumerate(self.robots):
-            if any((robot_idx, i) in self._effort_controlled_joints for i in range(self._robot_num_dofs[robot_idx])):
-                effort = self._compute_effort(actions, robot_idx)
-                joint_names = self._get_joint_names(robot.name, sort=True)
-                for i in range(self._robot_num_dofs[robot_idx]):
-                    if (robot_idx, i) in self._effort_controlled_joints:
-                        joint_name = joint_names[i]
-                        actuator_id = self.physics.model.actuator(
-                            f"{self._mujoco_robot_names[robot_idx]}{joint_name}"
-                        ).id
-                        self.physics.data.ctrl[actuator_id] = effort[i]
 
     def set_dof_targets(self, actions) -> None:
         """Unified: Tensor/ndarray -> write ctrl (or cache for PD); dict-list -> name-based."""
