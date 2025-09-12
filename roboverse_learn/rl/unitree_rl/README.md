@@ -5,7 +5,7 @@ Train and deploy locomotion policies for Unitree robots across three stages:
 - Sim2Sim evaluation in MuJoCo
 - Real-world deployment (networked controller)
 
-Well Supported robots: `g1_dex3` (humanoid with dexterous hands) and `g1_dof12` (12-DoF legs).
+Well Supported robots: `g1_dex3` (full-body with dexterous hands), `g1_dof29` (full-body without hands)  and `g1_dof12` (12-DoF legs).
 
 Directory: `roboverse_learn/rl/unitree_rl`
 
