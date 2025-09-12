@@ -1,27 +1,26 @@
 from __future__ import annotations
 
 import os
-import shutil
-
-from loguru import logger as log
-
 try:
     import isaacgym  # noqa: F401
 except ImportError:
     pass
 
 import rootutils
-
 rootutils.setup_root(__file__, pythonpath=True)
-
-import random
-
-import numpy as np
 import torch
 import wandb
+import random
+import shutil
+import numpy as np
+from loguru import logger as log
+
+from metasim.scenario.scenario import ScenarioCfg
 from rsl_rl.runners.on_policy_runner import OnPolicyRunner
 
-from metasim.cfg.scenario import ScenarioCfg
+from roboverse_learn.unitree_rl.envs.env_base import MasterSimulator, AgentEnv
+from roboverse_learn.unitree_rl.configs.cfg_base import BaseEnvCfg
+from roboverse_learn.unitree_rl.envs.env_wrapper import make_runner
 from roboverse_learn.unitree_rl.helper.utils import get_args, get_class, get_log_dir, make_robots
 
 
@@ -42,56 +41,24 @@ def train(args):
     # only support single robot for now
     _robots_name, _robots = make_robots(args)
     robots_name, robots = [_robots_name[0]], [_robots[0]]
-    config_wrapper = get_class(args.task, suffix="Cfg")
-    task_config = config_wrapper(robots=robots)
+    task_config: BaseEnvCfg = get_class(args.task, suffix="Cfg")(robots=robots)
+
     scenario = ScenarioCfg(
-        task=task_config,
-        decimation=task_config.decimation,
         robots=robots,
         num_envs=args.num_envs,
-        sim=args.sim,
+        simulator=args.sim,
+        renderer=args.sim,
         headless=args.headless,
-        cameras=[],
+        sim_params=task_config.sim_params,
     )
 
-    use_wandb = args.use_wandb
-    if use_wandb:
-        wandb.init(project=args.wandb, name=args.run_name)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    master_simulator = MasterSimulator(scenario=scenario, device=args.device)
+    robot0_env = get_class(args.task, suffix="Env")(simulator=master_simulator, robot=master_simulator.robots[0], config=task_config)
+    train_cfg = get_class(args.task, suffix="TrainCfg")()
+    runner = make_runner(env=robot0_env, train_cfg=train_cfg, lib='rsl')
 
-    log_dir = get_log_dir(args, scenario, args.log_dir)
-    task_wrapper = get_class(args.task, suffix="Task")
-    task_env = task_wrapper(scenario)
-
-    # dump snapshot of training config
-    task_path = f"roboverse_learn/unitree_rl/tasks/{scenario.task.task_name}.py"
-    if not os.path.exists(task_path):
-        log.error(f"Task path {task_path} does not exist, please check your task name in config carefully")
-        return
-    shutil.copy2(task_path, log_dir)
-
-    try:
-        ppo_runner = OnPolicyRunner(
-            env=task_env,
-            train_cfg=task_env.train_cfg,
-            device=task_env.device,
-            log_dir=log_dir,
-            # wandb=use_wandb,
-            args=args,
-        )
-    except Exception as e:
-        ppo_runner = OnPolicyRunner(
-            env=task_env,
-            train_cfg=task_env.train_cfg,
-            device=task_env.device,
-            log_dir=log_dir,
-            # wandb=use_wandb,
-            # args=args,
-        )
-    if args.load_run:
-        resume_dir = get_log_dir(args, scenario, args.load_run)
-        ppo_runner.load(resume_dir + f"/model_{args.checkpoint}.pt")
-    ppo_runner.learn(num_learning_iterations=task_config.ppo_cfg.runner.max_iterations, init_at_random_ep_len=True)
-
+    runner.learn()
 
 if __name__ == "__main__":
     # set_seed(1)

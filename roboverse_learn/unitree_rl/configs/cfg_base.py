@@ -1,6 +1,7 @@
 from __future__ import annotations
-from metasim.utils import configclass
 from typing import Callable
+from metasim.utils import configclass
+from metasim.scenario.simulator_params import SimParamCfg
 
 @configclass
 class BaseEnvCfg:
@@ -9,6 +10,20 @@ class BaseEnvCfg:
     obs_len_history = 0 # number of past + current observations to include in the observation
     num_priv_obs_single = 0
     priv_obs_len_history = 0 # number of past + current privileged observations to include in the privileged observation
+    sim_params = SimParamCfg(dt=0.005,
+                            substeps=1,
+                            num_threads=10,
+                            solver_type=1,
+                            num_position_iterations=4,
+                            num_velocity_iterations=0,
+                            contact_offset=0.01,
+                            rest_offset=0.0,
+                            bounce_threshold_velocity=0.5,
+                            max_depenetration_velocity=1.0,
+                            default_buffer_size_multiplier=5,
+                            replace_cylinder_with_capsule=True,
+                            friction_correlation_distance=0.025,
+                            friction_offset_threshold=0.04)
     class control:
         control_type = 'P' # P: position, V: velocity, T: torques
         action_scale = 0.5
