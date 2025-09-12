@@ -4,8 +4,8 @@ import torch
 
 from metasim.scenario.scenario import ScenarioCfg
 from metasim.utils import configclass
-from roboverse_learn.unitree_rl.configs.base_legged import BaseLeggedTaskCfg, LeggedRobotCfgPPO
-from roboverse_learn.unitree_rl.envs.base_humanoid import Humanoid
+from roboverse_learn.rl.unitree_rl.configs.base_legged import BaseLeggedTaskCfg, LeggedRobotCfgPPO
+from roboverse_learn.rl.unitree_rl.envs.base_humanoid import Humanoid
 import math
 
 # Training Config
@@ -52,7 +52,7 @@ class Dof12WalkingCfg(BaseLeggedTaskCfg):
         target_feet_height=0.08,
     )
 
-    reward_functions: str = "roboverse_learn.unitree_rl.configs.reward_funcs"
+    reward_functions: str = "roboverse_learn.rl.unitree_rl.configs.reward_funcs"
 
     reward_weights: dict[str, float] = {
         "tracking_lin_vel": 1.0,

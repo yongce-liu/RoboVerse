@@ -7,7 +7,7 @@ Train and deploy locomotion policies for Unitree robots across three stages:
 
 Well Supported robots: `g1_dex3` (humanoid with dexterous hands) and `g1_dof12` (12-DoF legs).
 
-Directory: `roboverse_learn/unitree_rl`
+Directory: `roboverse_learn/rl/unitree_rl`
 
 ## Environment setup
 
@@ -29,7 +29,7 @@ pip install -e .
 
 General form:
 ```
-python roboverse_learn/unitree_rl/train.py \
+python roboverse_learn/rl/unitree_rl/train.py \
   --task <your_task> \
   --sim isaacgym \
   --num_envs 8192 \
@@ -40,11 +40,11 @@ python roboverse_learn/unitree_rl/train.py \
 Examples:
 - G1Dex3 humanoid walking (IsaacGym):
 ```
-python roboverse_learn/unitree_rl/train.py --task humanoid_walking --sim isaacgym --num_envs 8192 --robot g1_dex3 --run_name g1dex3_walk
+python roboverse_learn/rl/unitree_rl/train.py --task humanoid_walking --sim isaacgym --num_envs 8192 --robot g1_dex3 --run_name g1dex3_walk
 ```
 - G1Dof12 walking (IsaacGym):
 ```
-python roboverse_learn/unitree_rl/train.py --task dof12_walking --sim isaacgym --num_envs 8192 --robot g1_dof12 --run_name g1dof12_walk
+python roboverse_learn/rl/unitree_rl/train.py --task dof12_walking --sim isaacgym --num_envs 8192 --robot g1_dof12 --run_name g1dof12_walk
 ```
 
 Outputs and checkpoints are saved to:
@@ -59,7 +59,7 @@ You can evaluate trained policies in both MuJoCo (sim2sim) and IsaacGym. `play.p
 
 IsaacGym evaluation:
 ```
-python roboverse_learn/unitree_rl/play.py \
+python roboverse_learn/rl/unitree_rl/play.py \
   --task humanoid_walking \
   --sim isaacgym \
   --num_envs 1 \
@@ -70,7 +70,7 @@ python roboverse_learn/unitree_rl/play.py \
 
 MuJoCo evaluation (e.g., DOF12 with public policy):
 ```
-python roboverse_learn/unitree_rl/play.py \
+python roboverse_learn/rl/unitree_rl/play.py \
   --checkpoint <iter> \
   --task dof12_walking \
   --sim mujoco \
@@ -83,7 +83,7 @@ Public policy quick-check (Unitree):
 2) Place at: `outputs/unitree_rl/g1_dof12_dof12_walking/pretrain/model_0.pt`
 3) Run the following command:
 ```
-python roboverse_learn/unitree_rl/play.py \
+python roboverse_learn/rl/unitree_rl/play.py \
     --robot "g1_dof12" --load_run pretrain \
     --checkpoint 0  --task dof12_walking \
     --jit_load true --reindex_actions true --sim mujoco
@@ -102,13 +102,13 @@ pip install -e .
 
 Real-world deployment entry point:
 ```
-python roboverse_learn/unitree_rl/deploy/deploy_real.py <network_interface> <robot_yaml>
+python roboverse_learn/rl/unitree_rl/deploy/deploy_real.py <network_interface> <robot_yaml>
 ```
 Example:
 ```
-python roboverse_learn/unitree_rl/deploy/deploy_real.py eno1 g1_dex3.yaml
+python roboverse_learn/rl/unitree_rl/deploy/deploy_real.py eno1 g1_dex3.yaml
 ```
-where you should modify the corresponding `yaml` file in `roboverse_learn/unitree_rl/deploy/configs`, setting the `policy_path` to the exported jit policy.
+where you should modify the corresponding `yaml` file in `roboverse_learn/rl/unitree_rl/deploy/configs`, setting the `policy_path` to the exported jit policy.
 This will initialize the real controller and stream commands to the robot. Ensure your networking and safety interlocks are correctly configured.
 
 ## Command-line arguments

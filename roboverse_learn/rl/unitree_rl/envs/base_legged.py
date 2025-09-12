@@ -21,8 +21,8 @@ from metasim.utils.math import quat_apply, quat_rotate_inverse, wrap_to_pi
 from metasim.utils.state import TensorState
 from metasim.task.base import BaseTaskEnv
 from roboverse_learn.rl.rsl_rl.rsl_rl_wrapper import RslRlWrapper
-from roboverse_learn.unitree_rl.configs.base_legged import BaseLeggedTaskCfg
-from roboverse_learn.unitree_rl.helper.utils import get_body_reindexed_indices_from_substring, torch_rand_float
+from roboverse_learn.rl.unitree_rl.configs.base_legged import BaseLeggedTaskCfg
+from roboverse_learn.rl.unitree_rl.helper.utils import get_body_reindexed_indices_from_substring, torch_rand_float
 from metasim.constants import SimType
 
 class LeggedRobot(RslRlWrapper):
@@ -419,6 +419,10 @@ class LeggedRobot(RslRlWrapper):
                         termination_contact_indices.append(i)
             self.termination_contact_indices = torch.tensor(termination_contact_indices, device=self.device)
         elif SimType(self.scenario.simulator) is SimType.ISAACGYM:
+            self.termination_contact_indices = get_body_reindexed_indices_from_substring(
+                self.handler, robot.name, termination_contact_names, device=self.device
+            )
+        elif SimType(self.scenario.simulator) is SimType.MUJOCO:
             self.termination_contact_indices = get_body_reindexed_indices_from_substring(
                 self.handler, robot.name, termination_contact_names, device=self.device
             )

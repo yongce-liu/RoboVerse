@@ -5,9 +5,9 @@ import torch
 from metasim.scenario.scenario import ScenarioCfg
 from metasim.utils.humanoid_robot_util import contact_forces_tensor, gait_phase_tensor
 from metasim.utils.state import TensorState
-from roboverse_learn.unitree_rl.configs.base_legged import BaseLeggedTaskCfg
-from roboverse_learn.unitree_rl.envs.base_legged import LeggedRobot
-from roboverse_learn.unitree_rl.helper.utils import (
+from roboverse_learn.rl.unitree_rl.configs.base_legged import BaseLeggedTaskCfg
+from roboverse_learn.rl.unitree_rl.envs.base_legged import LeggedRobot
+from roboverse_learn.rl.unitree_rl.helper.utils import (
     get_body_reindexed_indices_from_substring,
     get_joint_reindexed_indices_from_substring,
 )

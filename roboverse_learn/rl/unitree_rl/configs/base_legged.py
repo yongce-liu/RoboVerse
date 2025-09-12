@@ -13,10 +13,10 @@ from metasim.scenario.simulator_params import SimParamCfg
 from metasim.sim import BaseSimHandler
 from metasim.utils import configclass
 from metasim.utils.humanoid_robot_util import contact_forces_tensor, get_euler_xyz_tensor, robot_rotation_tensor
-from roboverse_learn.unitree_rl.helper.utils import torch_rand_float
+from roboverse_learn.rl.unitree_rl.helper.utils import torch_rand_float
 from metasim.queries.base import BaseQueryType
-from roboverse_learn.unitree_rl.configs.optional_queries import NetContactForce
-from roboverse_learn.unitree_rl.configs.base_terrain import TerrainConfig
+from roboverse_learn.rl.unitree_rl.configs.optional_queries import NetContactForce
+from roboverse_learn.rl.unitree_rl.configs.base_terrain import TerrainConfig
 
 
 # Training Config
@@ -248,7 +248,7 @@ class BaseLeggedTaskCfg:
         """soft torque limit"""
 
     reward_cfg: RewardCfg = RewardCfg()
-    reward_functions: list[Callable] | str = "roboverse_learn.unitree_rl.configs.reward_funcs"
+    reward_functions: list[Callable] | str = "roboverse_learn.rl.unitree_rl.configs.reward_funcs"
     reward_weights: dict[str, float] = MISSING
 
     @configclass

@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import math
 from functools import partial
 
 import torch
-
+import math
 from metasim.scenario.scenario import ScenarioCfg
 from metasim.utils import configclass
 from metasim.utils.humanoid_robot_util import (
@@ -13,38 +12,92 @@ from metasim.utils.humanoid_robot_util import (
     dof_vel_tensor,
     ref_dof_pos_tensor,
 )
-from roboverse_learn.unitree_rl.configs.base_legged import BaseLeggedTaskCfg, LeggedRobotCfgPPO
-from roboverse_learn.unitree_rl.envs.base_humanoid import Humanoid
-from roboverse_learn.unitree_rl.helper.utils import find_unique_candidate
+
+# from roboverse_learn.rl.unitree_rl.configs.base_humanoid import BaseHumanoidCfg
+from roboverse_learn.rl.unitree_rl.configs.base_legged import BaseLeggedTaskCfg, LeggedRobotCfgPPO
+from roboverse_learn.rl.unitree_rl.envs.base_humanoid import Humanoid
+from roboverse_learn.rl.unitree_rl.helper.utils import find_unique_candidate
+
 
 
 @configclass
-class G1Dof29WalkingCfgPPO(LeggedRobotCfgPPO):
+class HumanoidWalkingCfgPPO(LeggedRobotCfgPPO):
     seed: int = 0
 
     algorithm = LeggedRobotCfgPPO.Algorithm(
         entropy_coef=0.001, learning_rate=1e-5, num_learning_epochs=2, gamma=0.994, lam=0.9
     )
     runner = LeggedRobotCfgPPO.Runner(
-        num_steps_per_env=60, max_iterations=15001, save_interval=100, experiment_name="g1_dof29_walking"
+        num_steps_per_env=60, max_iterations=15001, save_interval=100, experiment_name="humanoid_walking"
     )
 
 
 @configclass
-class G1Dof29WalkingCfg(BaseLeggedTaskCfg):
-    """Walking task configuration for Unitree G1 29DoF (no hands)."""
+class HumanoidWalkingCfg(BaseLeggedTaskCfg):
+    """Configuration for the walking task."""
 
-    task_name = "g1_dof29_walking"
+    task_name = "humanoid_walking"
     env_spacing: float = 1.0
     max_episode_length_s: int = 24
     control = BaseLeggedTaskCfg.ControlCfg(action_scale=0.25, action_offset=True, torque_limit_scale=0.85)
 
-    # Initial state for the specific robot (no hand joints)
     init_states = [
         {
             "objects": {},
             "robots": {
-                "g1_dof29": {
+                "h1_wrist": {
+                    "pos": torch.tensor([0.0, 0.0, 1.0]),
+                    "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
+                    "dof_pos": {
+                        "left_hip_yaw": 0.0,
+                        "left_hip_roll": 0.0,
+                        "left_hip_pitch": -0.4,
+                        "left_knee": 0.8,
+                        "left_ankle": -0.4,
+                        "right_hip_yaw": 0.0,
+                        "right_hip_roll": 0.0,
+                        "right_hip_pitch": -0.4,
+                        "right_knee": 0.8,
+                        "right_ankle": -0.4,
+                        "torso": 0.0,
+                        "left_shoulder_pitch": 0.0,
+                        "left_shoulder_roll": 0.0,
+                        "left_shoulder_yaw": 0.0,
+                        "left_elbow": 0.0,
+                        "right_shoulder_pitch": 0.0,
+                        "right_shoulder_roll": 0.0,
+                        "right_shoulder_yaw": 0.0,
+                        "right_elbow": 0.0,
+                    },
+                },
+                "g1": {
+                    "pos": torch.tensor([0.0, 0.0, 0.735]),
+                    "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
+                    "dof_pos": {
+                        "left_hip_pitch": -0.4,
+                        "left_hip_roll": 0,
+                        "left_hip_yaw": 0.0,
+                        "left_knee": 0.8,
+                        "left_ankle_pitch": -0.4,
+                        "left_ankle_roll": 0,
+                        "right_hip_pitch": -0.4,
+                        "right_hip_roll": 0,
+                        "right_hip_yaw": 0.0,
+                        "right_knee": 0.8,
+                        "right_ankle_pitch": -0.4,
+                        "right_ankle_roll": 0,
+                        "waist_yaw": 0.0,
+                        "left_shoulder_pitch": 0.0,
+                        "left_shoulder_roll": 0.0,
+                        "left_shoulder_yaw": 0.0,
+                        "left_elbow": 0.0,
+                        "right_shoulder_pitch": 0.0,
+                        "right_shoulder_roll": 0.0,
+                        "right_shoulder_yaw": 0.0,
+                        "right_elbow": 0.0,
+                    },
+                },
+                "g1_dex3": {
                     "pos": torch.tensor([0.0, 0.0, 0.76]),
                     "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
                     "dof_pos": {
@@ -80,13 +133,28 @@ class G1Dof29WalkingCfg(BaseLeggedTaskCfg):
                         "right_wrist_roll_joint": 0.0,
                         "right_wrist_pitch_joint": 0.0,
                         "right_wrist_yaw_joint": 0.0,
+                        # Hands
+                        "left_hand_thumb_0_joint": 0.0,
+                        "left_hand_thumb_1_joint": 0.0,
+                        "left_hand_thumb_2_joint": 0.0,
+                        "left_hand_middle_0_joint": 0.0,
+                        "left_hand_middle_1_joint": 0.0,
+                        "left_hand_index_0_joint": 0.0,
+                        "left_hand_index_1_joint": 0.0,
+                        "right_hand_thumb_0_joint": 0.0,
+                        "right_hand_thumb_1_joint": 0.0,
+                        "right_hand_thumb_2_joint": 0.0,
+                        "right_hand_middle_0_joint": 0.0,
+                        "right_hand_middle_1_joint": 0.0,
+                        "right_hand_index_0_joint": 0.0,
+                        "right_hand_index_1_joint": 0.0,
                     },
-                }
+                },
             },
         }
     ]
 
-    ppo_cfg = G1Dof29WalkingCfgPPO()
+    ppo_cfg = HumanoidWalkingCfgPPO()
 
     frame_stack = 1
     c_frame_stack = 3
@@ -94,51 +162,51 @@ class G1Dof29WalkingCfg(BaseLeggedTaskCfg):
     reward_cfg = BaseLeggedTaskCfg.RewardCfg(base_height_target=0.80, tracking_sigma=1 / 0.2, max_contact_force=700)
 
     reward_weights: dict[str, float] = {
-        # safety/termination
         "termination": -0.0,
-        # base dynamics
-        "ang_vel_xy": -0.2,
+        "ang_vel_xy": -0.2,  # Increased penalty for xy angular velocity to reduce waist waving
         "base_height": 0.2,
         "lin_vel_z": -2.0,
+        # "feet_swing_height": -20.0,
+        "feet_air_time": 0.0,
         "orientation_sq": -1.0,
         "base_height_sq": -5.0,
-        # contacts
         "collision": -1.0,
         "feet_stumble": -0.0,
+        "stand_still": -0.0,
+        "joint_pos": 1.6,
         "feet_clearance": 2.0,
         "feet_contact_number": 2.4,
-        "feet_contact_forces": -0.05,
-        "contact": 0.18,
-        # gait/kinematics
-        "joint_pos": 1.6,
-        "feet_air_time": 0.0,
+        # gait
         "foot_slip": -0.05,
         "feet_distance": 0.3,
         "knee_distance": 0.2,
-        # velocity tracking
+        # contact
+        "feet_contact_forces": -0.05,
+        "contact": 0.18,
+        # vel tracking
         "tracking_lin_vel": 6.0,
         "tracking_ang_vel": 3.0,
         "vel_mismatch_exp": 0.5,
         "low_speed": 0.2,
         "track_vel_hard": 1.0,
-        # posture/constraints
+        # base pos
         "default_joint_pos": 1.0,
         "contact_no_vel": -0.2,
-        "upper_body_pos": 1.0,
+        "upper_body_pos": 1.0,  # Increased to keep upper body more stable
         "orientation": 1.0,
-        "base_acc": 0.4,
-        "waist_joint_stability": 10.0,
-        "hip_upright_axis": 6.0,
-        # energy/effort
-        "action_smoothness": -0.08,
+        "base_acc": 0.4,  # Increased penalty for base acceleration to reduce jerkiness
+        "waist_joint_stability": 10.0,  # New reward for waist joint stability
+        "hip_upright_axis": 6.0,  # NEW: Reward for keeping hip axis pointing upward
+        # energy
+        "action_smoothness": -0.08,  # Increased penalty for jerky actions
         "torques": -1e-5,
         "dof_vel": -1e-3,
-        "dof_acc": -2e-6,
+        "dof_acc": -2e-6,  # Increased penalty for joint accelerations
         "torque_limits": -0.001,
         "hip_pos": -1.0,
-        "dof_pos_limits": -5.0,
+        "dof_pos_limits": -5,
         # optional
-        "action_rate": -0.015,
+        "action_rate": -0.015,  # Increased penalty for action rate changes
     }
 
     def __post_init__(self):
@@ -149,10 +217,14 @@ class G1Dof29WalkingCfg(BaseLeggedTaskCfg):
         self.num_privileged_obs = int(self.c_frame_stack * self.single_num_privileged_obs)
 
 
-class G1Dof29WalkingTask(Humanoid):
-    """Humanoid walking wrapper for G1 29DoF robot (no hands)."""
+class HumanoidWalkingTask(Humanoid):
+    """
+    Wrapper for walking
 
-    def __init__(self, task_cfg: G1Dof29WalkingCfg, scenario: ScenarioCfg):
+    # TODO implement push robot
+    """
+
+    def __init__(self, task_cfg, scenario: ScenarioCfg):
         self.decimation = scenario.decimation
         self._init_from_cfg(task_cfg)
         super().__init__(scenario)
@@ -172,7 +244,7 @@ class G1Dof29WalkingTask(Humanoid):
         self.noise_scale_vec = self._get_noise_scale_vec()
 
     def _prepare_ref_indices(self):
-        """Get joint indices for reference pos computation."""
+        """get joint indices for reference pos computation."""
         joint_names = self.handler.get_joint_names(self.robot.name)
         find_func = partial(find_unique_candidate, data_base=joint_names)
 
@@ -191,41 +263,43 @@ class G1Dof29WalkingTask(Humanoid):
         )
 
     def _compute_ref_state(self):
-        """Compute reference target position for walking task."""
+        """compute reference target position for walking task."""
         phase = self._get_phase()
         sin_pos = torch.sin(2 * torch.pi * phase)
         sin_pos_l = sin_pos.clone()
         sin_pos_r = sin_pos.clone()
         self.ref_dof_pos = torch.zeros(
-            self.num_envs, self.robot.num_joints, device=self.device, requires_grad=False
+            self.num_envs, self.handler.robot_num_dof, device=self.device, requires_grad=False
         )
-
         # Scale gait amplitude by command magnitude so zero command => no gait
+        # Combine linear speed and a fraction of yaw command to allow in-place turning
         lin_speed = torch.norm(self.commands[:, :2], dim=1)
         yaw_speed = torch.abs(self.commands[:, 2]) if self.commands.shape[1] > 2 else 0.0
         speed_factor = torch.clamp(lin_speed + 0.5 * yaw_speed, 0.0, 1.0).unsqueeze(1)
-
         scale_1 = self.cfg.reward_cfg.target_joint_pos_scale
         scale_2 = 2 * scale_1
         sin_pos_l[sin_pos_l > 0] = 0
-        self.ref_dof_pos[:, self.left_hip_pitch_joint_idx] = sin_pos_l * scale_1
-        self.ref_dof_pos[:, self.left_knee_joint_idx] = sin_pos_l * scale_2
-        self.ref_dof_pos[:, self.left_ankle_joint_idx] = sin_pos_l * scale_1
+        self.ref_dof_pos[:, self.left_hip_pitch_joint_idx] = sin_pos_l * scale_1  # left_hip_pitch_joint
+        self.ref_dof_pos[:, self.left_knee_joint_idx] = sin_pos_l * scale_2  # left_knee_joint
+        self.ref_dof_pos[:, self.left_ankle_joint_idx] = sin_pos_l * scale_1  # left_ankle_joint
         sin_pos_r[sin_pos_r < 0] = 0
-        self.ref_dof_pos[:, self.right_hip_pitch_joint_idx] = sin_pos_r * scale_1
-        self.ref_dof_pos[:, self.right_knee_joint_idx] = sin_pos_r * scale_2
-        self.ref_dof_pos[:, self.right_ankle_joint_idx] = sin_pos_r * scale_1
-
+        self.ref_dof_pos[:, self.right_hip_pitch_joint_idx] = sin_pos_r * scale_1  # right_hip_pitch_joint
+        self.ref_dof_pos[:, self.right_knee_joint_idx] = sin_pos_r * scale_2  # right_knee_joint
+        self.ref_dof_pos[:, self.right_ankle_joint_idx] = sin_pos_r * scale_1  # right_ankle_joint
         # Double support phase
         self.ref_dof_pos[torch.abs(sin_pos) < 0.1] = 0
         self.ref_dof_pos = 2 * self.ref_dof_pos
+        # Apply speed-dependent amplitude
         self.ref_dof_pos *= speed_factor
 
     def _parse_ref_pos(self, envstate):
         envstate.robots[self.robot.name].extra["ref_dof_pos"] = self.ref_dof_pos
 
     def _parse_state_for_reward(self, envstate):
-        """Prepare state for reward computation."""
+        """
+        Parse all the states to prepare for reward computation, legged_robot level reward computation.
+        """
+
         super()._parse_state_for_reward(envstate)
         self._compute_ref_state()
         self._parse_ref_pos(envstate)
@@ -254,8 +328,10 @@ class G1Dof29WalkingTask(Humanoid):
         return noise_vec
 
     def compute_observations(self, envstates):
-        """Compute observation and privileged observation."""
+        """compute observation and privileged observation."""
+
         phase = self._get_phase()
+
         sin_phase = torch.sin(2 * torch.pi * phase).unsqueeze(1)
         cos_phase = torch.cos(2 * torch.pi * phase).unsqueeze(1)
 
@@ -313,5 +389,6 @@ class G1Dof29WalkingTask(Humanoid):
         self.obs_buf = obs_buf_all.reshape(self.num_envs, -1)
         self.privileged_obs_buf = torch.cat([self.critic_history[i] for i in range(self.cfg.c_frame_stack)], dim=1)
 
+        # add noise if needed
         if self.add_noise:
             self.obs_buf += (2 * torch.rand_like(self.obs_buf) - 1) * self.noise_scale_vec

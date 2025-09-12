@@ -127,7 +127,7 @@ def get_log_dir(args: argparse.Namespace, task, now=None) -> str:
     return log_dir
 
 
-def get_class(name: str, suffix: str, library="roboverse_learn.unitree_rl"):
+def get_class(name: str, suffix: str, library="roboverse_learn.rl.unitree_rl"):
     """Get the class wrappers.
     Example:
         get_class("ReachOrigin", "Cfg") -> ReachOriginCfg
@@ -178,7 +178,7 @@ def get_joint_reindexed_indices_from_substring(
 
 
 @torch.jit.script
-def torch_rand_float(lower: float, upper: float, shape: tuple[int, int], device: str) -> torch.Tensor:
+def torch_rand_float(lower: float, upper: float, shape: tuple[int, int], device: torch.device) -> torch.Tensor:
     """Generate a tensor of random floats in the range [lower, upper]."""
     return (upper - lower) * torch.rand(*shape, device=device) + lower
 

@@ -4,8 +4,8 @@ import math
 
 import numpy as np
 
-import roboverse_learn.unitree_rl.helper.terrain_utils as terrain_utils
-from roboverse_learn.unitree_rl.configs.base_terrain import (
+import roboverse_learn.rl.unitree_rl.helper.terrain_utils as terrain_utils
+from roboverse_learn.rl.unitree_rl.configs.base_terrain import (
     BaseTerrainConfig,
     GapConfig,
     ObstacleConfig,

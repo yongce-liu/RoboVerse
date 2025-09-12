@@ -23,12 +23,11 @@ class RslRlWrapper(BaseTaskEnv, VecEnv):
 
     def __init__(self, scenario: ScenarioCfg):
         # Initialize BaseTaskEnv via MRO; VecEnv has no __init__
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        super().__init__(scenario, self.device)
+        super().__init__(scenario)
 
 
 
-        if SimType(scenario.simulator) not in [SimType.ISAACGYM,SimType.ISAACLAB, SimType.ISAACSIM, SimType.GENESIS]:
+        if SimType(scenario.simulator) not in [SimType.MUJOCO, SimType.ISAACGYM, SimType.ISAACLAB, SimType.ISAACSIM, SimType.GENESIS]:
             raise NotImplementedError(
                 f"RslRlWrapper in Roboverse now only supports {SimType.ISAACGYM}, but got {scenario.simulator}"
             )
@@ -49,7 +48,8 @@ class RslRlWrapper(BaseTaskEnv, VecEnv):
         self.scenario = scenario
         self.robot = scenario.robots[0]
         self.num_envs = scenario.num_envs
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.object_names = sorted({obj.name for obj in scenario.objects})
+        self.robot_names = sorted({robot.name for robot in scenario.robots})
 
 
     def _get_init_states(self, scenario):
@@ -58,7 +58,10 @@ class RslRlWrapper(BaseTaskEnv, VecEnv):
         init_states_list = getattr(self.cfg, 'init_states', None)
         if init_states_list is None:
             raise AttributeError(f"'task cfg' has no attribute 'init_states', please add it in your scenario config!")
-
+        init_states_list = [{
+            "objects": {key: es["objects"][key] for key in es["objects"] if key in self.object_names},
+            "robots": {key: es["robots"][key] for key in es["robots"] if key in self.robot_names}}
+                            for es in init_states_list]
         if len(init_states_list) < self.num_envs:
             init_states_list = (
                 init_states_list * (self.num_envs // len(init_states_list))

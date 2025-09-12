@@ -22,7 +22,7 @@ import wandb
 from rsl_rl.runners.on_policy_runner import OnPolicyRunner
 
 from metasim.scenario.scenario import ScenarioCfg
-from roboverse_learn.unitree_rl.helper.utils import get_args, get_class, get_log_dir, make_robots
+from roboverse_learn.rl.unitree_rl.helper.utils import get_args, get_class, get_log_dir, make_robots
 
 
 def set_seed(seed):
@@ -66,7 +66,7 @@ def train(args):
     task_env = task_wrapper(task_config, scenario)
 
     # dump snapshot of training config
-    task_path = f"roboverse_learn/unitree_rl/tasks/{task_env.cfg.task_name}.py"
+    task_path = f"roboverse_learn/rl/unitree_rl/tasks/{task_env.cfg.task_name}.py"
     if not os.path.exists(task_path):
         log.error(f"Task path {task_path} does not exist, please check your task name in config carefully")
         return
