@@ -41,7 +41,7 @@ def train(args):
     # only support single robot for now
     _robots_name, _robots = make_robots(args)
     robots_name, robots = [_robots_name[0]], [_robots[0]]
-    task_config: BaseEnvCfg = get_class(args.task, suffix="Cfg")(robots=robots)
+    task_config: BaseEnvCfg = get_class(args.task, suffix="Cfg")()
 
     scenario = ScenarioCfg(
         robots=robots,

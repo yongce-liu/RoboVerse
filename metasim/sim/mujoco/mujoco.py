@@ -136,7 +136,7 @@ class MujocoHandler(BaseSimHandler):
                         ).id
                         torque_limit = self.physics.model.actuator_forcerange[actuator_id, 1]
 
-                    torque_limits[i] = self.scenario.control.torque_limit_scale * torque_limit
+                    # torque_limits[i] = self.scenario.control.torque_limit_scale * torque_limit
 
                 elif i_control_mode == "position":
                     self._position_controlled_joints.append((robot_idx, i))
@@ -278,29 +278,30 @@ class MujocoHandler(BaseSimHandler):
         if camera_max_width > 640 or camera_max_height > 480:
             self._set_framebuffer_size(mjcf_model, camera_max_width, camera_max_height)
 
-        mjcf_model.asset.add(
-            "texture",
-            name="texplane",
-            type="2d",
-            builtin="checker",
-            width=512,
-            height=512,
-            rgb1=[0, 0, 0],
-            rgb2=[1.0, 1.0, 1.0],
-        )
-        mjcf_model.asset.add(
-            "material", name="matplane", reflectance="0.2", texture="texplane", texrepeat=[1, 1], texuniform=True
-        )
-        ground = mjcf_model.worldbody.add(
-            "geom",
-            type="plane",
-            pos="0 0 0",
-            size="100 100 0.001",
-            quat="1 0 0 0",
-            condim="3",
-            conaffinity="15",
-            material="matplane",
-        )
+        # mjcf_model.asset.add(
+        #     "texture",
+        #     name="texplane",
+        #     type="2d",
+        #     builtin="checker",
+        #     width=512,
+        #     height=512,
+        #     rgb1=[0, 0, 0],
+        #     rgb2=[1.0, 1.0, 1.0],
+        # )
+        # mjcf_model.asset.add(
+        #     "material", name="matplane", reflectance="0.2", texture="texplane", texrepeat=[1, 1], texuniform=True
+        # )
+        # ground = mjcf_model.worldbody.add(
+        #     "geom",
+        #     type="plane",
+        #     pos="0 0 0",
+        #     size="100 100 0.001",
+        #     quat="1 0 0 0",
+        #     condim="3",
+        #     conaffinity="15",
+        #     material="matplane",
+        # )
+        self.hfield_name, self.hfield_measure = self._add_ground(mjcf_model=mjcf_model, if_random=False)
 
         self.object_body_names = []
         self.mj_objects = {}
@@ -612,7 +613,8 @@ class MujocoHandler(BaseSimHandler):
         """Apply torque control using computed efforts."""
         for robot_idx, robot in enumerate(self.robots):
             if any((robot_idx, i) in self._effort_controlled_joints for i in range(self._robot_num_dofs[robot_idx])):
-                effort = self._compute_effort(actions, robot_idx)
+                # effort = self._compute_effort(actions, robot_idx)
+                effort = actions.squeeze(0)
                 joint_names = self._get_joint_names(robot.name, sort=True)
                 for i in range(self._robot_num_dofs[robot_idx]):
                     if (robot_idx, i) in self._effort_controlled_joints:
@@ -686,9 +688,9 @@ class MujocoHandler(BaseSimHandler):
 
         # Apply torque control if manual PD is enabled
         if self._manual_pd_on:
-            for _ in range(self.decimation):
-                self._apply_pd_control(self._current_action)
-                self.physics.step()
+            # for _ in range(self.decimation):
+            self._apply_pd_control(self._current_action)
+            self.physics.step()
         else:
             self.physics.step(self.decimation)
 
