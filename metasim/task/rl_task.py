@@ -13,6 +13,8 @@ from metasim.utils.state import list_state_to_tensor
 class RLTaskEnv(BaseTaskEnv):
     """Common utilities for RL tasks."""
 
+    max_episode_steps = 1000
+
     def __init__(
         self,
         scenario: ScenarioCfg,
@@ -26,7 +28,6 @@ class RLTaskEnv(BaseTaskEnv):
         self._observation_space: spaces.Space | None = None
         self._action_space: spaces.Space | None = None
 
-        self.max_episode_steps = 1000
         self.asymmetric_obs = False
 
         super().__init__(scenario, device)
@@ -81,11 +82,11 @@ class RLTaskEnv(BaseTaskEnv):
 
     @property
     def action_space(self) -> spaces.Space:
-        """Action Box(num_actions,) within joint limits."""
+        """Action Box(num_actions,) with range [-1, 1]."""
         if self._action_space is None:
             self._action_space = spaces.Box(
-                low=self._action_low.detach().cpu().numpy().astype(np.float32),
-                high=self._action_high.detach().cpu().numpy().astype(np.float32),
+                low=-1.0,
+                high=1.0,
                 shape=(self.num_actions,),
                 dtype=np.float32,
             )
@@ -108,7 +109,8 @@ class RLTaskEnv(BaseTaskEnv):
             env_ids = list(range(self.num_envs))
 
         self._episode_steps[env_ids] = 0
-        states_to_set = self._initial_states if states is None else states
+        raw_states = self._initial_states if states is None else states
+        states_to_set = self._prepare_states(raw_states, env_ids)
         self.handler.set_states(states=states_to_set, env_ids=env_ids)
 
         states = self.handler.get_states()
@@ -191,3 +193,7 @@ class RLTaskEnv(BaseTaskEnv):
     def _terminated(self, env_states) -> torch.Tensor:
         """Terminal flags (default: none)."""
         return torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
+
+    def _prepare_states(self, env_states, env_ids) -> torch.Tensor:
+        """Prepare for the states before reset(do domain randomization)."""
+        return env_states

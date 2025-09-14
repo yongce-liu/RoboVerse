@@ -10,7 +10,7 @@ CONFIG: dict[str, Any] = {
     # -------------------------------------------------------------------------------
     # Environment
     # -------------------------------------------------------------------------------
-    "sim": "isaacgym",
+    "sim": "mjx",
     "robots": ["h1"],
     "task": "walk",
     "decimation": 10,
@@ -89,8 +89,6 @@ cfg = CONFIG.get
 
 os.environ["TORCHDYNAMO_INLINE_INBUILT_NN_MODULES"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
-if cfg("cuda") and os.environ.get("CUDA_VISIBLE_DEVICES") is None:
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(cfg("device_rank"))
 if sys.platform != "darwin":
     os.environ["MUJOCO_GL"] = "egl"
 else:
@@ -160,6 +158,7 @@ def main() -> None:
     else:
         if torch.cuda.is_available():
             device = torch.device(f"cuda:{cfg('device_rank')}")
+            torch.cuda.set_device(cfg("device_rank"))
 
         elif torch.backends.mps.is_available():
             device = torch.device(f"mps:{cfg('device_rank')}")
@@ -172,7 +171,6 @@ def main() -> None:
     scenario = task_cls.scenario.update(
         robots=cfg("robots"), simulator=cfg("sim"), num_envs=cfg("num_envs"), headless=cfg("headless"), cameras=[]
     )
-    scenario.decimation = cfg("decimation", 1)
     envs = task_cls(scenario, device=device)
     eval_envs = envs
 
@@ -266,8 +264,7 @@ def main() -> None:
             with torch.no_grad(), autocast(device_type=amp_device_type, dtype=amp_dtype, enabled=amp_enabled):
                 obs = normalize_obs(obs)
                 actions = actor(obs)
-            real_actions = envs.unnormalise_action(actions)
-            next_obs, rewards, terminated, time_out, infos = eval_envs.step(real_actions.float())
+            next_obs, rewards, terminated, time_out, infos = eval_envs.step(actions.float())
             episode_returns = torch.where(~done_masks, episode_returns + rewards, episode_returns)
             episode_lengths = torch.where(~done_masks, episode_lengths + 1, episode_lengths)
             done_masks = torch.logical_or(done_masks, dones)
@@ -290,13 +287,13 @@ def main() -> None:
 
         robots = cfg("robots")
         simulator = cfg("sim")
-        num_envs = 1
+        num_envs = cfg("num_envs")
         headless = True
         cameras = [
             PinholeCameraCfg(
                 width=cfg("video_width", 1024),
                 height=cfg("video_height", 1024),
-                pos=(4.0, -4.0, 4.0),  # adjust as needed
+                pos=(3.0, -3.0, 3.0),  # adjust as needed
                 look_at=(0.0, 0.0, 0.0),
             )
         ]
@@ -311,10 +308,8 @@ def main() -> None:
 
         for _ in range(env.max_episode_steps):
             with torch.no_grad(), autocast(device_type=amp_device_type, dtype=amp_dtype, enabled=amp_enabled):
-                act = actor(obs_normalizer(obs))
-            real_actions = envs.unnormalise_action(act)
-
-            obs, _, done, _, _ = env.step(real_actions.float())
+                actions = actor(obs_normalizer(obs))
+            obs, _, done, _, _ = env.step(actions.float())
 
             frames.append(env.render())
             if done.any():
@@ -454,8 +449,7 @@ def main() -> None:
         with torch.no_grad(), autocast(device_type=amp_device_type, dtype=amp_dtype, enabled=amp_enabled):
             norm_obs = normalize_obs(obs)
             actions = policy(obs=norm_obs, dones=dones)
-        real_actions = envs.unnormalise_action(actions)
-        next_obs, rewards, terminated, time_out, infos = envs.step(real_actions.float())
+        next_obs, rewards, terminated, time_out, infos = envs.step(actions.float())
         dones = terminated | time_out
 
         # Compute 'true' next_obs and next_critic_obs for saving
