@@ -479,6 +479,7 @@ class IsaacsimHandler(BaseSimHandler):
                     joint_names_expr=[jn],
                     stiffness=0.0,  # for torque control
                     damping=0.0,  # for torque control
+                    armature=0.01,
                 )
                 for jn, actuator in robot.actuators.items()
             },
