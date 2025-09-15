@@ -16,32 +16,37 @@ import numpy as np
 from loguru import logger as log
 
 from metasim.scenario.scenario import ScenarioCfg
-from rsl_rl.runners.on_policy_runner import OnPolicyRunner
+from metasim.scenario.simulator_params import SimParamCfg
+
 
 from roboverse_learn.unitree_rl.envs.env_base import MasterSimulator, AgentEnv
 from roboverse_learn.unitree_rl.configs.cfg_base import BaseEnvCfg
-from roboverse_learn.unitree_rl.envs.env_wrapper import make_runner
+from roboverse_learn.unitree_rl.envs.env_wrapper import Runner
 from roboverse_learn.unitree_rl.helper.utils import get_args, get_class, get_log_dir, make_robots
-
-
-def set_seed(seed):
-    if seed == -1:
-        seed = np.random.randint(0, 10000)
-    print(f"Setting seed: {seed}")
-
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    os.environ["PYTHONHASHSEED"] = str(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
 
 
 def train(args):
     # only support single robot for now
     _robots_name, _robots = make_robots(args)
     robots_name, robots = [_robots_name[0]], [_robots[0]]
-    task_config: BaseEnvCfg = get_class(args.task, suffix="Cfg")()
+    # task_config: BaseEnvCfg = get_class(args.task, suffix="EnvCfg")()
+
+    # should move the parameters in a common used config files
+    env_spacing = 2.5
+    sim_params = SimParamCfg(dt=0.005,
+                            substeps=1,
+                            num_threads=10,
+                            solver_type=1,
+                            num_position_iterations=4,
+                            num_velocity_iterations=0,
+                            contact_offset=0.01,
+                            rest_offset=0.0,
+                            bounce_threshold_velocity=0.5,
+                            max_depenetration_velocity=1.0,
+                            default_buffer_size_multiplier=5,
+                            replace_cylinder_with_capsule=True,
+                            friction_correlation_distance=0.025,
+                            friction_offset_threshold=0.04)
 
     scenario = ScenarioCfg(
         robots=robots,
@@ -49,15 +54,15 @@ def train(args):
         simulator=args.sim,
         renderer=args.sim,
         headless=args.headless,
-        sim_params=task_config.sim_params,
+        env_spacing=env_spacing,
+        sim_params=sim_params,
     )
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    master_simulator = MasterSimulator(scenario=scenario, device=args.device)
-    robot0_env = get_class(args.task, suffix="Env")(simulator=master_simulator, robot=master_simulator.robots[0], config=task_config)
-    train_cfg = get_class(args.task, suffix="TrainCfg")()
-    runner = make_runner(env=robot0_env, train_cfg=train_cfg, lib='rsl')
-
+    master_simulator = MasterSimulator(scenario=scenario, device=device)
+    runner = Runner(simulator=master_simulator, task_name=args.task, lib_name='rsl_rl')
+    if args.load_run:
+        runner.load(resume_dir=args.load_run)
     runner.learn()
 
 if __name__ == "__main__":

@@ -6,24 +6,25 @@ from metasim.scenario.simulator_params import SimParamCfg
 @configclass
 class BaseEnvCfg:
     episode_length_s = 20.0
+    # env_spacing = 2.5
     num_obs_single = 0
     obs_len_history = 0 # number of past + current observations to include in the observation
     num_priv_obs_single = 0
     priv_obs_len_history = 0 # number of past + current privileged observations to include in the privileged observation
-    sim_params = SimParamCfg(dt=0.005,
-                            substeps=1,
-                            num_threads=10,
-                            solver_type=1,
-                            num_position_iterations=4,
-                            num_velocity_iterations=0,
-                            contact_offset=0.01,
-                            rest_offset=0.0,
-                            bounce_threshold_velocity=0.5,
-                            max_depenetration_velocity=1.0,
-                            default_buffer_size_multiplier=5,
-                            replace_cylinder_with_capsule=True,
-                            friction_correlation_distance=0.025,
-                            friction_offset_threshold=0.04)
+    # sim_params = SimParamCfg(dt=0.005,
+    #                         substeps=1,
+    #                         num_threads=10,
+    #                         solver_type=1,
+    #                         num_position_iterations=4,
+    #                         num_velocity_iterations=0,
+    #                         contact_offset=0.01,
+    #                         rest_offset=0.0,
+    #                         bounce_threshold_velocity=0.5,
+    #                         max_depenetration_velocity=1.0,
+    #                         default_buffer_size_multiplier=5,
+    #                         replace_cylinder_with_capsule=True,
+    #                         friction_correlation_distance=0.025,
+    #                         friction_offset_threshold=0.04)
     class control:
         control_type = 'P' # P: position, V: velocity, T: torques
         action_scale = 0.5
@@ -108,20 +109,24 @@ class BaseEnvCfg:
             gravity = 0.05
             height_measurements = 0.1
 
-class RslTrainCfg:
-    seed = 1
-    runner_class_name = 'OnPolicyRunner'
-    class policy:
+@configclass
+class RslRlTrainCfg:
+    """
+    policy training cfg
+    """
+    @configclass
+    class Policy:
         init_noise_std = 1.0
         actor_hidden_dims = [512, 256, 128]
         critic_hidden_dims = [512, 256, 128]
         activation = 'elu' # can be elu, relu, selu, crelu, lrelu, tanh, sigmoid
         # only for 'ActorCriticRecurrent':
-        # rnn_type = 'lstm'
-        # rnn_hidden_size = 512
-        # rnn_num_layers = 1
+        rnn_type = 'lstm'
+        rnn_hidden_size = 512
+        rnn_num_layers = 1
 
-    class algorithm:
+    @configclass
+    class Algorithm:
         # training params
         value_loss_coef = 1.0
         use_clipped_value_loss = True
@@ -136,11 +141,12 @@ class RslTrainCfg:
         desired_kl = 0.01
         max_grad_norm = 1.
 
-    class runner:
+    @configclass
+    class Runner:
         policy_class_name = 'ActorCritic'
         algorithm_class_name = 'PPO'
         num_steps_per_env = 24 # per iteration
-        max_iterations = 1500 # number of policy updates
+        max_iterations = 20001 # number of policy updates
 
         # logging
         save_interval = 50 # check for potential saves every this many iterations
@@ -151,3 +157,10 @@ class RslTrainCfg:
         load_run = -1 # -1 = last run
         checkpoint = -1 # -1 = last saved model
         resume_path = None # updated from load_run and chkpt
+
+    seed = 1
+    runner_class_name = 'OnPolicyRunner'
+    # construct the object
+    policy = Policy()
+    algorithm = Algorithm()
+    runner = Runner()

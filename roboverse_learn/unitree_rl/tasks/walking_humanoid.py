@@ -1,96 +1,79 @@
+from __future__ import annotations
+
+from typing import Callable
+
 import torch
 from metasim.utils import configclass
 from roboverse_learn.unitree_rl.configs.cfg_base import BaseEnvCfg, RslRlTrainCfg
 from roboverse_learn.unitree_rl.envs.env_humanoid import HumanoidEnv
 
+
 @configclass
-class WalkingDof12EnvCfg(BaseEnvCfg):
-    num_obs_single = 6 + 3 + 3 * 12 + 2
-    obs_len_history = 1
-    num_priv_obs_single = 9 + 3 + 3 * 12 + 2
-    priv_obs_len_history = 1
+class WalkingHumanoidEnvCfg(BaseEnvCfg):
+    """
+    Environment configuration for humanoid walking task.
+    """
+    num_obs_single = 0
+    obs_len_history = 5
+    num_priv_obs_single = 0
+    priv_obs_len_history = 5
+    class noise(BaseEnvCfg.noise):
+        add_noise = True
 
-    class domain_rand(BaseEnvCfg.domain_rand):
-        randomize_friction = True
-        friction_range = [0.1, 1.25]
-        randomize_base_mass = True
-        added_mass_range = [-1., 3.]
-        push_robots = True
-        push_interval_s = 5
-        max_push_vel_xy = 1.5
-
-    class control(BaseEnvCfg.control):
-        action_scale = 0.25
-
-    class rewards(BaseEnvCfg.rewards):
-        class scales(BaseEnvCfg.rewards.scales):
-            tracking_lin_vel = 1.0
-            tracking_ang_vel = 0.5
+    class rewards:
+        send_timeouts = True
+        only_positive_rewards = True # if true negative total rewards are clipped at zero (avoids early termination problems)
+        functions: list[Callable] | str = "roboverse_learn.unitree_rl.configs.cfg_reward_funcs"
+        class scales:
+            # termination = -0.0
+            # tracking_lin_vel = 1.0
+            # tracking_ang_vel = 0.5
             lin_vel_z = -2.0
-            ang_vel_xy = -0.05
-            orientation = -1.0
-            base_height = -10.0
-            dof_acc = -2.5e-7
-            dof_vel = -1e-3
-            feet_air_time = 0.0
-            collision = 0.0
-            action_rate = -0.01
-            dof_pos_limits = -5.0
-            alive = 0.15
-            hip_pos = -1.0
-            contact_no_vel = -0.2
-            feet_swing_height = -20.0
-            contact = 0.18
-        class extras(BaseEnvCfg.rewards.extras):
-            soft_dof_pos_limit = 0.9
-            base_height_target = 0.78
-
-    class initial_states:
-        objects = {}
-        robots = {"g1_dof12":
-                    {"pos": [0.0, 0.0, 0.8],
-                     "rot": [1.0, 0.0, 0.0, 0.0],
-                     "joint_pos": {
-                            # Hips & legs
-                            "left_hip_yaw_joint": 0.0,
-                            "left_hip_roll_joint": 0.0,
-                            "left_hip_pitch_joint": -0.1,
-                            "left_knee_joint": 0.3,
-                            "left_ankle_pitch_joint": -0.2,
-                            "left_ankle_roll_joint": 0.0,
-                            "right_hip_yaw_joint": 0.0,
-                            "right_hip_roll_joint": 0.0,
-                            "right_hip_pitch_joint": -0.1,
-                            "right_knee_joint": 0.3,
-                            "right_ankle_pitch_joint": -0.2,
-                            "right_ankle_roll_joint": 0.0,
-                        },
-                    },
-                }
+            # ang_vel_xy = -0.05
+            # orientation = -0.
+            # torques = -0.00001
+            # dof_vel = -0.
+            # dof_acc = -2.5e-7
+            # base_height = -0.
+            # feet_air_time =  1.0
+            # collision = -1.
+            # feet_stumble = -0.0
+            # action_rate = -0.01
+            # stand_still = -0.
 
 @configclass
-class WalkingDof12RslRlTrainCfg(RslRlTrainCfg):
-    """Environment configuration for 12-DOF walking task."""
+class WalkingHumanoidRslRlTrainCfg(RslRlTrainCfg):
+    """Train configuration for humanoid walking task for the rsl-rl lib"""
     policy = RslRlTrainCfg.Policy(
-        init_noise_std = 0.8,
-        actor_hidden_dims = [32],
-        critic_hidden_dims = [32],
-        activation = 'elu',
-        rnn_type = 'lstm',
-        rnn_hidden_size = 64,
-        rnn_num_layers = 1,
+        init_noise_std=1.0,
+        actor_hidden_dims=[512, 256, 128],
+        critic_hidden_dims=[512, 256, 128],
+        activation="elu",
     )
     algorithm = RslRlTrainCfg.Algorithm(
-        entropy_coef = 0.01
+        value_loss_coef=1.0,
+        use_clipped_value_loss=True,
+        clip_param=0.2,
+        entropy_coef=0.01,
+        num_learning_epochs=5,
+        num_mini_batches=4,
+        learning_rate=1.0e-3,
+        schedule="adaptive",
+        gamma=0.99,
+        lam=0.95,
+        desired_kl=0.01,
+        max_grad_norm=1.0,
     )
     runner = RslRlTrainCfg.Runner(
-        run_name = 'dof12_walking',
-        experiment_name = 'train',
-        policy_class_name = "ActorCriticRecurrent",
+        policy_class_name="ActorCritic",
+        num_steps_per_env = 24,
+        max_iterations = 50000,
+        save_interval = 100,
+        experiment_name = "",  # same as task name
+        # empirical_normalization = False
     )
 
-
-class WalkingDof12Env(HumanoidEnv):
+class WalkingHumanoidEnv(HumanoidEnv):
     def _init_buffers(self):
         self.noise_scale_vec = self._get_noise_scale_vec()
         return super()._init_buffers()
@@ -124,10 +107,6 @@ class WalkingDof12Env(HumanoidEnv):
         return noise_vec
 
     def _observation(self, env_states):
-        phase = self._get_leg_phase()
-        sin_phase = torch.sin(2 * torch.pi * phase).unsqueeze(1)
-        cos_phase = torch.cos(2 * torch.pi * phase).unsqueeze(1)
-
         q = (env_states.robots[self.name].joint_pos - self.default_dof_pos) * self.cfg.normalization.obs_scales.dof_pos
         dq = env_states.robots[self.name].joint_vel * self.cfg.normalization.obs_scales.dof_vel
 
@@ -138,8 +117,7 @@ class WalkingDof12Env(HumanoidEnv):
             q,  # num_actions
             dq,  # num_actions
             self.actions,  # num_actions
-            sin_phase,  # 1
-            cos_phase,  # 1
+            # self.history_buffer['actions'][-1]  # num_actions
         ), dim=-1)
 
         # add noise if needed
@@ -154,8 +132,6 @@ class WalkingDof12Env(HumanoidEnv):
             q,  # num_actions
             dq,  # num_actions
             self.actions,
-            sin_phase,
-            cos_phase,
         ), dim=-1)
 
         return obs_buf, priv_obs_buf

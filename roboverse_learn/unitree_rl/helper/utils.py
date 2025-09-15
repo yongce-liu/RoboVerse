@@ -118,15 +118,11 @@ def get_args(test=False):
     return args
 
 
-def get_log_dir(args: argparse.Namespace, scenario: ScenarioCfg, now=None) -> str:
+def get_log_dir(task_name:str, robot_name:str, now=None) -> str:
     """Get the log directory."""
-
-    robot_name = args.robot
-    task_name = scenario.task.task_name
-    task_name = f"{robot_name}_{task_name}"
     if now is None:
         now = datetime.datetime.now().strftime("%Y_%m%d_%H%M%S")
-    log_dir = f"./outputs/unitree_rl/{task_name}/{now}/"
+    log_dir = f"./outputs/unitree_rl/{task_name}/{now}/{robot_name}/"
     if not os.path.exists(log_dir):
         os.makedirs(log_dir, exist_ok=True)
     log.info("Log directory: {}", log_dir)
@@ -149,10 +145,10 @@ def get_class(name: str, suffix: str, library="roboverse_learn.unitree_rl"):
     return wrapper_cls
 
 
-@torch.jit.script
-def torch_rand_float(lower: float, upper: float, shape: tuple[int, int], device: str) -> torch.Tensor:
-    """Generate a tensor of random floats in the range [lower, upper]."""
-    return (upper - lower) * torch.rand(*shape, device=device) + lower
+# @torch.jit.script
+# def torch_rand_float(lower: float, upper: float, shape: tuple[int, int], device: str) -> torch.Tensor:
+#     """Generate a tensor of random floats in the range [lower, upper]."""
+#     return (upper - lower) * torch.rand(*shape, device=device) + lower
 
 
 @torch.jit.script
