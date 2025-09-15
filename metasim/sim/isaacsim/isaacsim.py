@@ -459,6 +459,8 @@ class IsaacsimHandler(BaseSimHandler):
         from isaaclab.actuators import ImplicitActuatorCfg
         from isaaclab.assets import Articulation, ArticulationCfg
 
+        manual_pd = any(mode == "effort" for mode in robot.control_type.values())
+        self._manual_pd_on.append(manual_pd)
         cfg = ArticulationCfg(
             spawn=sim_utils.UsdFileCfg(
                 usd_path=robot.usd_path,
@@ -477,14 +479,13 @@ class IsaacsimHandler(BaseSimHandler):
             actuators={
                 jn: ImplicitActuatorCfg(
                     joint_names_expr=[jn],
-                    stiffness=0.0,  # for torque control
-                    damping=0.0,  # for torque control
+                    stiffness=actuator.stiffness if not manual_pd else 0.0,
+                    damping=actuator.damping if not manual_pd else 0.0,
                     armature=0.01,
                 )
                 for jn, actuator in robot.actuators.items()
             },
         )
-        self._manual_pd_on.append(any(mode == "effort" for mode in robot.control_type.values()))
         cfg.prim_path = f"/World/envs/env_.*/{robot.name}"
         cfg.spawn.usd_path = os.path.abspath(robot.usd_path)
         cfg.spawn.rigid_props.disable_gravity = not robot.enabled_gravity
