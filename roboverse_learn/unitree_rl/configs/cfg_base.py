@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import Callable
+
 from metasim.utils import configclass
 from metasim.scenario.simulator_params import SimParamCfg
 
@@ -146,19 +147,18 @@ class RslRlTrainCfg:
         policy_class_name = 'ActorCritic'
         algorithm_class_name = 'PPO'
         num_steps_per_env = 24 # per iteration
-        max_iterations = 20001 # number of policy updates
+        # max_iterations = 20001 # number of policy updates
 
         # logging
         save_interval = 50 # check for potential saves every this many iterations
-        experiment_name = 'test'
-        run_name = ''
-        # load and resume
-        resume = False
-        load_run = -1 # -1 = last run
-        checkpoint = -1 # -1 = last saved model
-        resume_path = None # updated from load_run and chkpt
+        # experiment_name = 'test'
+        # run_name = ''
+        # # load and resume
+        # resume = False
+        # load_run = -1 # -1 = last run
+        # checkpoint = -1 # -1 = last saved model
+        # resume_path = None # updated from load_run and chkpt
 
-    seed = 1
     runner_class_name = 'OnPolicyRunner'
     # construct the object
     policy = Policy()

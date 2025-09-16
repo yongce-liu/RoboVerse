@@ -1,6 +1,6 @@
 import rootutils
-
 rootutils.setup_root(__file__, pythonpath=True)
+
 try:
     import isaacgym  # noqa: F401
 except ImportError:

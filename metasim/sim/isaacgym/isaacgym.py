@@ -28,7 +28,7 @@ from metasim.utils.dict import class_to_dict
 from metasim.utils.state import CameraState, ObjectState, RobotState, TensorState
 
 # TODO: add it to the randomization of metasim
-from roboverse_learn.unitree_rl.helper.terrain_gererator import TerrainGenerator
+from roboverse_learn.unitree_rl.configs import TerrainGenerator
 
 
 class IsaacgymHandler(BaseSimHandler):

@@ -84,8 +84,8 @@ class WalkingDof12RslRlTrainCfg(RslRlTrainCfg):
         entropy_coef = 0.01
     )
     runner = RslRlTrainCfg.Runner(
-        run_name = 'dof12_walking',
-        experiment_name = 'train',
+        # run_name = 'dof12_walking',
+        # experiment_name = 'train',
         policy_class_name = "ActorCriticRecurrent",
     )
 

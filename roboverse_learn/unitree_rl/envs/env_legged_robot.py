@@ -1,11 +1,10 @@
 from __future__ import annotations
-
-import math
-import copy
-import torch
+from typing import Union, Callable
 
 from collections import deque
-from typing import Union, Callable
+
+import math
+import torch
 
 from metasim.scenario.robot import RobotCfg
 from metasim.utils.state import TensorState, RobotState
@@ -15,8 +14,9 @@ from metasim.utils.dict import class_to_dict
 
 from roboverse_pack.robots import G1Dof12Cfg, Go2Cfg
 from roboverse_learn.unitree_rl.configs.cfg_base import BaseEnvCfg
-from roboverse_learn.unitree_rl.envs.env_base import AgentEnv, MasterSimulator
-from roboverse_learn.unitree_rl.helper.utils import get_euler_xyz, get_indices_from_substring
+from roboverse_learn.unitree_rl.helper import get_euler_xyz, get_indices_from_substring
+
+from .env_base import AgentEnv, MasterSimulator
 
 
 class LeggedRobotEnv(AgentEnv):
@@ -447,3 +447,11 @@ class LeggedRobotEnv(AgentEnv):
         params = torch.where(zs == 1.0, value, zs)
         params[0] = x_value
         return params.tolist()
+
+    @property
+    def num_obs(self):
+        return self.cfg.num_obs_single * self.cfg.obs_len_history
+
+    @property
+    def num_priv_obs(self):
+        return self.cfg.num_priv_obs_single * self.cfg.priv_obs_len_history

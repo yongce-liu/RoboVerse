@@ -1,30 +1,125 @@
 from __future__ import annotations
+from typing import Literal
 
+import yaml
 import math
-
 import numpy as np
 
-import roboverse_learn.unitree_rl.helper.terrain_utils as terrain_utils
-from roboverse_learn.unitree_rl.configs.base_terrain import (
-    BaseTerrainConfig,
-    GapConfig,
-    ObstacleConfig,
-    PitConfig,
-    SlopeConfig,
-    StairConfig,
-    StoneConfig,
-    TerrainConfig,
-)
+from metasim.utils import configclass
+
+from roboverse_learn.unitree_rl.helper import terrain_utils
+
+
+@configclass
+class BaseTerrainCfg:
+    type: str = "base"
+    origin: list[float] = [0, 0]  # [row, col] OR [width, length]
+    size: list[float] = [1.0, 1.0]  # [width, length] OR [row, col]
+    platform_size: float = 1.0
+
+
+@configclass
+class SlopeCfg(BaseTerrainCfg):
+    type: str = "slope"
+    origin: list[float] = [0, 0]
+    size: list[float] = [1.0, 1.0]
+    slope: float = 0.2  # radians
+    random: bool = False
+    platform_size: float = 1.0
+
+
+@configclass
+class StairCfg(BaseTerrainCfg):
+    type: str = "stair"
+    origin: list[float] = [0, 0]
+    size: list[float] = [1.0, 1.0]
+    step: list[float] = [0.31, 0.05]
+    platform_size: float = 1.0  # size of the platform at the top of the stairs when use pyramid_stairs_terrain
+
+
+@configclass
+class ObstacleCfg(BaseTerrainCfg):
+    type: str = "obstacle"
+    origin: list[float] = [0, 0]
+    size: list[float] = [1.0, 1.0]
+    rectangle_params: list[int, float, float] = (1.0, 2.0, 20)  # (min_size, max_size, num_rectangles)
+    max_height: float = 0.2  # height of the obstacles in meters
+    platform_size: float = 1.0
+
+
+@configclass
+class StoneCfg(BaseTerrainCfg):
+    type: str = "stone"
+    origin: list[float] = [0, 0]
+    size: list[float] = [1.0, 1.0]
+    stone_params: list[float, float] = (0.5, 1.0)
+    max_height: float = 0.2  # height of the stones in meters
+    platform_size: float = 1.0
+
+
+@configclass
+class GapCfg(BaseTerrainCfg):
+    type: str = "gap"
+    origin: list[float] = [0, 0]
+    size: list[float] = [1.0, 1.0]
+    gap_size: float = 1.0  # size of the gap in meters
+    platform_size: float = 1.0
+
+
+@configclass
+class PitCfg(BaseTerrainCfg):
+    type: str = "pit"
+    position: list[float] = [0, 0]
+    size: list[float] = [1.0, 1.0]
+    depth: float = 1.0
+    platform_size: float = 1.0
+
+
+@configclass
+class GroundCfg:
+    width: float = 20.0  # m
+    length: float = 20.0  # m
+    horizontal_scale: float = 0.1  # m
+    vertical_scale: float = 0.005  # m
+    margin: float = 10  # m
+    elements: dict[str, SlopeCfg | StairCfg | ObstacleCfg | StoneCfg | GapCfg | PitCfg] = None
+    repeat_direction_gap: list[int, Literal["row", "column"], float] = (0, "row", 0.1)  # (repeat, repeat_direction)
+    difficulty: list[float, float, Literal["linear"]] = [1.0, 4.0, "linear"]  # (difficulty, type)
+    # For Isaacgym
+    static_friction = 1.0
+    dynamic_friction = 1.0
+    restitution = 1.0
+
+    def __post_init__(self):
+        self.num_rows: int = int(self.width / self.horizontal_scale)
+        self.margin_num_rows: int = int(self.margin / self.horizontal_scale)
+        self.num_cols: int = int(self.length / self.horizontal_scale)
+        self.margin_num_cols: int = int(self.margin / self.horizontal_scale)
+
+    @classmethod
+    def from_yaml(cls, yaml_file: str) -> GroundCfg:
+        with open(yaml_file) as f:
+            raw_data = yaml.safe_load(f)["terrain"]
+        elements = {t: [] for t in ["slope", "stair", "obstacle", "stone", "gap", "pit"]}
+        for elem in raw_data["elements"]:
+            t = elem["type"]
+            class_wrapper = globals().get(f"{t.capitalize()}Config")
+            if class_wrapper is None:
+                raise ValueError(f"Unknown terrain type: {t}")
+            elements[t].append(class_wrapper(**elem))
+
+        raw_data["elements"] = elements
+        return cls(**raw_data)
 
 
 class TerrainGenerator:
     """Abstract base class for backend-specific terrain implementation."""
 
-    def __init__(self, config: TerrainConfig = None):
+    def __init__(self, config: GroundCfg = None):
         if config is not None:
             self._parse_cfg(config)
 
-    def _parse_cfg(self, config: TerrainConfig):
+    def _parse_cfg(self, config: GroundCfg):
         """Parse the terrain configuration."""
         self.config = config
         self.height_mat = np.zeros((config.num_rows, config.num_cols), dtype=np.int16)
@@ -32,7 +127,7 @@ class TerrainGenerator:
         self.vertical_scale = config.vertical_scale
         self.margin = config.margin
 
-    def _make_sub_terrain(self, config: BaseTerrainConfig):
+    def _make_sub_terrain(self, config: BaseTerrainCfg):
         terrain = terrain_utils.SubTerrain(
             config.type,
             width=math.ceil(config.size[0] / self.horizontal_scale),
@@ -42,7 +137,7 @@ class TerrainGenerator:
         )
         return terrain
 
-    def _make_slope(self, config: SlopeConfig, difficulty: float = 1.0):
+    def _make_slope(self, config: SlopeCfg, difficulty: float = 1.0):
         terrain = self._make_sub_terrain(config)
         terrain_utils.pyramid_sloped_terrain(
             terrain,
@@ -55,7 +150,7 @@ class TerrainGenerator:
             )
         return config.origin, terrain
 
-    def _make_stair(self, config: StairConfig, difficulty: float = 1.0):
+    def _make_stair(self, config: StairCfg, difficulty: float = 1.0):
         terrain = self._make_sub_terrain(config)
         terrain_utils.pyramid_stairs_terrain(
             terrain,
@@ -65,7 +160,7 @@ class TerrainGenerator:
         )
         return config.origin, terrain
 
-    def _make_obstacle(self, config: ObstacleConfig, difficulty: float = 1.0):
+    def _make_obstacle(self, config: ObstacleCfg, difficulty: float = 1.0):
         terrain = self._make_sub_terrain(config)
         terrain_utils.discrete_obstacles_terrain(
             terrain,
@@ -77,7 +172,7 @@ class TerrainGenerator:
         )
         return config.origin, terrain
 
-    def _make_stone(self, config: StoneConfig, difficulty: float = 1.0):
+    def _make_stone(self, config: StoneCfg, difficulty: float = 1.0):
         terrain = self._make_sub_terrain(config)
         terrain_utils.stepping_stones_terrain(
             terrain,
@@ -88,12 +183,12 @@ class TerrainGenerator:
         )
         return config.origin, terrain
 
-    def _make_gap(self, config: GapConfig, difficulty: float = 1.0):
+    def _make_gap(self, config: GapCfg, difficulty: float = 1.0):
         terrain = self._make_sub_terrain(config)
         terrain_utils.gap_terrain(terrain, gap_size=config.gap_size * difficulty, platform_size=config.platform_size)
         return config.origin, terrain
 
-    def _make_pit(self, config: PitConfig, difficulty: float = 1.0):
+    def _make_pit(self, config: PitCfg, difficulty: float = 1.0):
         terrain = self._make_sub_terrain(config)
         terrain_utils.pit_terrain(terrain, depth=config.depth * difficulty, platform_size=config.platform_size)
         return config.origin, terrain
@@ -187,3 +282,7 @@ class TerrainGenerator:
     def height_measure_pad(self):
         """Get the padded height map of the generated terrain."""
         return self.height_mat_pad * self.vertical_scale
+
+
+if __name__ == "__main__":
+    cfg = TerrainConfig.from_yaml("terrain.yaml")

@@ -1,12 +1,9 @@
-from __future__ import annotations
-from typing import Union
-
 import torch
 from metasim.types import TensorState
 from roboverse_learn.unitree_rl.envs.env_legged_robot import LeggedRobotEnv
 from roboverse_learn.unitree_rl.envs.env_humanoid import HumanoidEnv
+from roboverse_learn.unitree_rl.envs import EnvTypes
 
-EnvTypes = Union[LeggedRobotEnv, HumanoidEnv]
 
 def reward_lin_vel_z(env: EnvTypes, states: TensorState) -> torch.Tensor:
     """Reward for z linear velocity."""
@@ -129,7 +126,7 @@ def reward_tracking_lin_vel(env: EnvTypes, states: TensorState) -> torch.Tensor:
         env.commands[:, :2] - env.base_lin_vel[:, :2]
     )
     lin_vel_error = torch.sum(torch.square(lin_vel_diff), dim=1)
-    return torch.exp(-lin_vel_error * env.cfg.rewards.extras.tracking_sigma)
+    return torch.exp(-lin_vel_error / env.cfg.rewards.extras.tracking_sigma)
 
 def reward_tracking_ang_vel(env: EnvTypes, states: TensorState) -> torch.Tensor:
     """
@@ -139,7 +136,7 @@ def reward_tracking_ang_vel(env: EnvTypes, states: TensorState) -> torch.Tensor:
         env.commands[:, 2] - env.base_ang_vel[:, 2]
     )
     ang_vel_error = torch.square(ang_vel_diff)
-    return torch.exp(-ang_vel_error * env.cfg.rewards.extras.tracking_sigma)
+    return torch.exp(-ang_vel_error / env.cfg.rewards.extras.tracking_sigma)
 
 '''
 def reward_feet_air_time(env: EnvTypes, states: TensorState) -> torch.Tensor:

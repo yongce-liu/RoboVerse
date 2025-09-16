@@ -1,6 +1,6 @@
 """Reward functions for legged robot"""
 
-from __future__ import annotations
+
 
 import torch
 
