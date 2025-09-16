@@ -10,42 +10,47 @@ class WalkingDof12EnvCfg(BaseEnvCfg):
     num_priv_obs_single = 9 + 3 + 3 * 12 + 2
     priv_obs_len_history = 1
 
-    class domain_rand(BaseEnvCfg.domain_rand):
-        randomize_friction = True
-        friction_range = [0.1, 1.25]
-        randomize_base_mass = True
-        added_mass_range = [-1., 3.]
-        push_robots = True
-        push_interval_s = 5
-        max_push_vel_xy = 1.5
+    domain_rand = BaseEnvCfg.DomainRand(
+        randomize_friction = True,
+        friction_range = [0.1, 1.25],
+        randomize_base_mass = True,
+        added_mass_range = [-1., 3.],
+        push_robots = True,
+        push_interval_s = 5,
+        max_push_vel_xy = 1.5,
+        randomize_initial_state = False
+    )
 
-    class control(BaseEnvCfg.control):
-        action_scale = 0.25
+    control = BaseEnvCfg.Control(action_scale = 0.25)
 
-    class rewards(BaseEnvCfg.rewards):
-        class scales(BaseEnvCfg.rewards.scales):
-            tracking_lin_vel = 1.0
-            tracking_ang_vel = 0.5
-            lin_vel_z = -2.0
-            ang_vel_xy = -0.05
-            orientation = -1.0
-            base_height = -10.0
-            dof_acc = -2.5e-7
-            dof_vel = -1e-3
-            feet_air_time = 0.0
-            collision = 0.0
-            action_rate = -0.01
-            dof_pos_limits = -5.0
-            alive = 0.15
-            hip_pos = -1.0
-            contact_no_vel = -0.2
-            feet_swing_height = -20.0
-            contact = 0.18
-        class extras(BaseEnvCfg.rewards.extras):
-            soft_dof_pos_limit = 0.9
-            base_height_target = 0.78
+    @configclass
+    class RewardsScales(BaseEnvCfg.Rewards.Scales):
+        tracking_lin_vel = 1.0
+        tracking_ang_vel = 0.5
+        lin_vel_z = -2.0
+        ang_vel_xy = -0.05
+        orientation = -1.0
+        base_height = -10.0
+        dof_acc = -2.5e-7
+        dof_vel = -1e-3
+        action_rate = -0.01
+        dof_pos_limits = -5.0
+        alive = 0.15
+        hip_pos = -1.0
+        contact_no_vel = -0.2
+        feet_swing_height = -20.0
+        contact = 0.18
+        # torques = -0.00001
+    @configclass
+    class RewardExtras(BaseEnvCfg.Rewards.Extras):
+        soft_dof_pos_limit = 0.9
+        base_height_target = 0.78
+    rewards = BaseEnvCfg.Rewards(
+        scales = RewardsScales(),
+        extras = RewardExtras()
+    )
 
-    class initial_states:
+    class InitialStates:
         objects = {}
         robots = {"g1_dof12":
                     {"pos": [0.0, 0.0, 0.8],
@@ -67,6 +72,7 @@ class WalkingDof12EnvCfg(BaseEnvCfg):
                         },
                     },
                 }
+    initial_states = InitialStates()
 
 @configclass
 class WalkingDof12RslRlTrainCfg(RslRlTrainCfg):
@@ -80,14 +86,8 @@ class WalkingDof12RslRlTrainCfg(RslRlTrainCfg):
         rnn_hidden_size = 64,
         rnn_num_layers = 1,
     )
-    algorithm = RslRlTrainCfg.Algorithm(
-        entropy_coef = 0.01
-    )
-    runner = RslRlTrainCfg.Runner(
-        # run_name = 'dof12_walking',
-        # experiment_name = 'train',
-        policy_class_name = "ActorCriticRecurrent",
-    )
+    algorithm = RslRlTrainCfg.Algorithm(entropy_coef = 0.01)
+    runner = RslRlTrainCfg.Runner(policy_class_name = "ActorCriticRecurrent",)
 
 
 class WalkingDof12Env(HumanoidEnv):

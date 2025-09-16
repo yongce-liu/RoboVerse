@@ -22,8 +22,8 @@ def train(args):
     robots: list = [make_robots(args.robots)[0]]  # get the first robot
 
     # should move the parameters in a common used config files
-    env_spacing = 2.5
-    decimation = 4
+    env_spacing = 4
+    # decimation = 4
     device = "cuda" if torch.cuda.is_available() else "cpu"
     sim_params = SimParamCfg(dt=0.005,
                             substeps=1,
@@ -49,7 +49,7 @@ def train(args):
         headless=args.headless,
         env_spacing=env_spacing,
         sim_params=sim_params,
-        decimation=decimation,
+        # decimation=decimation,
     )
 
     master_simulator = MasterSimulator(scenario=scenario, device=device)

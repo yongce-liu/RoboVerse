@@ -40,7 +40,7 @@ class LeggedRobotEnv(AgentEnv):
         self.max_episode_steps = math.ceil(self.cfg.episode_length_s / self.dt)
         self.command_ranges = self.cfg.commands.ranges
         self.num_commands = self.cfg.commands.num_commands
-        self.reward_scales = class_to_dict(self.cfg.rewards.scales)
+        self.reward_scales = dict(sorted(class_to_dict(self.cfg.rewards.scales).items(), key=lambda x: x[0]))
         # self.command_ranges = class_to_dict(self.cfg.commands.ranges)
 
     def _init_rigid_body_indices(self):
@@ -362,7 +362,7 @@ class LeggedRobotEnv(AgentEnv):
         rew_buf = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
         for i in range(len(self.reward_functions)):
             name = self.reward_names[i]
-            unscaled_rew = self.reward_functions[i](self, env_states)
+            unscaled_rew = self.reward_functions[i](self)
             rew = unscaled_rew * self.reward_scales[name]
             rew_buf += rew
             self.episode_sums[name] += rew
