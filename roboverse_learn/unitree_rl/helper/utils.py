@@ -134,7 +134,7 @@ def get_load_path(load_root: str, checkpoint: int = None) -> str:
         load_path = f"{load_root}/{model}"
     else:
         load_path = f"{load_root}/model_{checkpoint}.pt"
-    log.info(f"Loading checkpoint {model} from {load_root}")
+    log.info(f"Loading checkpoint {checkpoint} from {load_root}")
     return load_path
 
 def get_load_root_dir(args: argparse.Namespace, scenario) -> str:

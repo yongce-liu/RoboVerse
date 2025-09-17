@@ -307,7 +307,7 @@ class LeggedRobotEnv(AgentEnv):
         reset_env_idx = self.reset_buf.nonzero(as_tuple=False).flatten().tolist()
         env_states = self.reset(reset_env_idx)
         # simulate the push operation
-        if self.cfg.domain_rand.push_robots and False:
+        if self.cfg.domain_rand.push_robots:
             self._push_robots(env_states)
 
         _tmp_obs_buf_single, _tmp_priv_obs_buf_single = self._observation(env_states)
@@ -341,7 +341,7 @@ class LeggedRobotEnv(AgentEnv):
     def _push_robots(self, env_states: TensorState):
         """Randomly set robot's root velocity to simulate a push."""
         env_ids = torch.arange(self.num_envs, device=self.device)
-        push_env_ids = env_ids[self.episode_steps[env_ids] % int(self.cfg.domain_rand.push_interval_s) == 0]
+        push_env_ids = env_ids[self.episode_steps[env_ids] % self.cfg.domain_rand.push_interval == 0]
         if len(push_env_ids) == 0:
             return
 

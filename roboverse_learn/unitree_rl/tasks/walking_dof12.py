@@ -1,4 +1,5 @@
 import torch
+
 from metasim.utils import configclass
 from roboverse_learn.unitree_rl.configs.cfg_base import BaseEnvCfg, RslRlTrainCfg
 from roboverse_learn.unitree_rl.envs.env_humanoid import HumanoidEnv
@@ -16,7 +17,7 @@ class WalkingDof12EnvCfg(BaseEnvCfg):
         randomize_base_mass = True,
         added_mass_range = [-1., 3.],
         push_robots = True,
-        push_interval_s = 5,
+        push_interval = int(5/0.02),
         max_push_vel_xy = 1.5,
         randomize_initial_state = False
     )

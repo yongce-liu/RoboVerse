@@ -123,7 +123,7 @@ class BaseEnvCfg:
         randomize_base_mass = False
         added_mass_range = [-1., 1.]
         push_robots = True
-        push_interval_s = 15
+        push_interval = int(15/0.02) # [s] average time between pushes
         max_push_vel_xy = 1.
         randomize_initial_state = False
     domain_rand = DomainRand()
