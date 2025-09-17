@@ -10,8 +10,8 @@ from metasim.utils.humanoid_robot_util import (
     dof_vel_tensor,
 )
 from metasim.utils.state import TensorState
-from roboverse_learn.unitree_rl.configs.tmp_base_legged import BaseLeggedTaskCfg, LeggedRobotCfgPPO
-from roboverse_learn.unitree_rl.envs.base_legged import LeggedRobot
+from roboverse_learn.rl.unitree_rl.configs.tmp_base_legged import BaseLeggedTaskCfg, LeggedRobotCfgPPO
+from roboverse_learn.rl.unitree_rl.envs.base_legged import LeggedRobot
 
 
 # Training Config

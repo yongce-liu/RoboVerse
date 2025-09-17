@@ -6,9 +6,9 @@ import shutil
 import datetime
 import pickle as pkl
 
-from roboverse_learn.unitree_rl.configs.cfg_base import BaseEnvCfg
-from roboverse_learn.unitree_rl.envs import MasterSimulator, EnvTypes
-from roboverse_learn.unitree_rl.helper import get_class, get_log_dir, get_load_path
+from roboverse_learn.rl.unitree_rl.configs.cfg_base import BaseEnvCfg
+from roboverse_learn.rl.unitree_rl.envs import MasterSimulator, EnvTypes
+from roboverse_learn.rl.unitree_rl.helper import get_class, get_log_dir, get_load_path
 
 
 class BaseRunnerWrapper:

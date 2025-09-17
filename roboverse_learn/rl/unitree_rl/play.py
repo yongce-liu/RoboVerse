@@ -13,9 +13,9 @@ import torch
 from metasim.scenario.scenario import ScenarioCfg
 from metasim.scenario.simulator_params import SimParamCfg
 
-from roboverse_learn.unitree_rl.envs import MasterSimulator, EnvTypes
-from roboverse_learn.unitree_rl.runners import MasterRunner, EnvWrapperTypes
-from roboverse_learn.unitree_rl.helper import get_args, make_robots, set_seed
+from roboverse_learn.rl.unitree_rl.envs import MasterSimulator, EnvTypes
+from roboverse_learn.rl.unitree_rl.runners import MasterRunner, EnvWrapperTypes
+from roboverse_learn.rl.unitree_rl.helper import get_args, make_robots, set_seed
 
 
 def train(args):

@@ -1,8 +1,8 @@
 import torch
 from metasim.types import TensorState
-from roboverse_learn.unitree_rl.envs.env_legged_robot import LeggedRobotEnv
-from roboverse_learn.unitree_rl.envs.env_humanoid import HumanoidEnv
-from roboverse_learn.unitree_rl.envs import EnvTypes
+from roboverse_learn.rl.unitree_rl.envs.env_legged_robot import LeggedRobotEnv
+from roboverse_learn.rl.unitree_rl.envs.env_humanoid import HumanoidEnv
+from roboverse_learn.rl.unitree_rl.envs import EnvTypes
 
 
 def reward_lin_vel_z(env: EnvTypes) -> torch.Tensor:

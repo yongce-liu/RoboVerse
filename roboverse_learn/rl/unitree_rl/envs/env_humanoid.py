@@ -2,7 +2,7 @@ import torch
 
 from typing import Union
 from roboverse_pack.robots import G1Dof12Cfg
-from roboverse_learn.unitree_rl.helper import get_indices_from_substring
+from roboverse_learn.rl.unitree_rl.helper import get_indices_from_substring
 
 from .env_legged_robot import LeggedRobotEnv
 

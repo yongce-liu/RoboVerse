@@ -13,8 +13,8 @@ from metasim.utils.math import quat_apply, quat_rotate_inverse, wrap_to_pi
 from metasim.utils.dict import class_to_dict
 
 from roboverse_pack.robots import G1Dof12Cfg, Go2Cfg
-from roboverse_learn.unitree_rl.configs.cfg_base import BaseEnvCfg
-from roboverse_learn.unitree_rl.helper import get_euler_xyz, get_indices_from_substring
+from roboverse_learn.rl.unitree_rl.configs.cfg_base import BaseEnvCfg
+from roboverse_learn.rl.unitree_rl.helper import get_euler_xyz, get_indices_from_substring
 
 from .env_base import AgentEnv, MasterSimulator
 

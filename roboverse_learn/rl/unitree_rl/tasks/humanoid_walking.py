@@ -13,10 +13,10 @@ from metasim.utils.humanoid_robot_util import (
     ref_dof_pos_tensor,
 )
 
-# from roboverse_learn.unitree_rl.configs.base_humanoid import BaseHumanoidCfg
-from roboverse_learn.unitree_rl.configs.tmp_base_legged import BaseLeggedTaskCfg, ControlCfg, LeggedRobotCfgPPO
-from roboverse_learn.unitree_rl.envs.base_humanoid import Humanoid
-from roboverse_learn.unitree_rl.helper.utils import find_unique_candidate
+# from roboverse_learn.rl.unitree_rl.configs.base_humanoid import BaseHumanoidCfg
+from roboverse_learn.rl.unitree_rl.configs.tmp_base_legged import BaseLeggedTaskCfg, ControlCfg, LeggedRobotCfgPPO
+from roboverse_learn.rl.unitree_rl.envs.base_humanoid import Humanoid
+from roboverse_learn.rl.unitree_rl.helper.utils import find_unique_candidate
 
 
 @configclass

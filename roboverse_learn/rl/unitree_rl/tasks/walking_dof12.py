@@ -1,8 +1,8 @@
 import torch
 
 from metasim.utils import configclass
-from roboverse_learn.unitree_rl.configs.cfg_base import BaseEnvCfg, RslRlTrainCfg
-from roboverse_learn.unitree_rl.envs.env_humanoid import HumanoidEnv
+from roboverse_learn.rl.unitree_rl.configs.cfg_base import BaseEnvCfg, RslRlTrainCfg
+from roboverse_learn.rl.unitree_rl.envs.env_humanoid import HumanoidEnv
 
 @configclass
 class WalkingDof12EnvCfg(BaseEnvCfg):

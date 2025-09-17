@@ -3,8 +3,8 @@ from __future__ import annotations
 import math
 import numpy as np
 
-from roboverse_learn.unitree_rl.helper import terrain_utils
-from roboverse_learn.unitree_rl.configs.cfg_terrain import *
+from roboverse_learn.rl.unitree_rl.helper import terrain_utils
+from roboverse_learn.rl.unitree_rl.configs.cfg_terrain import *
 
 class TerrainGenerator:
     """Abstract base class for backend-specific terrain implementation."""

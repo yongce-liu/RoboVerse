@@ -2,8 +2,8 @@ from __future__ import annotations
 from typing import Union
 import torch
 
-from roboverse_learn.unitree_rl.envs import EnvTypes
-from roboverse_learn.unitree_rl.configs.cfg_base import RslRlTrainCfg
+from roboverse_learn.rl.unitree_rl.envs import EnvTypes
+from roboverse_learn.rl.unitree_rl.configs.cfg_base import RslRlTrainCfg
 from .master import BaseRunnerWrapper
 
 
