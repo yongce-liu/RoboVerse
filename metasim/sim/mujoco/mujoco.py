@@ -24,7 +24,7 @@ from metasim.types import Action
 from metasim.utils.state import CameraState, ObjectState, RobotState, TensorState, state_tensor_to_nested
 
 # TODO: add it to the randomization of metasim
-from roboverse_learn.unitree_rl.helper import TerrainGenerator
+from roboverse_learn.rl.unitree_rl.helper import TerrainGenerator
 
 
 class MujocoHandler(BaseSimHandler):
