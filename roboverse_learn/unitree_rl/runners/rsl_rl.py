@@ -2,12 +2,13 @@ from __future__ import annotations
 from typing import Union
 import torch
 
+from roboverse_learn.unitree_rl.envs import EnvTypes
 from roboverse_learn.unitree_rl.configs.cfg_base import RslRlTrainCfg
-from .base import EnvTypes, BaseWrapper
+from .master import BaseRunnerWrapper
 
 
-class RslRLEnvWrapper:
-    def __init__(self, env: EnvTypes):
+class RslRlEnvWrapper:
+    def __init__(self, env):
         self.env = env
 
     def step(self, actions: torch.Tensor) -> tuple[torch.Tensor, Union[torch.Tensor, None], torch.Tensor, torch.Tensor, dict]:
@@ -77,18 +78,14 @@ class RslRLEnvWrapper:
         return self.env.device
 
 
-class RslRlWrapper(BaseWrapper):
+class RslRlWrapper(BaseRunnerWrapper):
     def __init__(self, env: EnvTypes, train_cfg: dict|RslRlTrainCfg, log_dir:str):
+        super().__init__(env, train_cfg, log_dir)
         from rsl_rl.runners.on_policy_runner import OnPolicyRunner
-        self.env = RslRLEnvWrapper(env)
-        self.device = env.device
-        if not isinstance(train_cfg, dict):
-            train_cfg = train_cfg.to_dict()
-        self.train_cfg = train_cfg
-        self.log_dir = log_dir
 
+        self.env_wrapper = RslRlEnvWrapper(self.env)
         self.runner = OnPolicyRunner(
-            env=self.env,
+            env=self.env_wrapper,
             train_cfg=self.train_cfg,
             device=self.device,
             log_dir=log_dir,
@@ -99,3 +96,6 @@ class RslRlWrapper(BaseWrapper):
 
     def load(self, path):
         self.runner.load(path)
+
+    def get_policy(self):
+        return self.runner.get_inference_policy()

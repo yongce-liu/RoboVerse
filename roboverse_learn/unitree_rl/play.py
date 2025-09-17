@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import rootutils
 rootutils.setup_root(__file__, pythonpath=True)
 
@@ -6,129 +8,92 @@ try:
 except ImportError:
     pass
 
-import os
-
 import torch
-from rsl_rl.runners.on_policy_runner import OnPolicyRunner
 
-from metasim.cfg.scenario import ScenarioCfg
-from roboverse_learn.unitree_rl.helper.utils import (
-    PolicyExporterLSTM,
-    export_policy_as_jit,
-    get_args,
-    get_class,
-    get_export_jit_path,
-    get_load_path,
-    make_robots,
-    reindex_func,
-)
+from metasim.scenario.scenario import ScenarioCfg
+from metasim.scenario.simulator_params import SimParamCfg
+
+from roboverse_learn.unitree_rl.envs import MasterSimulator, EnvTypes
+from roboverse_learn.unitree_rl.runners import MasterRunner, EnvWrapperTypes
+from roboverse_learn.unitree_rl.helper import get_args, make_robots, set_seed
 
 
-def play(args):
-    # device = "cuda" if torch.cuda.is_available() else "cpu"
-    _robots_name, _robots = make_robots(args)
-    robots_name, robots = [_robots_name[0]], [_robots[0]]
-    config_wrapper = get_class(args.task, "Cfg")
-    task = config_wrapper(robots=robots)
-    if args.sim == "mujoco":
-        task.sim_params.dt = 0.002
-        task.decimation = 10
-        task.__post_init__()
+def train(args):
+    # only support single robot for now
+    robots: list = [make_robots(args.robots)[0]]  # get the first robot
+
+    # should move the parameters in a common used config files
+    env_spacing = 4
+    # decimation = 4
+    device = "cpu" if args.sim == "mujoco" else "cuda" if torch.cuda.is_available() else "cpu"
+    sim_params = SimParamCfg(dt=0.005,
+                            substeps=1,
+                            num_threads=10,
+                            solver_type=1,
+                            num_position_iterations=4,
+                            num_velocity_iterations=0,
+                            contact_offset=0.01,
+                            rest_offset=0.0,
+                            bounce_threshold_velocity=0.5,
+                            max_depenetration_velocity=1.0,
+                            default_buffer_size_multiplier=5,
+                            replace_cylinder_with_capsule=True,
+                            friction_correlation_distance=0.025,
+                            friction_offset_threshold=0.04)
+    # should move the parameters in a common used config files
+
     scenario = ScenarioCfg(
-        task=task,
-        sim_params=task.sim_params,
-        decimation=task.decimation,
         robots=robots,
         num_envs=args.num_envs,
-        sim=args.sim,
+        simulator=args.sim,
+        renderer=args.sim,
         headless=args.headless,
-        try_add_table=False,  # add a ground plane
-        cameras=[],
+        env_spacing=env_spacing,
+        sim_params=sim_params,
+        # decimation=decimation,
     )
-    scenario.num_envs = 1
-    scenario.task.commands.curriculum = False
-    scenario.task.ppo_cfg.runner.resume = True
-    scenario.task.random.friction.enabled = False
-    scenario.task.random.mass.enabled = False
-    scenario.task.random.push.enabled = False
-    scenario.task.noise.add_noise = False
 
-    task_wrapper = get_class(args.task, "Task")
-    env = task_wrapper(scenario)
-
-    load_path = get_load_path(args, scenario)
-    # Use the existing run directory as log_dir to avoid creating new output dirs during play
-    log_dir = os.path.dirname(load_path)
-
-    obs = env.get_observations()
-    # load policy
-    try:
-        ppo_runner = OnPolicyRunner(
-            env=env,
-            train_cfg=env.train_cfg,
-            device=env.device,
-            log_dir=log_dir,
-            args=args,
-        )
-    except Exception as e:
-        ppo_runner = OnPolicyRunner(
-            env=env,
-            train_cfg=env.train_cfg,
-            device=env.device,
-            log_dir=log_dir,
-            # args=args,
-        )
-    if args.jit_load:
-        policy = torch.jit.load(load_path).to(env.device)
+    master_simulator = MasterSimulator(scenario=scenario, device=device)
+    master_runner = MasterRunner(simulator=master_simulator, task_name=args.task, lib_name='rsl_rl')
+    if args.resume:
+        policys = master_runner.load(resume_dir=args.resume, checkpoint=-1)
     else:
-        ppo_runner.load(load_path)
-        policy = ppo_runner.get_inference_policy(device=env.device)
+        raise ValueError("Please provide the resume dir for eval policy.")
 
-    # export policy as a jit module (used to run it from C++)
-    if EXPORT_POLICY:
-        export_jit_path = get_export_jit_path(args, scenario)
-        actor_critic = ppo_runner.alg.actor_critic
-        if hasattr(actor_critic, "memory_a"):
-            exporter = PolicyExporterLSTM(actor_critic)
-            exporter.export(export_jit_path)
-        else:
-            export_policy_as_jit(actor_critic.actor, export_jit_path)
-        print("Exported policy as jit script to: ", export_jit_path)
+    name_0 = list(master_runner.runners.keys())[0]
+    runner_0 = master_runner.runners[name_0]
+    policy_0 = policys[name_0]
+    env_0: EnvTypes = runner_0.env
+    cfg_0 = env_0.cfg
 
-    # if args.reindex_actions:
-    num_actions = env.num_actions
-    reindex_actions_idx = env.env.handler.get_joint_reindex(obj_name=env.robot.name, inverse=False)
-    print(f"Reindex actions idx: {reindex_actions_idx}")
-    reverse_reindex_actions_idx = env.env.handler.get_joint_reindex(obj_name=env.robot.name, inverse=True)
-    assert num_actions == len(reindex_actions_idx)
-    print(f"Reverse reindex actions idx: {reverse_reindex_actions_idx}")
+    cfg_0.commands.curriculum = False
+    cfg_0.commands.resampling_time = 1e6  # effectively disable command changes
+    cfg_0.domain_rand.randomize_friction = False
+    cfg_0.domain_rand.randomize_base_mass = False
+    cfg_0.domain_rand.randomize_initial_state = False
+    cfg_0.domain_rand.push_robots = False
+    cfg_0.noise.add_noise = False
+
+    # unenable noise and randomization for eval
+
+    env_0.reset()
+    obs, _, _, _, _ = env_0.step(torch.zeros(env_0.num_envs, env_0.num_actions, device=env_0.device))
 
     for i in range(1000000):
         # set fixed command
-        env.commands[:, 0] = 0.5
-        env.commands[:, 1] = 0.0
-        env.commands[:, 2] = 0.0
-        env.commands[:, 3] = 0.0
-        actions = policy(obs.detach()).detach()
-        if args.reindex_actions:
-            actions = actions[:, reindex_actions_idx]
-        obs, _, _, _, _ = env.step(actions)
-        if args.reindex_actions:
-            # set the command
-            obs_start_idx = torch.tensor([9, 9 + num_actions, 9 + num_actions * 2])
-            obs = reindex_func(obs, reverse_reindex_actions_idx, obs_start_idx)
-
+        env_0.commands[:, 0] = 0.5
+        env_0.commands[:, 1] = 0.0
+        env_0.commands[:, 2] = 0.0
+        env_0.commands[:, 3] = 0.0
+        actions = policy_0(obs.detach()).detach()
+        obs, _, _, _, _ = env_0.step(actions)
 
 if __name__ == "__main__":
-    EXPORT_POLICY = True
+    # set_seed(1)
     args = get_args()
-    # args.jit_load = True
-    # args.reindex_actions = True
-    # args.task = "dof12_walking"
-    # args.sim = "isaacgym"
-    # args.robot = 'g1_dof12'
-    # args.load_run = "2025_0902_125815"
-    # args.checkpoint = "600"
-    # args.num_envs = 128
+    # args.num_envs = 1
+    # args.robot = "g1_dof12"
     # args.headless = True
-    play(args)
+    # args.task = "walking_dof12"
+    # args.sim = "isaacgym"
+    train(args)

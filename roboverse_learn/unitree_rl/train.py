@@ -13,7 +13,8 @@ import torch
 from metasim.scenario.scenario import ScenarioCfg
 from metasim.scenario.simulator_params import SimParamCfg
 
-from roboverse_learn.unitree_rl.envs import MasterSimulator, Runner
+from roboverse_learn.unitree_rl.envs import MasterSimulator
+from roboverse_learn.unitree_rl.runners import MasterRunner
 from roboverse_learn.unitree_rl.helper import get_args, make_robots, set_seed
 
 
@@ -53,10 +54,10 @@ def train(args):
     )
 
     master_simulator = MasterSimulator(scenario=scenario, device=device)
-    runner = Runner(simulator=master_simulator, task_name=args.task, lib_name='rsl_rl')
+    master_runner = MasterRunner(simulator=master_simulator, task_name=args.task, lib_name='rsl_rl')
     if args.resume:
-        runner.load(resume_dir=args.resume, checkpoint=args.checkpoint)
-    runner.learn(max_iterations=args.iter)
+        master_runner.load(resume_dir=args.resume, checkpoint=args.checkpoint)
+    master_runner.learn(max_iterations=args.iter)
 
 if __name__ == "__main__":
     args = get_args()
