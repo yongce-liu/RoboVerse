@@ -4,19 +4,50 @@ import os
 import random
 import sys
 import time
+from typing import Any
+import yaml
+import argparse
+
+def load_config(config_path: str) -> dict[str, Any]:
+    """Load configuration from YAML file."""
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+    return config
+
+def get_config():
+    """Get configuration with command line argument support."""
+    parser = argparse.ArgumentParser(description='FastTD3 Training')
+    parser.add_argument('--config', type=str, default='mjx_rl_open_cabinet.yaml',
+                       help='YAML configuration file name (will be loaded from configs/ directory)')
+    args = parser.parse_args()
+
+    # Get the directory of the current script
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    configs_dir = os.path.join(script_dir, 'configs')
+    config_path = os.path.join(configs_dir, args.config)
+
+    if not os.path.exists(config_path):
+        raise FileNotFoundError(f"Configuration file not found: {config_path}")
+
+    return load_config(config_path)
+
+# Load configuration
+CONFIG = get_config()
+cfg = CONFIG.get
 
 os.environ["TORCHDYNAMO_INLINE_INBUILT_NN_MODULES"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
-
 if sys.platform != "darwin":
     os.environ["MUJOCO_GL"] = "egl"
 else:
     os.environ["MUJOCO_GL"] = "glfw"
-
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
-# os.environ["JAX_DEFAULT_MATMUL_PRECISION"]          = "highest"
 
-import numpy as np
+# Ensure repos
+# itory root is on sys.path for local package imports
+import rootutils
+
+rootutils.setup_root(__file__, pythonpath=True)
 
 try:
     import isaacgym  # noqa: F401
@@ -24,55 +55,29 @@ except ImportError:
     pass
 
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
-import tqdm
-import wandb
-import yaml
-from fast_td3 import Actor, Critic
-from fast_td3_utils import EmpiricalNormalization, SimpleReplayBuffer
-from loguru import logger as log
-from tensordict import TensorDict
-from torch.amp import GradScaler, autocast
-from wrapper import FastTD3EnvWrapper
 
-from metasim.scenario.scenario import ScenarioCfg
-from metasim.scenario.sensors import PinholeCameraCfg
-
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 torch.set_float32_matmul_precision("high")
 
+import numpy as np
+import torch
+import torch.nn.functional as F
+import tqdm
+import wandb
+from loguru import logger as log
+from tensordict import TensorDict
+from torch import optim
+from torch.amp import GradScaler, autocast
 
-def load_config_from_yaml(config_name: str) -> dict:
-    """
-    Load configuration from a YAML file.
-
-    Args:
-        config_name (str): Name of the YAML config file
-
-    Returns:
-        dict: The loaded config dictionary
-    """
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    config_path = os.path.join(current_dir, "configs", f"{config_name}.yaml")
-    with open(config_path) as f:
-        config = yaml.safe_load(f)
-    return config
+from roboverse_learn.rl.fast_td3.fttd3_module import Actor, Critic, EmpiricalNormalization, SimpleReplayBuffer
+from metasim.scenario.cameras import PinholeCameraCfg
+from metasim.task.registry import get_task_class
 
 
 def main() -> None:
-    if len(sys.argv) < 2:
-        log.error("Please provide the config file path, e.g. python train_sb3.py configs/isaacgym.yaml")
-        exit(1)
-    config_name = sys.argv[1]
-    config = load_config_from_yaml(config_name)
-    cfg = config.get
     GAMMA = float(cfg("gamma"))
     USE_CDQ = bool(cfg("use_cdq"))
     MAX_GRAD_NORM = float(cfg("max_grad_norm"))
     DISABLE_BOOTSTRAP = bool(cfg("disable_bootstrap"))
-    log.info(f"Load config: {config_name}")
 
     amp_enabled = cfg("amp") and cfg("cuda") and torch.cuda.is_available()
     amp_device_type = (
@@ -89,7 +94,6 @@ def main() -> None:
     if cfg("use_wandb") and cfg("train_or_eval") == "train":
         wandb.init(
             project=cfg("wandb_project", "fttd3_training"),
-            config=config,
             save_code=True,
         )
 
@@ -103,44 +107,21 @@ def main() -> None:
     else:
         if torch.cuda.is_available():
             device = torch.device(f"cuda:{cfg('device_rank')}")
+            torch.cuda.set_device(cfg("device_rank"))
+
         elif torch.backends.mps.is_available():
             device = torch.device(f"mps:{cfg('device_rank')}")
         else:
             raise ValueError("No GPU available")
-    print(f"Using device: {device}")
+    log.info(f"Using device: {device}")
 
-    scenario = ScenarioCfg(
-        task=cfg("task"),
-        robots=cfg("robots"),
-        try_add_table=cfg("add_table", False),
-        sim=cfg("sim"),
-        num_envs=cfg("num_envs", 1),
-        headless=True if cfg("train_or_eval") == "train" else False,
-        cameras=[],
+    task_cls = get_task_class(cfg("task"))
+    # Get default scenario from task class and update with specific parameters
+    scenario = task_cls.scenario.update(
+        robots=cfg("robots"), simulator=cfg("sim"), num_envs=cfg("num_envs"), headless=cfg("headless"), cameras=[]
     )
-
-    # For different simulators, the decimation factor is different, so we need to set it here
-    scenario.task.decimation = cfg("decimation", 1)
-
-    envs = FastTD3EnvWrapper(scenario, device=device)
-    eval_envs = envs  # reuse for evaluation
-    scenario_render = ScenarioCfg(
-        task=cfg("task"),
-        robots=cfg("robots"),
-        try_add_table=cfg("add_table", False),
-        sim=cfg("sim"),
-        num_envs=cfg("num_envs", 1),
-        headless=True,
-        cameras=[
-            PinholeCameraCfg(
-                width=cfg("video_width", 1024),
-                height=cfg("video_height", 1024),
-                pos=(4.0, -4.0, 4.0),  # adjust as needed
-                look_at=(0.0, 0.0, 0.0),
-            )
-        ],
-    )
-    scenario_render.task.decimation = cfg("decimation", 1)
+    envs = task_cls(scenario, device=device)
+    eval_envs = envs
 
     # ---------------- derive shapes ------------------------------------
     n_act = envs.num_actions
@@ -149,13 +130,8 @@ def main() -> None:
     action_low, action_high = -1.0, 1.0
 
     # ---------------- normalisers -------------------------------------
-
-    if cfg("obs_normalization"):
-        obs_normalizer = EmpiricalNormalization(shape=n_obs, device=device)
-        critic_obs_normalizer = EmpiricalNormalization(shape=n_critic_obs, device=device)
-    else:
-        obs_normalizer = nn.Identity()
-        critic_obs_normalizer = nn.Identity()
+    obs_normalizer = EmpiricalNormalization(shape=n_obs, device=device)
+    critic_obs_normalizer = EmpiricalNormalization(shape=n_critic_obs, device=device)
 
     actor = Actor(
         n_obs=n_obs,
@@ -230,15 +206,14 @@ def main() -> None:
         episode_lengths = torch.zeros(num_eval_envs, device=device)
         done_masks = torch.zeros(num_eval_envs, dtype=torch.bool, device=device)
 
-        obs = eval_envs.reset()
+        obs, info = eval_envs.reset()
 
         # Run for a fixed number of steps
         for _ in range(eval_envs.max_episode_steps):
             with torch.no_grad(), autocast(device_type=amp_device_type, dtype=amp_dtype, enabled=amp_enabled):
                 obs = normalize_obs(obs)
                 actions = actor(obs)
-
-            next_obs, rewards, dones, _ = eval_envs.step(actions.float())
+            next_obs, rewards, terminated, time_out, infos = eval_envs.step(actions.float())
             episode_returns = torch.where(~done_masks, episode_returns + rewards, episode_returns)
             episode_lengths = torch.where(~done_masks, episode_lengths + 1, episode_lengths)
             done_masks = torch.logical_or(done_masks, dones)
@@ -258,23 +233,40 @@ def main() -> None:
         """
         video_path: str = cfg("video_path", "output/rollout.mp4")
         os.makedirs(os.path.dirname(video_path), exist_ok=True)
-        obs_normalizer.eval()
-        env = FastTD3EnvWrapper(scenario_render, device=device)
-        # first frame after reset
-        obs = env.reset()
-        frames = [env.render()]
+
+        robots = cfg("robots")
+        simulator = cfg("sim")
+        num_envs = cfg("num_envs")
+        headless = True
+        cameras = [
+            PinholeCameraCfg(
+                width=cfg("video_width", 1024),
+                height=cfg("video_height", 1024),
+                pos=(4.0, -4.0, 4.0),  # adjust as needed
+                look_at=(0.0, 0.0, 0.0),
+            )
+        ]
+        scenario_render = scenario.update(
+            robots=robots, simulator=simulator, num_envs=num_envs, headless=headless, cameras=cameras
+        )
+        env = task_cls(scenario_render, device=device)
 
         obs_normalizer.eval()
+        obs, info = env.reset()
+        frames = [env.render()]
+
         for _ in range(env.max_episode_steps):
             with torch.no_grad(), autocast(device_type=amp_device_type, dtype=amp_dtype, enabled=amp_enabled):
-                act = actor(obs_normalizer(obs))
-            obs, _, done, _ = env.step(act.float())
+                actions = actor(obs_normalizer(obs))
+            obs, _, done, _, _ = env.step(actions.float())
+
             frames.append(env.render())
             if done.any():
                 break
-        obs_normalizer.train()
-        print(f"[render_with_rollout] MP4 saved to {video_path}")
+
         env.close()
+        obs_normalizer.train()
+
         iio.mimsave(video_path, frames, fps=30)
         return frames
 
@@ -282,12 +274,8 @@ def main() -> None:
         with autocast(device_type=amp_device_type, dtype=amp_dtype, enabled=amp_enabled):
             observations = data["observations"]
             next_observations = data["next"]["observations"]
-            if envs.asymmetric_obs:
-                critic_observations = data["critic_observations"]
-                next_critic_observations = data["next"]["critic_observations"]
-            else:
-                critic_observations = observations
-                next_critic_observations = next_observations
+            critic_observations = observations
+            next_critic_observations = next_observations
             actions = data["actions"]
             rewards = data["next"]["rewards"]
             dones = data["next"]["dones"].bool()
@@ -350,7 +338,7 @@ def main() -> None:
 
     def update_pol(data, logs_dict):
         with autocast(device_type=amp_device_type, dtype=amp_dtype, enabled=amp_enabled):
-            critic_observations = data["critic_observations"] if envs.asymmetric_obs else data["observations"]
+            critic_observations = data["observations"]
 
             qf1, qf2 = qnet(critic_observations, actor(data["observations"]))
             qf1_value = qnet.get_value(F.softmax(qf1, dim=1))
@@ -380,16 +368,9 @@ def main() -> None:
         update_pol = torch.compile(update_pol, mode=mode)
         policy = torch.compile(policy, mode=mode)
         normalize_obs = torch.compile(obs_normalizer.forward, mode=mode)
-        normalize_critic_obs = torch.compile(critic_obs_normalizer.forward, mode=mode)
     else:
         normalize_obs = obs_normalizer.forward
-        normalize_critic_obs = critic_obs_normalizer.forward
-
-    if envs.asymmetric_obs:
-        obs, critic_obs = envs.reset_with_critic_obs()
-        critic_obs = torch.as_tensor(critic_obs, device=device, dtype=torch.float)
-    else:
-        obs = envs.reset()
+    obs, info = envs.reset()
 
     if cfg("checkpoint_path"):
         # Load checkpoint if specified
@@ -417,22 +398,11 @@ def main() -> None:
         with torch.no_grad(), autocast(device_type=amp_device_type, dtype=amp_dtype, enabled=amp_enabled):
             norm_obs = normalize_obs(obs)
             actions = policy(obs=norm_obs, dones=dones)
-
-        next_obs, rewards, dones, infos = envs.step(actions.float())
-
-        truncations = infos["time_outs"]
-
-        if envs.asymmetric_obs:
-            next_critic_obs = infos["observations"]["critic"]
+        next_obs, rewards, terminated, time_out, infos = envs.step(actions.float())
+        dones = terminated | time_out
 
         # Compute 'true' next_obs and next_critic_obs for saving
         true_next_obs = torch.where(dones[:, None] > 0, infos["observations"]["raw"]["obs"], next_obs)
-        if envs.asymmetric_obs:
-            true_next_critic_obs = torch.where(
-                dones[:, None] > 0,
-                infos["observations"]["raw"]["critic_obs"],
-                next_critic_obs,
-            )
         transition = TensorDict(
             {
                 "observations": obs,
@@ -440,20 +410,14 @@ def main() -> None:
                 "next": {
                     "observations": true_next_obs,
                     "rewards": torch.as_tensor(rewards, device=device, dtype=torch.float),
-                    "truncations": truncations.long(),
+                    "truncations": time_out.long(),
                     "dones": dones.long(),
                 },
             },
             batch_size=(envs.num_envs,),
             device=device,
         )
-        if envs.asymmetric_obs:
-            transition["critic_observations"] = critic_obs
-            transition["next"]["critic_observations"] = true_next_critic_obs
-
         obs = next_obs
-        if envs.asymmetric_obs:
-            critic_obs = next_critic_obs
 
         rb.extend(transition)
 
@@ -463,9 +427,6 @@ def main() -> None:
                 data = rb.sample(batch_size)
                 data["observations"] = normalize_obs(data["observations"])
                 data["next"]["observations"] = normalize_obs(data["next"]["observations"])
-                if envs.asymmetric_obs:
-                    data["critic_observations"] = normalize_critic_obs(data["critic_observations"])
-                    data["next"]["critic_observations"] = normalize_critic_obs(data["next"]["critic_observations"])
                 logs_dict = update_main(data, logs_dict)
                 if cfg("num_updates") > 1:
                     if i % cfg("policy_frequency") == 1:
@@ -496,12 +457,12 @@ def main() -> None:
                     }
 
                     if cfg("eval_interval") > 0 and global_step % cfg("eval_interval") == 0:
-                        print(f"Evaluating at global step {global_step}")
+                        log.info(f"Evaluating at global step {global_step}")
                         eval_avg_return, eval_avg_length = evaluate()
-                        obs = envs.reset()
+                        obs, info = envs.reset()
                         logs["eval_avg_return"] = eval_avg_return
                         logs["eval_avg_length"] = eval_avg_length
-                        print(f"avg_return={eval_avg_return:.4f}, avg_length={eval_avg_length:.4f}")
+                        log.info(f"avg_return={eval_avg_return:.4f}, avg_length={eval_avg_length:.4f}")
 
                 if cfg("use_wandb"):
                     wandb.log(
@@ -514,7 +475,7 @@ def main() -> None:
                     )
 
             if cfg("save_interval") > 0 and global_step > 0 and global_step % cfg("save_interval") == 0:
-                print(f"Saving model at global step {global_step}")
+                log.info(f"Saving model at global step {global_step}")
 
         global_step += 1
         pbar.update(1)
