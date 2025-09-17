@@ -299,23 +299,24 @@ class LeggedRobotEnv(AgentEnv):
         self._post_physics_step_callback()
 
         # gym-style return values
-        self.rew_buf[:] = self._reward(env_states)
-        clip_obs_limit = self.cfg.normalization.clip_observations
-        _tmp_obs_buf_single, _tmp_priv_obs_buf_single = self._observation(env_states)
-        self.obs_buf_history.append(_tmp_obs_buf_single)
-        self.obs_buf[:] = torch.cat(list(self.obs_buf_history), dim=1).clip(-clip_obs_limit, clip_obs_limit).to(self.device)
-        if _tmp_priv_obs_buf_single is not None:
-            self.priv_obs_buf_history.append(_tmp_priv_obs_buf_single)
-            self.priv_obs_buf[:] = torch.cat(list(self.priv_obs_buf_history), dim=1).clip(-clip_obs_limit, clip_obs_limit).to(self.device)
         self.time_out_buf[:] = self._time_out(env_states)
         self.reset_buf[:] = torch.logical_or(self._terminated(env_states), self.time_out_buf)
+        self.rew_buf[:] = self._reward(env_states)
 
         # reset envs
         reset_env_idx = self.reset_buf.nonzero(as_tuple=False).flatten().tolist()
         env_states = self.reset(reset_env_idx)
         # simulate the push operation
-        if self.cfg.domain_rand.push_robots:
+        if self.cfg.domain_rand.push_robots and False:
             self._push_robots(env_states)
+
+        _tmp_obs_buf_single, _tmp_priv_obs_buf_single = self._observation(env_states)
+        clip_obs_limit = self.cfg.normalization.clip_observations
+        self.obs_buf_history.append(_tmp_obs_buf_single)
+        self.obs_buf[:] = torch.cat(list(self.obs_buf_history), dim=1).clip(-clip_obs_limit, clip_obs_limit).to(self.device)
+        if _tmp_priv_obs_buf_single is not None:
+            self.priv_obs_buf_history.append(_tmp_priv_obs_buf_single)
+            self.priv_obs_buf[:] = torch.cat(list(self.priv_obs_buf_history), dim=1).clip(-clip_obs_limit, clip_obs_limit).to(self.device)
 
         # copy to the history buffer
         for _key, _val in self.history_buffer.items():
@@ -373,13 +374,9 @@ class LeggedRobotEnv(AgentEnv):
         return rew_buf
 
     def _terminated(self, env_states):
-        reset_buf = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
-        contact_forces = env_states.robots[self.name].extra["contact_forces"]
-        reset_buf |= torch.any(
-            torch.norm(contact_forces[:, self.termination_contact_indices, :], dim=-1) > 1.0, dim=1
-        )
-        rpy = get_euler_xyz(env_states.robots[self.name].root_state[:, 3:7])
-        reset_buf |= torch.logical_or(torch.abs(rpy[:, 1]) > 1.0, torch.abs(rpy[:, 0]) > 0.8)
+        # contact_forces = env_states.robots[self.name].extra["contact_forces"]
+        reset_buf = torch.any(torch.norm(self.contact_forces[:, self.termination_contact_indices, :], dim=-1) > 1.0, dim=1)
+        reset_buf |= torch.logical_or(torch.abs(self.base_euler_xyz[:, 1]) > 1.0, torch.abs(self.base_euler_xyz[:, 0]) > 0.8)
         return reset_buf
 
     def _time_out(self, env_states: TensorState | None) -> torch.BoolTensor:

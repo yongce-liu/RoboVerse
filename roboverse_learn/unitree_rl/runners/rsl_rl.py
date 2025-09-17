@@ -16,7 +16,8 @@ class RslRlEnvWrapper:
         return self.obs_buf, self.privileged_obs_buf, self.rew_buf, self.reset_buf, self.extras
 
     def reset(self, env_ids: Union[list, torch.Tensor] = None):
-        _ = self.env.reset(env_ids)
+        _ = self.env.reset(list(range(self.num_envs)))
+        _ = self.step(torch.zeros(self.num_envs, self.num_actions, device=self.device, requires_grad=False))
         return self.obs_buf, self.privileged_obs_buf
 
     def get_observations(self) -> torch.Tensor:
