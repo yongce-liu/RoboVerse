@@ -110,7 +110,7 @@ def get_log_dir(task_name:str, robot_name:str, now=None) -> str:
     log.info("Log directory: {}", log_dir)
     return log_dir
 
-def get_class(name: str, suffix: str, library="roboverse_learn.unitree_rl"):
+def get_class(name: str, suffix: str, library="roboverse_learn.rl.unitree_rl"):
     """Get the class wrappers.
     Example:
         get_class("ReachOrigin", "Cfg") -> ReachOriginCfg

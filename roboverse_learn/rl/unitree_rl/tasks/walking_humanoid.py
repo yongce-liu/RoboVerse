@@ -23,7 +23,7 @@ class WalkingHumanoidEnvCfg(BaseEnvCfg):
     class rewards:
         send_timeouts = True
         only_positive_rewards = True # if true negative total rewards are clipped at zero (avoids early termination problems)
-        functions: list[Callable] | str = "roboverse_learn.unitree_rl.configs.cfg_reward_funcs"
+        functions: list[Callable] | str = "roboverse_learn.rl.unitree_rl.configs.cfg_reward_funcs"
         class scales:
             termination = -0.0
             tracking_lin_vel = 1.0
