@@ -10,6 +10,7 @@ import mujoco
 import numpy as np
 import torch
 from dm_control import mjcf
+from loguru import logger as log
 
 from metasim.scenario.objects import ArticulationObjCfg, PrimitiveCubeCfg, PrimitiveCylinderCfg, PrimitiveSphereCfg
 from metasim.scenario.robot import RobotCfg
@@ -21,6 +22,9 @@ from metasim.queries.base import BaseQueryType
 from metasim.sim import BaseSimHandler
 from metasim.types import Action
 from metasim.utils.state import CameraState, ObjectState, RobotState, TensorState, state_tensor_to_nested
+
+# TODO: add it to the randomization of metasim
+from roboverse_learn.rl.unitree_rl.helper import TerrainGenerator
 
 
 class MujocoHandler(BaseSimHandler):
@@ -47,7 +51,14 @@ class MujocoHandler(BaseSimHandler):
             self.cameras.append(camera)
         self._episode_length_buf = 0
 
+        # FIXME: hard code decimation for now
+        self.decimation = 25
+
         self._manual_pd_on = False
+        self._p_gains = None
+        self._d_gains = None
+        self._torque_limits = None
+        self._robot_default_dof_pos = None
         self._effort_controlled_joints = []
         self._position_controlled_joints = []
         self._current_action = None
@@ -56,6 +67,9 @@ class MujocoHandler(BaseSimHandler):
     def launch(self) -> None:
         model = self._init_mujoco()
         self.physics = mjcf.Physics.from_mjcf_model(model)
+        if self.hfield_measure is not None:
+            self.physics.model.hfield_data[:] = self.hfield_measure.flatten(order="C")
+
         self.data = self.physics.data
 
         self.body_names = [self.physics.model.body(i).name for i in range(self.physics.model.nbody)]
@@ -77,16 +91,66 @@ class MujocoHandler(BaseSimHandler):
 
     def _init_torque_control(self):
         """Initialize torque control parameters based on robot configuration."""
-        self._manual_pd_on = []
+        self._p_gains = []
+        self._d_gains = []
+        self._torque_limits = []
+        self._robot_default_dof_pos = []
+        self._effort_controlled_joints = []
+        self._position_controlled_joints = []
+
         for robot_idx, robot in enumerate(self.robots):
-            manual_pd = any(mode == "effort" for mode in self.robots[robot_idx].control_type.values())
-            self._manual_pd_on.append(manual_pd)
             joint_names = self._get_joint_names(robot.name, sort=True)
-            self._robot_num_dofs.append(len(joint_names))
+            robot_num_dof = len(joint_names)
+            self._robot_num_dofs.append(robot_num_dof)
+
+            p_gains = np.zeros(robot_num_dof)
+            d_gains = np.zeros(robot_num_dof)
+            torque_limits = np.zeros(robot_num_dof)
+
+            manual_pd_on = any(mode == "effort" for mode in robot.control_type.values())
+
+            default_dof_pos = []
+
             for i, joint_name in enumerate(joint_names):
-                i_control_mode = self.robot.control_type.get(joint_name, "position")
+                i_actuator_cfg = robot.actuators[joint_name]
+                i_control_mode = robot.control_type.get(joint_name, "position")
+
+                if joint_name in robot.default_joint_positions:
+                    default_pos = robot.default_joint_positions[joint_name]
+                else:
+                    joint_id = self.physics.model.joint(f"{self._mujoco_robot_names[robot_idx]}{joint_name}").id
+                    joint_range = self.physics.model.jnt_range[joint_id]
+                    default_pos = 0.3 * (joint_range[0] + joint_range[1])
+                default_dof_pos.append(default_pos)
+
                 if i_control_mode == "effort":
-                    self._effort_controlled_joints.append(i)
+                    self._effort_controlled_joints.append((robot_idx, i))
+                    p_gains[i] = i_actuator_cfg.stiffness
+                    d_gains[i] = i_actuator_cfg.damping
+
+                    if i_actuator_cfg.torque_limit is not None:
+                        torque_limit = i_actuator_cfg.torque_limit
+                    else:
+                        actuator_id = self.physics.model.actuator(
+                            f"{self._mujoco_robot_names[robot_idx]}{joint_name}"
+                        ).id
+                        torque_limit = self.physics.model.actuator_forcerange[actuator_id, 1]
+
+                    # torque_limits[i] = self.scenario.control.torque_limit_scale * torque_limit
+
+                elif i_control_mode == "position":
+                    self._position_controlled_joints.append((robot_idx, i))
+                else:
+                    log.error(f"Unknown actuator control mode: {i_control_mode}, only support effort and position")
+                    raise ValueError
+
+            self._p_gains.append(p_gains)
+            self._d_gains.append(d_gains)
+            self._torque_limits.append(torque_limits)
+            self._robot_default_dof_pos.append(np.array(default_dof_pos))
+
+        self._manual_pd_on = len(self._effort_controlled_joints) > 0
+        self._current_vel_target = None  # Initialize velocity target tracking
 
     def _apply_scale_to_mjcf(self, mjcf_model, scale):
         """Apply scale to all geoms, bodies, and sites in the MJCF model."""
@@ -214,29 +278,30 @@ class MujocoHandler(BaseSimHandler):
         if camera_max_width > 640 or camera_max_height > 480:
             self._set_framebuffer_size(mjcf_model, camera_max_width, camera_max_height)
 
-        mjcf_model.asset.add(
-            "texture",
-            name="texplane",
-            type="2d",
-            builtin="checker",
-            width=512,
-            height=512,
-            rgb1=[0, 0, 0],
-            rgb2=[1.0, 1.0, 1.0],
-        )
-        mjcf_model.asset.add(
-            "material", name="matplane", reflectance="0.2", texture="texplane", texrepeat=[1, 1], texuniform=True
-        )
-        ground = mjcf_model.worldbody.add(
-            "geom",
-            type="plane",
-            pos="0 0 0",
-            size="100 100 0.001",
-            quat="1 0 0 0",
-            condim="3",
-            conaffinity="15",
-            material="matplane",
-        )
+        # mjcf_model.asset.add(
+        #     "texture",
+        #     name="texplane",
+        #     type="2d",
+        #     builtin="checker",
+        #     width=512,
+        #     height=512,
+        #     rgb1=[0, 0, 0],
+        #     rgb2=[1.0, 1.0, 1.0],
+        # )
+        # mjcf_model.asset.add(
+        #     "material", name="matplane", reflectance="0.2", texture="texplane", texrepeat=[1, 1], texuniform=True
+        # )
+        # ground = mjcf_model.worldbody.add(
+        #     "geom",
+        #     type="plane",
+        #     pos="0 0 0",
+        #     size="100 100 0.001",
+        #     quat="1 0 0 0",
+        #     condim="3",
+        #     conaffinity="15",
+        #     material="matplane",
+        # )
+        self.hfield_name, self.hfield_measure = self._add_ground(mjcf_model=mjcf_model, if_random=False)
 
         self.object_body_names = []
         self.mj_objects = {}
@@ -396,6 +461,12 @@ class MujocoHandler(BaseSimHandler):
                 else None,
                 joint_effort_target=torch.from_numpy(self.physics.data.actuator_force[actuator_reindex]).unsqueeze(0),
             )
+            # FIXME a temporary solution for accessing net contact forces of robots, it will be moved to
+            self._contact_forces = self._get_contact_forces().view(self.num_envs, -1, 3)
+            extra = {
+                "contact_forces": self._contact_forces[:, body_ids_reindex, :],
+            }
+            state.extra = extra
             robot_states[robot.name] = state
 
         camera_states = {}
@@ -412,13 +483,6 @@ class MujocoHandler(BaseSimHandler):
             state = CameraState(rgb=rgb, depth=depth)
             camera_states[camera.name] = state
         extras = self.get_extra()
-        for key, extra_value in extras.items():
-            if isinstance(extra_value, dict):
-                for rname, rvalue in extra_value.items():
-                    if hasattr(robot_states[rname], "extra"):
-                        robot_states[rname].extra[key] = rvalue
-                    else:
-                        robot_states[rname].extra = {key: rvalue}
         return TensorState(objects=object_states, robots=robot_states, cameras=camera_states, extras=extras)
 
     def _set_root_state(self, obj_name, obj_state, zero_vel=False):
@@ -438,8 +502,7 @@ class MujocoHandler(BaseSimHandler):
             robot_name = self._mujoco_robot_names[robot_idx]
             if not robot.fix_base_link:
                 root_joint = self.physics.data.joint(robot_name)
-                # TODO: fix the height bug for mujoco
-                root_joint.qpos[:3] = [0, 0, 0]
+                root_joint.qpos[:3] = obj_state.get("pos", [0, 0, 0])
                 root_joint.qpos[3:7] = obj_state.get("rot", [1, 0, 0, 0])
                 if zero_vel:
                     root_joint.qvel[:6] = 0
@@ -496,12 +559,18 @@ class MujocoHandler(BaseSimHandler):
             states = state_tensor_to_nested(self, states)
         if len(states) > 1:
             raise ValueError("MujocoHandler only supports single env state setting")
+        try:
+            states_flat = [state["objects"] | state["robots"] for state in states]
+        except:
+            # ToFix: for g1_dex3, objects are empty
+            states_flat = [state["robots"] for state in states]
 
         states_flat = [{**state["objects"], **state["robots"]} for state in states]
 
         for obj_name, obj_state in states_flat[0].items():
-            self._set_root_state(obj_name, obj_state, zero_vel)
-            self._set_joint_state(obj_name, obj_state, zero_vel)
+            if obj_name in self.mj_objects:
+                self._set_root_state(obj_name, obj_state, zero_vel)
+                self._set_joint_state(obj_name, obj_state, zero_vel)
         self.physics.forward()
 
     def _disable_robotgravity(self):
@@ -514,24 +583,56 @@ class MujocoHandler(BaseSimHandler):
             self.physics.data.xfrc_applied[body_id, 0:3] = force_vec
             self.physics.data.xfrc_applied[body_id, 3:6] = 0
 
+    def _compute_effort(self, actions, robot_idx):
+        """Compute effort from actions using PD controller."""
+        # FIXME: hard code for 0-1 action space, should remove all the scale stuff later
+        action_scaled = self._action_scale * actions
+        joint_names = self._get_joint_names(self.robots[robot_idx].name, sort=True)
+        robot_dof_pos = np.array([
+            self.physics.data.joint(f"{self._mujoco_robot_names[robot_idx]}{jn}").qpos[0] for jn in joint_names
+        ])
+        robot_dof_vel = np.array([
+            self.physics.data.joint(f"{self._mujoco_robot_names[robot_idx]}{jn}").qvel[0] for jn in joint_names
+        ])
+
+        if self._action_offset:
+            effort = (
+                self._p_gains[robot_idx] * (action_scaled + self._robot_default_dof_pos[robot_idx] - robot_dof_pos)
+                - self._d_gains[robot_idx] * robot_dof_vel
+            )
+        else:
+            effort = (
+                self._p_gains[robot_idx] * (action_scaled - robot_dof_pos) - self._d_gains[robot_idx] * robot_dof_vel
+            )
+
+        effort = np.clip(effort, -self._torque_limits[robot_idx], self._torque_limits[robot_idx])
+
+        return effort
+
+    def _apply_pd_control(self, actions):
+        """Apply torque control using computed efforts."""
+        for robot_idx, robot in enumerate(self.robots):
+            if any((robot_idx, i) in self._effort_controlled_joints for i in range(self._robot_num_dofs[robot_idx])):
+                # effort = self._compute_effort(actions, robot_idx)
+                effort = actions.squeeze(0)
+                joint_names = self._get_joint_names(robot.name, sort=True)
+                for i in range(self._robot_num_dofs[robot_idx]):
+                    if (robot_idx, i) in self._effort_controlled_joints:
+                        joint_name = joint_names[i]
+                        actuator_id = self.physics.model.actuator(
+                            f"{self._mujoco_robot_names[robot_idx]}{joint_name}"
+                        ).id
+                        self.physics.data.ctrl[actuator_id] = effort[i]
+
     def set_dof_targets(self, actions) -> None:
         """Unified: Tensor/ndarray -> write ctrl (or cache for PD); dict-list -> name-based."""
-        actions = actions.squeeze()
         self._actions_cache = actions
 
         # Fast path: tensor-like controls
         if isinstance(actions, torch.Tensor):
             vec = actions.detach().to(dtype=torch.float32, device="cpu").numpy()
-            robot_idx = 0
             if self._manual_pd_on:
-                joint_names = self.get_joint_names(self.robot.name, sort=True)
-                for i in range(self._robot_num_dofs[robot_idx]):
-                    if i in self._effort_controlled_joints:
-                        joint_name = joint_names[i]
-                        actuator_id = self.physics.model.actuator(
-                            f"{self._mujoco_robot_names[robot_idx]}{joint_name}"
-                        ).id
-                        self.physics.data.ctrl[actuator_id] = vec[i]
+                self._current_action = vec
             else:
                 self.physics.data.ctrl[:] = vec
             return
@@ -586,7 +687,12 @@ class MujocoHandler(BaseSimHandler):
                 self._disable_robotgravity()
 
         # Apply torque control if manual PD is enabled
-        self.physics.step()
+        if self._manual_pd_on:
+            # for _ in range(self.decimation):
+            self._apply_pd_control(self._current_action)
+            self.physics.step()
+        else:
+            self.physics.step(self.decimation)
 
         if not self.headless:
             self.viewer.sync()
@@ -717,6 +823,93 @@ class MujocoHandler(BaseSimHandler):
 
         return self._body_ids_reindex_cache[obj_name]
 
+    def _get_contact_forces(self) -> torch.Tensor:
+        """
+        Compute net contact forces on each body.
+        Returns:
+            torch.Tensor: shape (nbody, 3), contact forces for each body
+        """
+        nbody = self.physics.model.nbody
+        contact_forces = torch.zeros((nbody, 3), device=self.device)
+
+        for i in range(self.physics.data.ncon):
+            contact = self.physics.data.contact[i]
+            force = np.zeros(6, dtype=np.float64)
+            mujoco.mj_contactForce(self.physics.model.ptr, self.physics.data.ptr, i, force)
+            f_contact = torch.from_numpy(force[:3]).to(device=self.device)
+
+            body1 = self.physics.model.geom_bodyid[contact.geom1]
+            body2 = self.physics.model.geom_bodyid[contact.geom2]
+
+            contact_forces[body1] += f_contact
+            contact_forces[body2] -= f_contact
+
+        return contact_forces
+
+    def _add_ground(self, mjcf_model, if_random: bool = False):
+        if if_random:
+            tg = TerrainGenerator(self.scenario.random.terrain_cfg)
+            static_friction = getattr(self.scenario.random.terrain_cfg, "static_friction", 1.0)
+            dynamic_friction = getattr(self.scenario.random.terrain_cfg, "dynamic_friction", 1.0)
+            restitution = getattr(self.scenario.random.terrain_cfg, "restitution", 0.0)
+
+            height_mat = tg.generate_terrain(self.scenario.random.terrain_cfg, type="heightfield")
+            hfield_name = "terrain"
+            mjcf_model.asset.add(
+                "hfield",
+                name=hfield_name,
+                nrow=height_mat.shape[0],
+                ncol=height_mat.shape[1],
+                size=[
+                    height_mat.shape[0] * tg.horizontal_scale / 2,
+                    height_mat.shape[1] * tg.horizontal_scale / 2,
+                    1.0,
+                    0.1,
+                ],
+            )
+
+            mjcf_model.worldbody.add(
+                "geom",
+                name="terrain_geom",
+                type="hfield",
+                hfield=hfield_name,
+                pos=f"{-tg.margin} {-tg.margin} 0",
+                rgba="0.8 0.8 0.8 1",
+                friction=[static_friction, dynamic_friction, 0.001],
+                solimp=[restitution, 0.01, 0.99],
+                # contype="0",
+                # conaffinity="1",
+                # condim="6",
+            )
+            hfield_measure = height_mat
+        else:
+            mjcf_model.asset.add(
+                "texture",
+                name="texplane",
+                type="2d",
+                builtin="checker",
+                width=512,
+                height=512,
+                rgb1=[0, 0, 0],
+                rgb2=[1.0, 1.0, 1.0],
+            )
+            mjcf_model.asset.add(
+                "material", name="matplane", reflectance="0.2", texture="texplane", texrepeat=[1, 1], texuniform=True
+            )
+            ground = mjcf_model.worldbody.add(
+                "geom",
+                type="plane",
+                pos="0 0 0",
+                size="100 100 0.001",
+                quat="1 0 0 0",
+                condim="3",
+                conaffinity="15",
+                material="matplane",
+            )
+            hfield_name = None
+            hfield_measure = None
+        return hfield_name, hfield_measure
+
     ############################################################
     ## Misc
     ############################################################
@@ -740,7 +933,3 @@ class MujocoHandler(BaseSimHandler):
     @property
     def robot(self) -> RobotCfg:
         return self.robots[0]
-
-    @property
-    def robot_num_dof(self) -> int:
-        return self._robot_num_dofs[0]

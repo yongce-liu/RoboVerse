@@ -27,6 +27,9 @@ from metasim.types import Action, DictEnvState
 from metasim.utils.dict import class_to_dict
 from metasim.utils.state import CameraState, ObjectState, RobotState, TensorState
 
+# TODO: add it to the randomization of metasim
+from roboverse_learn.rl.unitree_rl.helper import TerrainGenerator
+
 
 class IsaacgymHandler(BaseSimHandler):
     def __init__(self, scenario: ScenarioCfg, optional_queries: dict[str, BaseQueryType] | None = None):
@@ -44,7 +47,7 @@ class IsaacgymHandler(BaseSimHandler):
         self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self._num_envs: int = scenario.num_envs
-        self._episode_length_buf = [0 for _ in range(self.num_envs)]
+        # self._episode_length_buf = [0 for _ in range(self.num_envs)]
 
         # asset related
         self._asset_dict_dict: dict = {}  # dict of object link index dict
@@ -84,6 +87,9 @@ class IsaacgymHandler(BaseSimHandler):
             None  # for the configuration: desire_pos = action_scale * action + default_pos
         )
         self._action_offset: bool = False  # for configuration: desire_pos = action_scale * action + default_pos
+        self._p_gains: torch.Tensor | None = None  # parameter for PD controller in for pd effort control
+        self._d_gains: torch.Tensor | None = None
+        self._torque_limits: torch.Tensor | None = None
         self._effort: torch.Tensor | None = None  # output of pd controller, used for effort control
         self._pos_ctrl_dof_dix = []  # joint index in dof state, built-in position control mode
         self._manual_pd_on: bool = False  # turn on maunual pd controller if effort joint exist
@@ -141,7 +147,8 @@ class IsaacgymHandler(BaseSimHandler):
         sim_params.physx.bounce_threshold_velocity = self.scenario.sim_params.bounce_threshold_velocity
         sim_params.physx.max_depenetration_velocity = self.scenario.sim_params.max_depenetration_velocity
         sim_params.physx.default_buffer_size_multiplier = self.scenario.sim_params.default_buffer_size_multiplier
-
+        # sim_params.physx.contact_collection = gymapi.ContactCollection.CC_ALL_SUBSTEPS
+        # sim_params.physx.max_gpu_contact_pairs = 2**23
         compute_device_id = 0
         graphics_device_id = 0
         if self.headless:
@@ -277,7 +284,7 @@ class IsaacgymHandler(BaseSimHandler):
         assert len(self.robots) == 1, "Only support one robot for now"
         robot_asset_file = self.robots[0].mjcf_path if self.robots[0].isaacgym_read_mjcf else self.robots[0].urdf_path
         asset_options = gymapi.AssetOptions()
-        asset_options.armature = 0.01
+        asset_options.armature = getattr(self.robots[0], "armature", 0.0)
         asset_options.fix_base_link = self.robots[0].fix_base_link
         asset_options.disable_gravity = not self.robots[0].enabled_gravity
         asset_options.flip_visual_attachments = self.robots[0].isaacgym_flip_visual_attachments
@@ -293,6 +300,10 @@ class IsaacgymHandler(BaseSimHandler):
         # FIXME: hard code for 0-1 action space, should remove all the scale stuff later
         self._action_scale = torch.tensor(1.0, device=self.device)
         self._action_offset = torch.tensor(0.0, device=self.device)
+
+        self._torque_limits = torch.zeros(
+            self._num_envs, robot_num_dofs, dtype=torch.float, device=self.device, requires_grad=False
+        )
 
         robot_dof_props = self.gym.get_asset_dof_properties(robot_asset)
 
@@ -326,7 +337,7 @@ class IsaacgymHandler(BaseSimHandler):
                 default_dof_pos.append(robot_upper_limits[i])
             # pd control effort mode
             if i_control_mode == "effort":
-                # effort control should set all to zeros
+                # FIXME: hard code for 0-1 action space, should remove all the scale stuff later
 
                 robot_dof_props["driveMode"][i] = gymapi.DOF_MODE_EFFORT
                 robot_dof_props["stiffness"][i] = 0.0
@@ -380,9 +391,8 @@ class IsaacgymHandler(BaseSimHandler):
         )  # x, y, z, w order for gymapi.Quat
 
         # add ground plane
-        plane_params = gymapi.PlaneParams()
-        plane_params.normal = gymapi.Vec3(0, 0, 1)
-        self.gym.add_ground(self.sim, plane_params)
+        # _height_measure, _horizontal_scale = self._add_ground(if_random=self.scenario.random.ground)
+        _height_measure, _horizontal_scale = self._add_ground(if_random=False)
 
         # get object and robot asset
         obj_assets_list = [self._load_object_asset(obj) for obj in self.objects]
@@ -521,10 +531,7 @@ class IsaacgymHandler(BaseSimHandler):
                 self._env_rigid_body_global_indices[-1][self.objects[obj_i].name] = object_rigid_body_indices
 
             # # carefully add robot
-            if self.robots[0].enabled_self_collisions:
-                robot_handle = self.gym.create_actor(env, robot_asset, robot_pose, "robot", i, 0, 0)
-            else:
-                robot_handle = self.gym.create_actor(env, robot_asset, robot_pose, "robot", i, 2)
+            robot_handle = self.gym.create_actor(env, robot_asset, robot_pose, "robot", i, 2)
             assert self.robots[0].scale[0] == 1.0 and self.robots[0].scale[1] == 1.0 and self.robots[0].scale[2] == 1.0
             self._robot_handles.append(robot_handle)
             # set dof properties
@@ -608,7 +615,9 @@ class IsaacgymHandler(BaseSimHandler):
                 joint_vel=self._dof_states.view(self.num_envs, -1, 2)[:, joint_ids_reindex, 1],
                 joint_pos_target=None,  # TODO
                 joint_vel_target=None,  # TODO
-                joint_effort_target=self._effort if self._manual_pd_on else None,
+                joint_effort_target=self._effort[:, joint_ids_reindex]
+                if (self._manual_pd_on and self._effort is not None)
+                else None,
             )
             # FIXME a temporary solution for accessing net contact forces of robots, it will be moved to
             extra = {
@@ -619,6 +628,7 @@ class IsaacgymHandler(BaseSimHandler):
 
         camera_states = {}
 
+        self.refresh_render()
         self.gym.start_access_image_tensors(self.sim)
 
         for cam_id, cam in enumerate(self.cameras):
@@ -631,9 +641,9 @@ class IsaacgymHandler(BaseSimHandler):
         extras = self.get_extra()  # extra observations
         return TensorState(objects=object_states, robots=robot_states, cameras=camera_states, extras=extras)
 
-    @property
-    def episode_length_buf(self) -> list[int]:
-        return self._episode_length_buf
+    # @property
+    # def episode_length_buf(self) -> list[int]:
+    #     return self._episode_length_buf
 
     ############################################################
     ## Gymnasium main methods
@@ -719,16 +729,20 @@ class IsaacgymHandler(BaseSimHandler):
             self.gym.set_dof_position_target_tensor(self.sim, gymtorch.unwrap_tensor(action_input))
 
     def refresh_render(self) -> None:
+        # Step the physics
+        # self.gym.simulate(self.sim)
         self.gym.fetch_results(self.sim, True)
         self._render()
 
     def _simulate_one_physics_step(self):
         self.gym.simulate(self.sim)
-        self.gym.fetch_results(self.sim, True)
+        if self.device == "cpu":
+            self.gym.fetch_results(self.sim, True)
         self.gym.refresh_dof_state_tensor(self.sim)
 
     def _simulate(self) -> None:
         # Step the physics
+        # for _ in range(self.decimation):
         self._simulate_one_physics_step()
         self.gym.refresh_rigid_body_state_tensor(self.sim)
         self.gym.refresh_actor_root_state_tensor(self.sim)
@@ -892,6 +906,8 @@ class IsaacgymHandler(BaseSimHandler):
                     rotation_list[i][j], dtype=torch.float32, device=self.device
                 )
                 new_root_states[actor_idx, 7:13] = torch.zeros(6, dtype=torch.float32, device=self.device)
+                # ONLY WORKS FOR NO FIXED BASE LINK
+                # new_root_states[actor_idx, 7:13] = torch_rand_float(-0.5, 0.5, (1, 6), device=self.device.type)
             actor_indices.extend(range(env_offset, env_offset + len(self.objects) + 1))
 
         # Convert the actor indices to a tensor
@@ -1009,6 +1025,38 @@ class IsaacgymHandler(BaseSimHandler):
         props[0].mass += self._rand_mass_dist[env_id]
         return props
 
+    def _add_ground(self, if_random: bool = False):
+        if if_random:
+            tg = TerrainGenerator(self.scenario.random.terrain_cfg)
+            vertices, triangles = tg.generate_terrain(self.scenario.random.terrain_cfg, type="trimesh")
+            tm_params = gymapi.TriangleMeshParams()
+            tm_params.nb_vertices = vertices.shape[0]
+            tm_params.nb_triangles = triangles.shape[0]
+
+            tm_params.transform.p.x = -tg.margin
+            tm_params.transform.p.y = -tg.margin
+            tm_params.transform.p.z = 0.0
+            tm_params.static_friction = getattr(self.scenario.random.terrain_cfg, "static_friction", 1.0)
+            tm_params.dynamic_friction = getattr(self.scenario.random.terrain_cfg, "dynamic_friction", 1.0)
+            tm_params.restitution = getattr(self.scenario.random.terrain_cfg, "restitution", 0.0)
+            self.gym.add_triangle_mesh(
+                self.sim, vertices.flatten(order="C"), triangles.flatten(order="C"), tm_params
+            )  # add terrain to sim
+            height_measure = tg.height_measure  ## get the actual height of each grid
+            horizontal_scale = tg.horizontal_scale
+        else:
+            plane_params = gymapi.PlaneParams()
+            plane_params.normal = gymapi.Vec3(0, 0, 1)
+            # plane_params.static_friction = getattr(self.scenario.random.terrain_cfg, "static_friction", 1.0)
+            # plane_params.dynamic_friction = getattr(self.scenario.random.terrain_cfg, "dynamic_friction", 1.0)
+            # plane_params.restitution = getattr(self.scenario.random.terrain_cfg, "restitution", 0.0)
+            plane_params.static_friction = 1.0
+            plane_params.dynamic_friction = 1.0
+            plane_params.restitution = 0.0
+            self.gym.add_ground(self.sim, plane_params)
+            height_measure, horizontal_scale = None, None
+        return (height_measure, horizontal_scale)
+
     @property
     def num_envs(self) -> int:
         return self._num_envs
@@ -1025,6 +1073,11 @@ class IsaacgymHandler(BaseSimHandler):
     def default_dof_pos(self) -> torch.tensor:
         joint_reindex = self.get_joint_reindex(self.robot.name)
         return self._robot_default_dof_pos[:, joint_reindex]
+
+    @property
+    def torque_limits(self) -> torch.tensor:
+        joint_reindex = self.get_joint_reindex(self.robot.name)
+        return self._torque_limits[:, joint_reindex]
 
     @property
     def robot_num_dof(self) -> int:

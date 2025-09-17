@@ -24,3 +24,9 @@ def tensor_to_cpu(data: dict | list) -> dict | list:
         for i, v in enumerate(data):
             data[i] = v.cpu() if isinstance(v, torch.Tensor) else tensor_to_cpu(v)
     return data
+
+
+@torch.jit.script
+def torch_rand_float(lower: float, upper: float, shape: tuple[int, int], device: str) -> torch.Tensor:
+    """Generate a tensor of random floats in the range [lower, upper]."""
+    return (upper - lower) * torch.rand(*shape, device=device) + lower

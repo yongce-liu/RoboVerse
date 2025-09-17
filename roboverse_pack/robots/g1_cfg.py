@@ -12,7 +12,8 @@ class G1Cfg(RobotCfg):
     name: str = "g1"
     num_joints: int = 21
     usd_path: str = MISSING
-    xml_path: str = MISSING
+    xml_path: str = "roboverse_data/robots/g1/xml/g1_29dof_lock_waist_rev_1_0_modified.xml"
+    mjcf_path: str = xml_path
     urdf_path: str = "roboverse_data/robots/g1/urdf/g1_29dof_lock_waist_rev_1_0_modified.urdf"
     enabled_gravity: bool = True
     fix_base_link: bool = False
@@ -21,28 +22,29 @@ class G1Cfg(RobotCfg):
     collapse_fixed_joints: bool = True
 
     actuators: dict[str, BaseActuatorCfg] = {
-        "left_hip_pitch": BaseActuatorCfg(stiffness=200, damping=5),
-        "left_hip_roll": BaseActuatorCfg(stiffness=150, damping=5),
-        "left_hip_yaw": BaseActuatorCfg(stiffness=150, damping=5),
-        "left_knee": BaseActuatorCfg(stiffness=200, damping=5),
-        "left_ankle_pitch": BaseActuatorCfg(stiffness=20, damping=4),
-        "left_ankle_roll": BaseActuatorCfg(stiffness=20, damping=4),
-        "right_hip_pitch": BaseActuatorCfg(stiffness=200, damping=5),
-        "right_hip_roll": BaseActuatorCfg(stiffness=150, damping=5),
-        "right_hip_yaw": BaseActuatorCfg(stiffness=150, damping=5),
-        "right_knee": BaseActuatorCfg(stiffness=200, damping=5),
-        "right_ankle_pitch": BaseActuatorCfg(stiffness=20, damping=4),
-        "right_ankle_roll": BaseActuatorCfg(stiffness=20, damping=4),
-        "waist_yaw": BaseActuatorCfg(stiffness=200, damping=5),
-        "left_shoulder_pitch": BaseActuatorCfg(stiffness=40, damping=10),
-        "left_shoulder_roll": BaseActuatorCfg(stiffness=40, damping=10),
-        "left_shoulder_yaw": BaseActuatorCfg(stiffness=40, damping=10),
-        "left_elbow": BaseActuatorCfg(stiffness=40, damping=10),
-        "right_shoulder_pitch": BaseActuatorCfg(stiffness=40, damping=10),
-        "right_shoulder_roll": BaseActuatorCfg(stiffness=40, damping=10),
-        "right_shoulder_yaw": BaseActuatorCfg(stiffness=40, damping=10),
-        "right_elbow": BaseActuatorCfg(stiffness=40, damping=10),
+        "left_hip_pitch": BaseActuatorCfg(stiffness=200, damping=5, torque_limit=88),
+        "left_hip_roll": BaseActuatorCfg(stiffness=150, damping=5, torque_limit=139),
+        "left_hip_yaw": BaseActuatorCfg(stiffness=150, damping=5, torque_limit=88),
+        "left_knee": BaseActuatorCfg(stiffness=200, damping=5, torque_limit=139),
+        "left_ankle_pitch": BaseActuatorCfg(stiffness=20, damping=4, torque_limit=50),
+        "left_ankle_roll": BaseActuatorCfg(stiffness=20, damping=4, torque_limit=50),
+        "right_hip_pitch": BaseActuatorCfg(stiffness=200, damping=5, torque_limit=88),
+        "right_hip_roll": BaseActuatorCfg(stiffness=150, damping=5, torque_limit=139),
+        "right_hip_yaw": BaseActuatorCfg(stiffness=150, damping=5, torque_limit=88),
+        "right_knee": BaseActuatorCfg(stiffness=200, damping=5, torque_limit=139),
+        "right_ankle_pitch": BaseActuatorCfg(stiffness=20, damping=4, torque_limit=50),
+        "right_ankle_roll": BaseActuatorCfg(stiffness=20, damping=4, torque_limit=50),
+        "waist_yaw": BaseActuatorCfg(stiffness=200, damping=5, torque_limit=88),
+        "left_shoulder_pitch": BaseActuatorCfg(stiffness=40, damping=10, torque_limit=25),
+        "left_shoulder_roll": BaseActuatorCfg(stiffness=40, damping=10, torque_limit=25),
+        "left_shoulder_yaw": BaseActuatorCfg(stiffness=40, damping=10, torque_limit=25),
+        "left_elbow": BaseActuatorCfg(stiffness=40, damping=10, torque_limit=25),
+        "right_shoulder_pitch": BaseActuatorCfg(stiffness=40, damping=10, torque_limit=25),
+        "right_shoulder_roll": BaseActuatorCfg(stiffness=40, damping=10, torque_limit=25),
+        "right_shoulder_yaw": BaseActuatorCfg(stiffness=40, damping=10, torque_limit=25),
+        "right_elbow": BaseActuatorCfg(stiffness=40, damping=10, torque_limit=25),
     }
+
     joint_limits: dict[str, tuple[float, float]] = {
         "left_hip_pitch": (-2.5307, 2.8798),
         "left_hip_roll": (-0.5236, 2.9671),
@@ -153,3 +155,10 @@ class G1Cfg(RobotCfg):
     left_yaw_roll_joints = ["left_hip_yaw", "left_hip_roll"]
     right_yaw_roll_joints = ["right_hip_yaw", "right_hip_roll"]
     upper_body_joints = ["shoulder", "elbow", "torso"]
+
+    # From default joint damping in XML
+    dof_damping: float = 0.001
+    # From default joint friction in XML
+    dof_friction: float = 0.2
+    # From default joint armature in XML
+    dof_armature: float = 0.1

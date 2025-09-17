@@ -17,7 +17,7 @@ class G1Dof12Cfg(RobotCfg):
     mjcf_path = xml_path
     enabled_gravity: bool = True
     fix_base_link: bool = False
-    enabled_self_collisions: bool = True
+    enabled_self_collisions: bool = False
     isaacgym_flip_visual_attachments: bool = False
     collapse_fixed_joints: bool = True
 
@@ -26,14 +26,14 @@ class G1Dof12Cfg(RobotCfg):
         "left_hip_roll_joint": BaseActuatorCfg(stiffness=100, damping=2, torque_limit=139),
         "left_hip_yaw_joint": BaseActuatorCfg(stiffness=100, damping=2, torque_limit=88),
         "left_knee_joint": BaseActuatorCfg(stiffness=150, damping=4, torque_limit=139),
-        "left_ankle_pitch_joint": BaseActuatorCfg(stiffness=40, damping=2, torque_limit=35),
-        "left_ankle_roll_joint": BaseActuatorCfg(stiffness=40, damping=2, torque_limit=35),
+        "left_ankle_pitch_joint": BaseActuatorCfg(stiffness=40, damping=2, torque_limit=50),
+        "left_ankle_roll_joint": BaseActuatorCfg(stiffness=40, damping=2, torque_limit=50),
         "right_hip_pitch_joint": BaseActuatorCfg(stiffness=100, damping=2, torque_limit=88),
         "right_hip_roll_joint": BaseActuatorCfg(stiffness=100, damping=2, torque_limit=139),
         "right_hip_yaw_joint": BaseActuatorCfg(stiffness=100, damping=2, torque_limit=88),
         "right_knee_joint": BaseActuatorCfg(stiffness=150, damping=4, torque_limit=139),
-        "right_ankle_pitch_joint": BaseActuatorCfg(stiffness=40, damping=2, torque_limit=35),
-        "right_ankle_roll_joint": BaseActuatorCfg(stiffness=40, damping=2, torque_limit=35),
+        "right_ankle_pitch_joint": BaseActuatorCfg(stiffness=40, damping=2, torque_limit=50),
+        "right_ankle_roll_joint": BaseActuatorCfg(stiffness=40, damping=2, torque_limit=50),
     }
 
     joint_limits: dict[str, tuple[float, float]] = {
@@ -58,14 +58,14 @@ class G1Dof12Cfg(RobotCfg):
         "left_hip_roll_joint": 139,
         "left_hip_yaw_joint": 88,
         "left_knee_joint": 139,
-        "left_ankle_pitch_joint": 35,
-        "left_ankle_roll_joint": 35,
+        "left_ankle_pitch_joint": 50,
+        "left_ankle_roll_joint": 50,
         "right_hip_pitch_joint": 88,
         "right_hip_roll_joint": 139,
         "right_hip_yaw_joint": 88,
         "right_knee_joint": 139,
-        "right_ankle_pitch_joint": 35,
-        "right_ankle_roll_joint": 35,
+        "right_ankle_pitch_joint": 50,
+        "right_ankle_roll_joint": 50,
     }
 
     default_joint_positions: dict[str, float] = {
@@ -113,6 +113,7 @@ class G1Dof12Cfg(RobotCfg):
     left_yaw_roll_joints = ["left_hip_yaw_joint", "left_hip_roll_joint"]
     right_yaw_roll_joints = ["right_hip_yaw_joint", "right_hip_roll_joint"]
     upper_body_joints = []
+    waist_joints = []
 
     # From default joint armature in XML
-    dof_armature: float = 0.0
+    armature: float = 0.0

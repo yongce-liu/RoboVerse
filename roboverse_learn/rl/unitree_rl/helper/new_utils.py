@@ -1,0 +1,237 @@
+from __future__ import annotations
+
+import os
+import copy
+import argparse
+import datetime
+import importlib
+from loguru import logger as log
+
+import random
+import torch
+import numpy as np
+
+from metasim.utils.math import copysign
+from metasim.utils.setup_util import get_robot
+from metasim.utils.string_util import is_camel_case, is_snake_case, to_camel_case
+
+
+# region: Math Utils
+@torch.jit.script
+def get_euler_xyz(q):
+    qw, qx, qy, qz = 0, 1, 2, 3  # wxyz
+    # roll (x-axis rotation)
+    sinr_cosp = 2.0 * (q[:, qw] * q[:, qx] + q[:, qy] * q[:, qz])
+    cosr_cosp = q[:, qw] * q[:, qw] - q[:, qx] * q[:, qx] - q[:, qy] * q[:, qy] + q[:, qz] * q[:, qz]
+    roll = torch.atan2(sinr_cosp, cosr_cosp)
+
+    # pitch (y-axis rotation)
+    sinp = 2.0 * (q[:, qw] * q[:, qy] - q[:, qz] * q[:, qx])
+    pitch = torch.where(torch.abs(sinp) >= 1, copysign(torch.pi / 2.0, sinp), torch.asin(sinp))
+
+    # yaw (z-axis rotation)
+    siny_cosp = 2.0 * (q[:, qw] * q[:, qz] + q[:, qx] * q[:, qy])
+    cosy_cosp = q[:, qw] * q[:, qw] + q[:, qx] * q[:, qx] - q[:, qy] * q[:, qy] - q[:, qz] * q[:, qz]
+    yaw = torch.atan2(siny_cosp, cosy_cosp)
+
+    return torch.stack((roll, pitch, yaw), dim=-1)
+# endregion: Math Utils
+
+def parse_arguments(description="humanoid rl task arguments", custom_parameters=None):
+    """Parse command line arguments."""
+    if custom_parameters is None:
+        custom_parameters = []
+    parser = argparse.ArgumentParser(description=description)
+    for argument in custom_parameters:
+        if ("name" in argument) and ("type" in argument or "action" in argument):
+            help_str = ""
+            if "help" in argument:
+                help_str = argument["help"]
+
+            if "type" in argument:
+                if "default" in argument:
+                    parser.add_argument(
+                        argument["name"], type=argument["type"], default=argument["default"], help=help_str
+                    )
+                else:
+                    parser.add_argument(argument["name"], type=argument["type"], help=help_str)
+            elif "action" in argument:
+                parser.add_argument(argument["name"], action=argument["action"], help=help_str)
+
+        else:
+            log.error("ERROR: command line argument name, type/action must be defined, argument not added to parser")
+            log.error("supported keys: name, type, default, action, help")
+
+    return parser.parse_args()
+
+def get_args(test=False):
+    """Get the command line arguments."""
+    custom_parameters = [
+        {"name": "--task", "type": str, "default": "WalkingHumanoid", "help": "Task name for training/testing."},
+        {"name": "--robots", "type": str, "default": "g1_dof12", "help": "The used robots."},
+        {"name": "--num_envs", "type": int, "default": 128, "help": "number of parallel environments."},
+        {"name": "--iter", "type": int, "default": 15000, "help": "Max number of training iterations."},
+        {"name": "--sim", "type": str, "default": "isaacgym", "help": "simulator type, currently only isaacgym is supported"},
+        {"name": "--headless", "action": "store_true", "default": True, "help": "Force display off at all times"},
+        {"name": "--resume", "type": str, "default": None, "help": "Resume training from a checkpoint"},
+        {"name": "--checkpoint", "type": int, "default": -1, "help": "Saved model checkpoint number. If -1: will load the last checkpoint. Overrides config file if provided."},
+        {"name": "--reindex", "type": bool, "default": False, "help": "Whether to reindex actions/observations between the default order sequence and a sorted (ascending) order"},
+        {"name": "--seed", "type": int, "default": -1, "help": "The random seed for the run. If -1, will be randomly generated."},
+
+        # {"name": "--run_name", "type": str, "required": True if not test else False, "help": "Name of the run. Overrides config file if provided."},
+        # {"name": "--load_run", "type": str, "default": None, "help": "Path to the config file. If provided, will override command line arguments."},
+        # {"name": "--use_wandb", "action": "store_true", "default": True, "help": "Use wandb for logging"},
+        # {"name": "--wandb", "type": str, "default": "g1_walking", "help": "Wandb project name"},
+        # {"name": "--jit_load", "type": bool, "default": False, "help": "Whether to load the JIT model"},
+        # {"name": "--log", "type": str, "default": None, "help": "log directory. If None, will be set automatically."},
+    ]
+    args = parse_arguments(custom_parameters=custom_parameters)
+    return args
+
+def set_seed(seed = -1):
+    if seed == -1:
+        seed = np.random.randint(0, 10000)
+    log.info(f"Setting seed: {seed}")
+
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+def get_log_dir(task_name:str, robot_name:str, now=None) -> str:
+    """Get the log directory."""
+    if now is None:
+        now = datetime.datetime.now().strftime("%Y_%m%d_%H%M%S")
+    log_dir = f"./outputs/unitree_rl/{task_name}/{now}/{robot_name}/"
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir, exist_ok=True)
+    log.info("Log directory: {}", log_dir)
+    return log_dir
+
+def get_class(name: str, suffix: str, library="roboverse_learn.rl.unitree_rl"):
+    """Get the class wrappers.
+    Example:
+        get_class("ReachOrigin", "Cfg") -> ReachOriginCfg
+        get_class("reach_origin", "Cfg") -> ReachOriginCfg
+    """
+    if is_camel_case(name):
+        task_name_camel = name
+    elif is_snake_case(name):
+        task_name_camel = to_camel_case(name)
+
+    wrapper_module = importlib.import_module(library)
+    wrapper_cls = getattr(wrapper_module, f"{task_name_camel}{suffix}")
+    return wrapper_cls
+
+def get_load_path(load_root: str, checkpoint: int = None) -> str:
+    """Get the path to load the model from."""
+    if checkpoint == -1:
+        models = [file for file in os.listdir(load_root) if "model" in file and file.endswith(".pt")]
+        models.sort(key=lambda m: f"{m!s:0>15}")
+        model = models[-1]
+        load_path = f"{load_root}/{model}"
+    else:
+        load_path = f"{load_root}/model_{checkpoint}.pt"
+    log.info(f"Loading checkpoint {checkpoint} from {load_root}")
+    return load_path
+
+def get_load_root_dir(args: argparse.Namespace, scenario) -> str:
+    """Get the root directory to load the model from."""
+
+    robot_name = args.robot
+    task_name = scenario.task.task_name
+    task_name = f"{robot_name}_{task_name}"
+    if args.load_run is None:
+        raise ValueError("Please provide a run name to load the model from using --load_run")
+    load_root = f"./outputs/unitree_rl/{task_name}/{args.load_run}"
+    return load_root
+
+
+def make_robots(robots_str: str) -> list[any]:
+    robot_names = robots_str.split()
+    robots = []
+    for _name in robot_names:
+        robots.append(get_robot(_name))
+    return robots
+
+
+def find_unique_candidate(candidates: list[any], data_base: list[any]) -> int:
+    found_candidates = []
+    found_indices = []
+
+    for candidate in candidates:
+        if candidate in data_base:
+            found_candidates.append(candidate)
+            found_indices.append(data_base.index(candidate))
+
+    if len(found_candidates) == 0:
+        raise ValueError(f"None of the candidates {candidates} found in {data_base}")
+    elif len(found_candidates) > 1:
+        raise ValueError(f"Multiple candidates found: {found_candidates}. Only one naming convention should be used.")
+
+    return found_indices[0]
+
+
+def get_indices_from_substring(candidates_list: list[list[any]], data_base: list[any]) -> torch.Tensor:
+    found_indices = []
+    for candidate in candidates_list:
+        for i, name in enumerate(data_base):
+            if candidate in name:
+                found_indices.append(i)
+    return torch.tensor(found_indices, dtype=torch.int32, requires_grad=False)
+
+
+def reindex_func(data: torch.Tensor, new_idx: torch.Tensor, start_idx: int | torch.Tensor) -> torch.Tensor:
+    assert data.dim() == 2, "data must be a 2D tensor"
+    assert new_idx.dim() == 1, "new_idx must be a 1D tensor"
+    reindex_length = len(new_idx)
+    for start in start_idx:
+        data[:, start : start + reindex_length] = data[:, start : start + reindex_length][:, new_idx]
+    return data
+
+
+def export_policy_as_jit(actor, path, filename=None):
+    """Export the policy as a JIT model."""
+    model = copy.deepcopy(actor).to("cpu")
+    traced_script_module = torch.jit.script(model)
+    traced_script_module.save(path)
+
+
+def get_export_jit_path(args: argparse.Namespace, scenario) -> str:
+    """Get the path to export the JIT model."""
+    load_root = get_load_root_dir(args, scenario)
+    exported_root_dir = f"{load_root}/exported"
+    os.makedirs(exported_root_dir, exist_ok=True)
+    return f"{load_root}/exported/model_exported_jit.pt"
+
+
+
+class PolicyExporterLSTM(torch.nn.Module):
+    def __init__(self, actor_critic):
+        super().__init__()
+        self.actor = copy.deepcopy(actor_critic.actor)
+        self.is_recurrent = actor_critic.is_recurrent
+        self.memory = copy.deepcopy(actor_critic.memory_a.rnn)
+        self.memory.cpu()
+        self.register_buffer("hidden_state", torch.zeros(self.memory.num_layers, 1, self.memory.hidden_size))
+        self.register_buffer("cell_state", torch.zeros(self.memory.num_layers, 1, self.memory.hidden_size))
+
+    def forward(self, x):
+        out, (h, c) = self.memory(x.unsqueeze(0), (self.hidden_state, self.cell_state))
+        self.hidden_state[:] = h
+        self.cell_state[:] = c
+        return self.actor(out.squeeze(0))
+
+    @torch.jit.export
+    def reset_memory(self):
+        self.hidden_state[:] = 0.0
+        self.cell_state[:] = 0.0
+
+    def export(self, path):
+        if not path.endswith(".pt"):
+            path = os.path.join(path, "policy.pt")
+        self.to("cpu")
+        traced_script_module = torch.jit.script(self)
+        traced_script_module.save(path)

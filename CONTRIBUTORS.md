@@ -40,6 +40,7 @@ Guidelines for modifications:
 * Yuran Wang
 * Yutong Liang
 * Yuyang Li
+* Yongce Liu
 * Zhigen Zhao
 
 ## Acknowledgements

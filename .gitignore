@@ -98,3 +98,5 @@ id_rsa*
 
 # for sapien
 *.convex.stl
+
+.history
