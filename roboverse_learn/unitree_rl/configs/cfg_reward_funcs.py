@@ -54,17 +54,7 @@ def reward_collision(env: EnvTypes) -> torch.Tensor:
     """
     Penalize collisions.
     """
-    return torch.sum(
-        1.0
-        * (
-            torch.norm(
-                env.contact_forces[:, env.penalised_contact_indices, :],
-                dim=-1,
-            )
-            > 0.1
-        ),
-        dim=1,
-    )
+    return torch.sum(1.0 * (torch.norm(env.contact_forces[:, env.penalised_contact_indices, :], dim=-1) > 0.1),dim=1)
 
 def reward_termination(env: EnvTypes) -> torch.Tensor:
     """
@@ -100,21 +90,13 @@ def reward_torque_limits(env: EnvTypes) -> torch.Tensor:
     """
     Penalize high torques.
     """
-    return torch.sum(
-        (
-            torch.abs(env.torques)
-            - env.torque_limits * env.cfg.rewards.extras.soft_torque_limit
-        ).clip(min=0.0),
-        dim=1,
-    )
+    return torch.sum((torch.abs(env.torques) - env.torque_limits * env.cfg.rewards.extras.soft_torque_limit).clip(min=0.0), dim=1)
 
 def reward_tracking_lin_vel(env: EnvTypes) -> torch.Tensor:
     """
     Track linear velocity commands (xy axes).
     """
-    lin_vel_diff = (
-        env.commands[:, :2] - env.base_lin_vel[:, :2]
-    )
+    lin_vel_diff = env.commands[:, :2] - env.base_lin_vel[:, :2]
     lin_vel_error = torch.sum(torch.square(lin_vel_diff), dim=1)
     return torch.exp(-lin_vel_error / env.cfg.rewards.extras.tracking_sigma)
 
@@ -122,9 +104,7 @@ def reward_tracking_ang_vel(env: EnvTypes) -> torch.Tensor:
     """
     Track angular velocity commands (yaw).
     """
-    ang_vel_diff = (
-        env.commands[:, 2] - env.base_ang_vel[:, 2]
-    )
+    ang_vel_diff = env.commands[:, 2] - env.base_ang_vel[:, 2]
     ang_vel_error = torch.square(ang_vel_diff)
     return torch.exp(-ang_vel_error / env.cfg.rewards.extras.tracking_sigma)
 
@@ -178,8 +158,8 @@ def reward_feet_contact_forces(env: EnvTypes) -> torch.Tensor:
 
 def reward_contact(env: EnvTypes) -> torch.Tensor:
     contact = env.contact_forces[:, env.feet_indices, 2] > 1.0
-    res = torch.sum(contact == (env.leg_phase < 0.55), dim=1, dtype=torch.float32)
-    return res
+    res = torch.logical_not(torch.logical_xor(contact, env.leg_phase))
+    return res.sum(dim=1, dtype=torch.float32)
 
 def reward_feet_swing_height(env: EnvTypes) -> torch.Tensor:
     states: TensorState = env.get_states()
@@ -187,7 +167,7 @@ def reward_feet_swing_height(env: EnvTypes) -> torch.Tensor:
     feet_state = states.robots[env.name].body_state[:, env.feet_indices, :]
     feet_pos = feet_state[:, :, :3]
     pos_error = torch.square(feet_pos[:, :, 2] - env.cfg.rewards.extras.target_feet_height) * ~contact
-    return torch.sum(pos_error, dim=(1))
+    return torch.sum(pos_error, dim=1)
 
 def reward_alive(env: EnvTypes) -> torch.Tensor:
     # Reward for staying alive
@@ -208,7 +188,7 @@ def reward_hip_pos(env: EnvTypes) -> torch.Tensor:
     dof_pos = states.robots[env.name].joint_pos
     indices = torch.concat([env.left_yaw_roll_joint_indices, env.right_yaw_roll_joint_indices])
     dof_pos_hip = dof_pos[:, indices]
-    return torch.sum(torch.square(dof_pos_hip), dim=1)  # * gate
+    return torch.sum(torch.square(dof_pos_hip), dim=1)
 
 # ==========================h1 walking========================
 def reward_joint_pos(env: EnvTypes) -> torch.Tensor:

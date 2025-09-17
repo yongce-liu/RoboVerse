@@ -449,9 +449,9 @@ class LeggedRobotEnv(AgentEnv):
         return params.tolist()
 
     @property
-    def num_obs(self):
-        return self.cfg.num_obs_single * self.cfg.obs_len_history
+    def num_obs(self) -> int:
+        return int(self.cfg.num_obs_single * self.cfg.obs_len_history)
 
     @property
-    def num_priv_obs(self):
-        return self.cfg.num_priv_obs_single * self.cfg.priv_obs_len_history
+    def num_priv_obs(self) -> int:
+        return int(self.cfg.num_priv_obs_single * self.cfg.priv_obs_len_history)

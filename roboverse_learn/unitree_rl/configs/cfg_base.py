@@ -73,7 +73,7 @@ class BaseEnvCfg:
             lin_vel_z = 0.0
             ang_vel_xy = 0.0
             orientation = 0.0
-            torques = -0.00001
+            torques = 0.0
             dof_vel = 0.0
             dof_acc = 0.0
             base_height = 0.0
@@ -90,7 +90,7 @@ class BaseEnvCfg:
             soft_torque_limit = 1.
             base_height_target = 1.
             target_feet_height = 0.08
-            feet_cycle_time = 0.7
+            feet_cycle_time = 0.8
             all_feet_contact_time = 0.05
             max_contact_force = 100. # forces above this value are penalized
 
@@ -136,7 +136,7 @@ class BaseEnvCfg:
             lin_vel = 0.1
             ang_vel = 0.2
             gravity = 0.05
-            height_measurements = 0.1
+            # height_measurements = 0.1
 
         add_noise = True
         noise_level = 1.0 # scales other values

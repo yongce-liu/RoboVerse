@@ -40,11 +40,13 @@ class WalkingDof12EnvCfg(BaseEnvCfg):
         contact_no_vel = -0.2
         feet_swing_height = -20.0
         contact = 0.18
-        # torques = -0.00001
+        torques = -0.00001
     @configclass
     class RewardExtras(BaseEnvCfg.Rewards.Extras):
         soft_dof_pos_limit = 0.9
         base_height_target = 0.78
+        feet_cycle_time = 0.7
+
     rewards = BaseEnvCfg.Rewards(
         scales = RewardsScales(),
         extras = RewardExtras()
@@ -96,15 +98,6 @@ class WalkingDof12Env(HumanoidEnv):
         return super()._init_buffers()
 
     def _get_noise_scale_vec(self):
-        """Sets a vector used to scale the noise added to the observations.
-            [NOTE]: Must be adapted when changing the observations structure
-
-        Args:
-            cfg (Dict): Environment config file
-
-        Returns:
-            [torch.Tensor]: Vector of scales used to multiply a uniform distribution in [-1, 1]
-        """
         noise_vec = torch.zeros(size=(self.cfg.num_obs_single,), dtype=torch.float, device=self.device)
         self.add_noise = self.cfg.noise.add_noise
         noise_scales = self.cfg.noise.scales

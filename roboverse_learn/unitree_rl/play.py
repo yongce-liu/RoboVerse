@@ -96,4 +96,6 @@ if __name__ == "__main__":
     # args.headless = True
     # args.task = "walking_dof12"
     # args.sim = "isaacgym"
+    # args.headless = True
+    # args.resume = "2025_0916_111424"
     train(args)
