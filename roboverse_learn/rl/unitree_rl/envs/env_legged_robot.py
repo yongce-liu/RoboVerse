@@ -211,7 +211,7 @@ class LeggedRobotEnv(AgentEnv):
         elif self.control_type=="T":
             torques = actions_scaled
         else:
-            raise NameError(f"Unknown controller type: {control_type}")
+            raise NameError(f"Unknown controller type: {self.control_type}")
         return torch.clip(torques, -self.torque_limits, self.torque_limits)
 
     def reset(self, env_ids: list[int] = None):
