@@ -9,14 +9,12 @@ from typing import Callable, Literal
 import torch
 from metasim.scenario.robot import RobotCfg
 from metasim.scenario.simulator_params import SimParamCfg
-
-from metasim.sim import BaseSimHandler
-from metasim.utils import configclass
-from metasim.utils.humanoid_robot_util import contact_forces_tensor, get_euler_xyz_tensor, robot_rotation_tensor
-from roboverse_learn.rl.unitree_rl.helper.utils import torch_rand_float
 from metasim.queries.base import BaseQueryType
+from metasim.utils.tensor_util import torch_rand_float
+from metasim.utils import configclass
+
 from roboverse_learn.rl.unitree_rl.configs.optional_queries import NetContactForce
-from roboverse_learn.rl.unitree_rl.configs.base_terrain import TerrainConfig
+from roboverse_learn.rl.unitree_rl.configs.cfg_terrain import GroundCfg
 
 
 # Training Config
@@ -176,7 +174,7 @@ class LeggedRobotDomainRandCfg:
 
     push = PushRandomCfg(enabled=True)
 
-    terrain_cfg: TerrainConfig = TerrainConfig.from_yaml(pathlib.Path(__file__).parent / "terrain.yaml")
+    terrain_cfg: GroundCfg = GroundCfg.from_yaml(pathlib.Path(__file__).parent / "terrain.yaml")
     """Terrain randomization configuration"""
 
     def __post_init__(self):
