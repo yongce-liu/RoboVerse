@@ -2,22 +2,22 @@ from __future__ import annotations
 from typing import Union
 import torch
 
-from roboverse_learn.rl.unitree_rl.envs import EnvTypes
+from roboverse_learn.rl.unitree_rl.envs import AgentEnv
 from roboverse_learn.rl.unitree_rl.configs.cfg_base import RslRlTrainCfg
 from .master import BaseRunnerWrapper
 
 
 class RslRlEnvWrapper:
-    def __init__(self, env):
+    def __init__(self, env: AgentEnv):
         self.env = env
 
     def step(self, actions: torch.Tensor) -> tuple[torch.Tensor, Union[torch.Tensor, None], torch.Tensor, torch.Tensor, dict]:
         _ = self.env.step(actions)
         return self.obs_buf, self.privileged_obs_buf, self.rew_buf, self.reset_buf, self.extras
 
-    def reset(self, env_ids: Union[list, torch.Tensor] = None):
+    def reset(self):
         _ = self.env.reset(list(range(self.num_envs)))
-        _ = self.step(torch.zeros(self.num_envs, self.num_actions, device=self.device, requires_grad=False))
+        _ = self.step(torch.zeros(size=(self.num_envs, self.num_actions), device=self.device, requires_grad=False))
         return self.obs_buf, self.privileged_obs_buf
 
     def get_observations(self) -> torch.Tensor:
@@ -80,7 +80,7 @@ class RslRlEnvWrapper:
 
 
 class RslRlWrapper(BaseRunnerWrapper):
-    def __init__(self, env: EnvTypes, train_cfg: dict|RslRlTrainCfg, log_dir:str):
+    def __init__(self, env: AgentEnv, train_cfg: dict|RslRlTrainCfg, log_dir:str):
         super().__init__(env, train_cfg, log_dir)
         from rsl_rl.runners.on_policy_runner import OnPolicyRunner
 

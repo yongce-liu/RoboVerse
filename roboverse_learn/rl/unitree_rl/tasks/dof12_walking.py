@@ -106,7 +106,7 @@ class Dof12WalkingTask(Humanoid):
         self.num_obs = self.cfg.num_observations
         self.num_actions = self.cfg.num_actions
         self.num_privileged_obs = self.cfg.num_privileged_obs
-        self.dt = self.decimation * self.cfg.sim_params.dt
+        self.dt = self.cfg.sim_params.dt
         self.max_episode_length = math.ceil(self.cfg.max_episode_length_s / self.dt)
         from metasim.utils.dict import class_to_dict
         self.train_cfg = class_to_dict(self.cfg.ppo_cfg)

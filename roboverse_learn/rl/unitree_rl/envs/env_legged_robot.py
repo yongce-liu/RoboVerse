@@ -50,9 +50,9 @@ class LeggedRobotEnv(AgentEnv):
         robot: Union[G1Dof12Cfg, Go2Cfg] = self.robot
         sorted_body_names: list[str] = self.sorted_body_names
 
-        self.feet_indices = get_indices_from_substring(robot.feet_links, sorted_body_names).to(self.device)
-        self.termination_contact_indices = get_indices_from_substring(robot.terminate_contacts_links, sorted_body_names).to(self.device)
-        self.penalised_contact_indices = get_indices_from_substring(robot.penalized_contacts_links, sorted_body_names).to(self.device)
+        self.feet_indices = get_indices_from_substring(robot.feet_links, sorted_body_names)
+        self.termination_contact_indices = get_indices_from_substring(robot.terminate_contacts_links, sorted_body_names)
+        self.penalised_contact_indices = get_indices_from_substring(robot.penalized_contacts_links, sorted_body_names)
 
     def _init_joint_cfg(self):
         """
@@ -116,6 +116,8 @@ class LeggedRobotEnv(AgentEnv):
             for name in self.reward_scales.keys()
         }
 
+
+
     def _init_buffers(self):
         # self.joint_pos = torch.zeros(size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device, requires_grad=False)
         self.joint_vel = torch.zeros(size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device, requires_grad=False)
@@ -132,17 +134,8 @@ class LeggedRobotEnv(AgentEnv):
         self.contact_forces = torch.zeros(size=(self.num_envs, len(self.sorted_body_names), 3), dtype=torch.float, device=self.device)
 
         # self.common_step_counter = 0
-        self.episode_steps = torch.zeros(size=(self.num_envs,), dtype=torch.int, device=self.device)
-        self.actions = torch.zeros(size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device, requires_grad=False)
-        self.torques = torch.zeros(size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device, requires_grad=False)
         self.obs_buf_history = deque([torch.zeros(size=(self.num_envs, self.cfg.num_obs_single), dtype=torch.float, device=self.device, requires_grad=False) for _ in range(self.cfg.obs_len_history)], maxlen=self.cfg.obs_len_history)
-        self.obs_buf = None if self.cfg.num_obs_single == 0 else torch.cat(list(self.obs_buf_history), dim=1).to(self.device)
         self.priv_obs_buf_history = deque([torch.zeros(size=(self.num_envs, self.cfg.num_priv_obs_single), dtype=torch.float, device=self.device, requires_grad=False)], maxlen=self.cfg.priv_obs_len_history)
-        self.priv_obs_buf = None if self.cfg.num_priv_obs_single == 0 else torch.cat(list(self.priv_obs_buf_history), dim=1).to(self.device)
-        self.rew_buf = torch.zeros(size=(self.num_envs,), dtype=torch.float, device=self.device)
-        self.reset_buf = torch.ones(size=(self.num_envs,), device=self.device, dtype=torch.bool)
-        self.time_out_buf = torch.zeros(size=(self.num_envs,), device=self.device, dtype=torch.bool)
-        self.extras = {}
 
         self.commands = torch.zeros(size=(self.num_envs, self.cfg.commands.num_commands), dtype=torch.float, device=self.device, requires_grad=False)
         self.commands_scale = torch.tensor(
@@ -166,8 +159,8 @@ class LeggedRobotEnv(AgentEnv):
 
         # history buffer for reward computation
         self.history_buffer = {}
-        self.history_buffer['actions'] = deque([self.actions.clone()], maxlen=1)
-        self.history_buffer['joint_vel'] = deque([self.joint_vel.clone()], maxlen=1)
+        self.history_buffer['actions'] = deque([self.actions.clone() * 0.0], maxlen=2)
+        self.history_buffer['joint_vel'] = deque([self.joint_vel.clone() * 0.0], maxlen=2)
 
         # self.last_contacts = torch.zeros(
             # self.num_envs, len(self.feet_indices), dtype=torch.bool, device=self.device, requires_grad=False
@@ -273,7 +266,7 @@ class LeggedRobotEnv(AgentEnv):
     def step(self, actions: torch.Tensor):
         clip_actions_limit = self.cfg.normalization.clip_actions
         # update self.action
-        self.actions[:] = actions.clip(-clip_actions_limit, clip_actions_limit).to(self.device)
+        self.actions[:] = actions.clip(-clip_actions_limit, clip_actions_limit)
         env_states = self.get_states()
         for _ in range(self.decimation):
             self.torques[:] = self._compute_torques(env_states, self.actions)
@@ -303,20 +296,18 @@ class LeggedRobotEnv(AgentEnv):
         self.reset_buf[:] = torch.logical_or(self._terminated(env_states), self.time_out_buf)
         self.rew_buf[:] = self._reward(env_states)
 
+        clip_obs_limit = self.cfg.normalization.clip_observations
+        _tmp_obs_buf_single, _tmp_priv_obs_buf_single = self._observation(env_states)
+        self.obs_buf_history.append(_tmp_obs_buf_single.clip(-clip_obs_limit, clip_obs_limit))
+        if _tmp_priv_obs_buf_single is not None:
+            self.priv_obs_buf_history.append(_tmp_priv_obs_buf_single.clip(-clip_obs_limit, clip_obs_limit))
+
         # reset envs
         reset_env_idx = self.reset_buf.nonzero(as_tuple=False).flatten().tolist()
         env_states = self.reset(reset_env_idx)
         # simulate the push operation
         if self.cfg.domain_rand.push_robots:
             self._push_robots(env_states)
-
-        _tmp_obs_buf_single, _tmp_priv_obs_buf_single = self._observation(env_states)
-        clip_obs_limit = self.cfg.normalization.clip_observations
-        self.obs_buf_history.append(_tmp_obs_buf_single)
-        self.obs_buf[:] = torch.cat(list(self.obs_buf_history), dim=1).clip(-clip_obs_limit, clip_obs_limit).to(self.device)
-        if _tmp_priv_obs_buf_single is not None:
-            self.priv_obs_buf_history.append(_tmp_priv_obs_buf_single)
-            self.priv_obs_buf[:] = torch.cat(list(self.priv_obs_buf_history), dim=1).clip(-clip_obs_limit, clip_obs_limit).to(self.device)
 
         # copy to the history buffer
         for _key, _val in self.history_buffer.items():
@@ -331,6 +322,8 @@ class LeggedRobotEnv(AgentEnv):
             .nonzero(as_tuple=False)
             .flatten()
         )
+        if len(env_ids) == 0:
+            return
         self._resample_commands(env_ids)
 
         if self.cfg.commands.heading_command:

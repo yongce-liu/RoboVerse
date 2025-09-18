@@ -95,8 +95,4 @@ class RslRlWrapper(BaseTaskEnv, VecEnv):
         """
         Reset state in the env and buffer in the wrapper
         """
-        if env_ids is None:
-            env_ids = list(range(self.handler.num_envs))
-
-        # reset in the env
-        self.handler.reset(env_ids)
+        raise NotImplementedError

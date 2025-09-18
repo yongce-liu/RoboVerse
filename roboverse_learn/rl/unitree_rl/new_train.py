@@ -23,7 +23,7 @@ def train(args):
     robots: list = [make_robots(args.robots)[0]]  # get the first robot
 
     # should move the parameters in a common used config files
-    env_spacing = 4
+    env_spacing = 2.0
     # decimation = 4
     device = "cuda" if torch.cuda.is_available() else "cpu"
     sim_params = SimParamCfg(dt=0.005,
@@ -63,9 +63,9 @@ if __name__ == "__main__":
     args = get_args()
     # args.task = "walking_dof12"
     # args.sim = "isaacgym"
-    # args.num_envs = 1
+    # args.num_envs = 128
     # args.robot = "g1_dof12"
     # args.headless = True
     # args.seed = 0
-    set_seed(args.seed)
+    # set_seed(args.seed)
     train(args)

@@ -34,15 +34,13 @@ def reward_dof_vel(env: EnvTypes) -> torch.Tensor:
     """
     Penalize high DOF velocities.
     """
-    states: TensorState = env.get_states()
-    return torch.sum(torch.square(states.robots[env.name].joint_vel), dim=1)
+    return torch.sum(torch.square(env.joint_vel), dim=1)
 
 def reward_dof_acc(env: EnvTypes) -> torch.Tensor:
     """
     Penalize high DOF accelerations.
     """
-    states: TensorState = env.get_states()
-    return torch.sum(torch.square((env.history_buffer["joint_vel"][-1] - states.robots[env.name].joint_vel) / env.dt), dim=1)
+    return torch.sum(torch.square((env.history_buffer["joint_vel"][-1] - env.joint_vel) / env.dt), dim=1)
 
 def reward_action_rate(env: EnvTypes) -> torch.Tensor:
     """
@@ -158,8 +156,8 @@ def reward_feet_contact_forces(env: EnvTypes) -> torch.Tensor:
 
 def reward_contact(env: EnvTypes) -> torch.Tensor:
     contact = env.contact_forces[:, env.feet_indices, 2] > 1.0
-    res = torch.logical_not(torch.logical_xor(contact, env.leg_phase))
-    return res.sum(dim=1, dtype=torch.float32)
+    res = torch.sum(contact == env.leg_phase, dim=1, dtype=torch.float)
+    return res
 
 def reward_feet_swing_height(env: EnvTypes) -> torch.Tensor:
     states: TensorState = env.get_states()

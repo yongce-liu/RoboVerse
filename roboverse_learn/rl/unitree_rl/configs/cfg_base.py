@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import Callable
+from dataclasses import MISSING
 
 from metasim.utils import configclass
 from metasim.scenario.simulator_params import SimParamCfg
@@ -155,9 +156,9 @@ class RslRlTrainCfg:
         critic_hidden_dims = [512, 256, 128]
         activation = 'elu' # can be elu, relu, selu, crelu, lrelu, tanh, sigmoid
         # only for 'ActorCriticRecurrent':
-        rnn_type = 'lstm'
-        rnn_hidden_size = 512
-        rnn_num_layers = 1
+        rnn_type: str = MISSING
+        rnn_hidden_size: int = MISSING
+        rnn_num_layers: int = MISSING
 
     @configclass
     class Algorithm:

@@ -605,7 +605,7 @@ class LeggedRobot(RslRlWrapper):
             if scale == 0:
                 self.reward_scales.pop(key)
             else:
-                self.reward_scales[key] *= self.dt
+                self.reward_scales[key] *= (self.dt * self.decimation)
         # prepare list of functions
         self.reward_functions = []
         self.reward_names = []

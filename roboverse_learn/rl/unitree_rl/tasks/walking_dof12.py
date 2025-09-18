@@ -46,7 +46,7 @@ class WalkingDof12EnvCfg(BaseEnvCfg):
     class RewardExtras(BaseEnvCfg.Rewards.Extras):
         soft_dof_pos_limit = 0.9
         base_height_target = 0.78
-        feet_cycle_time = 0.7
+        feet_cycle_time = 0.8
 
     rewards = BaseEnvCfg.Rewards(
         scales = RewardsScales(),
