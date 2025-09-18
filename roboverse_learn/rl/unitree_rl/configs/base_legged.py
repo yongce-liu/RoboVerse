@@ -174,7 +174,7 @@ class LeggedRobotDomainRandCfg:
 
     push = PushRandomCfg(enabled=True)
 
-    terrain_cfg: GroundCfg = GroundCfg.from_yaml(pathlib.Path(__file__).parent / "terrain.yaml")
+    terrain_cfg: GroundCfg = GroundCfg.from_yaml(pathlib.Path(__file__).parent / "tmp_terrain.yaml")
     """Terrain randomization configuration"""
 
     def __post_init__(self):
