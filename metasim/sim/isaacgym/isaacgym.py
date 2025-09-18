@@ -284,7 +284,7 @@ class IsaacgymHandler(BaseSimHandler):
         assert len(self.robots) == 1, "Only support one robot for now"
         robot_asset_file = self.robots[0].mjcf_path if self.robots[0].isaacgym_read_mjcf else self.robots[0].urdf_path
         asset_options = gymapi.AssetOptions()
-        asset_options.armature = getattr(self.robots[0], "armature", 0.0)
+        asset_options.armature = getattr(self.robots[0], "armature", 0.01)
         asset_options.fix_base_link = self.robots[0].fix_base_link
         asset_options.disable_gravity = not self.robots[0].enabled_gravity
         asset_options.flip_visual_attachments = self.robots[0].isaacgym_flip_visual_attachments
@@ -531,7 +531,10 @@ class IsaacgymHandler(BaseSimHandler):
                 self._env_rigid_body_global_indices[-1][self.objects[obj_i].name] = object_rigid_body_indices
 
             # # carefully add robot
-            robot_handle = self.gym.create_actor(env, robot_asset, robot_pose, "robot", i, 0)
+            if self.robots[0].enabled_self_collisions:
+                robot_handle = self.gym.create_actor(env, robot_asset, robot_pose, "robot", i, 0, 0)
+            else:
+                robot_handle = self.gym.create_actor(env, robot_asset, robot_pose, "robot", i, 2)
             assert self.robots[0].scale[0] == 1.0 and self.robots[0].scale[1] == 1.0 and self.robots[0].scale[2] == 1.0
             self._robot_handles.append(robot_handle)
             # set dof properties
