@@ -98,7 +98,7 @@ class GroundCfg:
         elements = {t: [] for t in ["slope", "stair", "obstacle", "stone", "gap", "pit"]}
         for elem in raw_data["elements"]:
             t = elem["type"]
-            class_wrapper = globals().get(f"{t.capitalize()}Config")
+            class_wrapper = globals().get(f"{t.capitalize()}Cfg")
             if class_wrapper is None:
                 raise ValueError(f"Unknown terrain type: {t}")
             elements[t].append(class_wrapper(**elem))
