@@ -116,22 +116,20 @@ class LeggedRobotEnv(AgentEnv):
             for name in self.reward_scales.keys()
         }
 
-
-
     def _init_buffers(self):
         # self.joint_pos = torch.zeros(size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device, requires_grad=False)
-        self.joint_vel = torch.zeros(size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device, requires_grad=False)
-        self.base_pos = torch.zeros(size=(self.num_envs, 3), dtype=torch.float, device=self.device, requires_grad=False)
-        self.base_quat = torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device).unsqueeze(0).repeat(self.num_envs, 1)
-        self.base_euler_xyz = get_euler_xyz(self.base_quat)
-        self.base_lin_vel = torch.zeros(size=(self.num_envs, 3), dtype=torch.float, device=self.device, requires_grad=False)
-        self.base_ang_vel = torch.zeros(size=(self.num_envs, 3), dtype=torch.float, device=self.device, requires_grad=False)
+        # self.joint_vel = torch.zeros(size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device, requires_grad=False)
+        # self.base_pos = torch.zeros(size=(self.num_envs, 3), dtype=torch.float, device=self.device, requires_grad=False)
+        # self.base_quat = torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device).unsqueeze(0).repeat(self.num_envs, 1)
+        # self.base_euler_xyz = get_euler_xyz(self.base_quat)
+        # self.base_lin_vel = torch.zeros(size=(self.num_envs, 3), dtype=torch.float, device=self.device, requires_grad=False)
+        # self.base_ang_vel = torch.zeros(size=(self.num_envs, 3), dtype=torch.float, device=self.device, requires_grad=False)
 
         self.up_axis_idx = 2
         self.gravity_vec = torch.tensor(self.get_axis_params(-1.0, self.up_axis_idx), dtype=torch.float, device=self.device).repeat((self.num_envs, 1))
         self.forward_vec = torch.tensor([1.0, 0.0, 0.0], dtype=torch.float, device=self.device).repeat((self.num_envs, 1))
-        self.projected_gravity = quat_rotate_inverse(self.base_quat, self.gravity_vec)
-        self.contact_forces = torch.zeros(size=(self.num_envs, len(self.sorted_body_names), 3), dtype=torch.float, device=self.device)
+        # self.projected_gravity = quat_rotate_inverse(self.base_quat, self.gravity_vec)
+        # self.contact_forces = torch.zeros(size=(self.num_envs, len(self.sorted_body_names), 3), dtype=torch.float, device=self.device)
 
         # self.common_step_counter = 0
         self.obs_buf_history = deque([torch.zeros(size=(self.num_envs, self.cfg.num_obs_single), dtype=torch.float, device=self.device, requires_grad=False) for _ in range(self.cfg.obs_len_history)], maxlen=self.cfg.obs_len_history)
@@ -160,7 +158,7 @@ class LeggedRobotEnv(AgentEnv):
         # history buffer for reward computation
         self.history_buffer = {}
         self.history_buffer['actions'] = deque([self.actions.clone() * 0.0], maxlen=2)
-        self.history_buffer['joint_vel'] = deque([self.joint_vel.clone() * 0.0], maxlen=2)
+        self.history_buffer['joint_vel'] = deque([self.actions.clone() * 0.0], maxlen=2)
 
         # self.last_contacts = torch.zeros(
             # self.num_envs, len(self.feet_indices), dtype=torch.bool, device=self.device, requires_grad=False
@@ -237,11 +235,8 @@ class LeggedRobotEnv(AgentEnv):
         self.episode_steps[env_ids] = 0
         self.actions[env_ids] = 0.0
         # self.feet_air_time[env_ids] = 0.0
-        # self.base_quat[env_ids] = (
-        #     torch.tensor([1.0, 0.0, 0.0, 0.0], dtype=torch.float, device=self.device)
-        #     .unsqueeze(0)
-        #     .repeat(len(env_ids), 1)
-        # )
+        # robot_state = env_states.robots[self.name]
+        # self.base_quat[:] = robot_state.root_state[:, 3:7]
         # self.base_euler_xyz = get_euler_xyz(self.base_quat)
         # self.projected_gravity[env_ids] = quat_rotate_inverse(self.base_quat[env_ids], self.gravity_vec[env_ids])
         self.reset_buf[env_ids] = 1
@@ -277,30 +272,24 @@ class LeggedRobotEnv(AgentEnv):
     def _post_physics_step(self, env_states: TensorState):
         self.episode_steps += 1
 
-        robot_state = env_states.robots[self.name]
+        # robot_state = env_states.robots[self.name]
         # update tensors from env_states
         # self.joint_pos[:] = robot_state.joint_pos
-        self.joint_vel[:] = robot_state.joint_vel
-        self.base_pos[:] = robot_state.root_state[:, 0:3]
-        self.base_quat[:] = robot_state.root_state[:, 3:7]
-        self.base_euler_xyz = get_euler_xyz(self.base_quat)
-        self.base_lin_vel[:] = quat_rotate_inverse(self.base_quat, robot_state.root_state[:, 7:10])
-        self.base_ang_vel[:] = quat_rotate_inverse(self.base_quat, robot_state.root_state[:, 10:13])
-        self.projected_gravity[:] = quat_rotate_inverse(self.base_quat, self.gravity_vec)
-        self.contact_forces[:] = robot_state.extra['contact_forces']
+        # self.joint_vel[:] = robot_state.joint_vel
+        # self.base_pos[:] = robot_state.root_state[:, 0:3]
+        # self.base_quat[:] = robot_state.root_state[:, 3:7]
+        # self.base_euler_xyz = get_euler_xyz(self.base_quat)
+        # self.base_lin_vel[:] = quat_rotate_inverse(self.base_quat, robot_state.root_state[:, 7:10])
+        # self.base_ang_vel[:] = quat_rotate_inverse(self.base_quat, robot_state.root_state[:, 10:13])
+        # self.projected_gravity[:] = quat_rotate_inverse(self.base_quat, self.gravity_vec)
+        # self.contact_forces[:] = robot_state.extra['contact_forces']
 
-        self._post_physics_step_callback()
+        self._post_physics_step_callback(env_states)
 
         # gym-style return values
         self.time_out_buf[:] = self._time_out(env_states)
         self.reset_buf[:] = torch.logical_or(self._terminated(env_states), self.time_out_buf)
         self.rew_buf[:] = self._reward(env_states)
-
-        clip_obs_limit = self.cfg.normalization.clip_observations
-        _tmp_obs_buf_single, _tmp_priv_obs_buf_single = self._observation(env_states)
-        self.obs_buf_history.append(_tmp_obs_buf_single.clip(-clip_obs_limit, clip_obs_limit))
-        if _tmp_priv_obs_buf_single is not None:
-            self.priv_obs_buf_history.append(_tmp_priv_obs_buf_single.clip(-clip_obs_limit, clip_obs_limit))
 
         # reset envs
         reset_env_idx = self.reset_buf.nonzero(as_tuple=False).flatten().tolist()
@@ -309,11 +298,20 @@ class LeggedRobotEnv(AgentEnv):
         if self.cfg.domain_rand.push_robots:
             self._push_robots(env_states)
 
+        clip_obs_limit = self.cfg.normalization.clip_observations
+        _tmp_obs_buf_single, _tmp_priv_obs_buf_single = self._observation(env_states)
+        self.obs_buf_history.append(_tmp_obs_buf_single.clip(-clip_obs_limit, clip_obs_limit))
+        if _tmp_priv_obs_buf_single is not None:
+            self.priv_obs_buf_history.append(_tmp_priv_obs_buf_single.clip(-clip_obs_limit, clip_obs_limit))
+
         # copy to the history buffer
         for _key, _val in self.history_buffer.items():
-                _val.append(self.__getattribute__(_key).clone())
+                if hasattr(self, _key):
+                    _val.append(self.__getattribute__(_key).clone())
+                elif hasattr(env_states.robots[self.name], _key):
+                    _val.append(getattr(env_states.robots[self.name], _key).clone())
 
-    def _post_physics_step_callback(self):
+    def _post_physics_step_callback(self, env_states: TensorState):
         """Callback called before computing terminations, rewards, and observations
         Default behaviour: Compute ang vel command based on target and heading, compute measured terrain heights and randomly push robots
         """
@@ -327,7 +325,9 @@ class LeggedRobotEnv(AgentEnv):
         self._resample_commands(env_ids)
 
         if self.cfg.commands.heading_command:
-            forward = quat_apply(self.base_quat, self.forward_vec)  # quat:[w, x, y, z], forward:[x, y, z]
+            robot_state = env_states.robots[self.name]
+            base_quat = robot_state.root_state[:, 3:7]
+            forward = quat_apply(base_quat, self.forward_vec)  # quat:[w, x, y, z], forward:[x, y, z]
             heading = torch.atan2(forward[:, 1], forward[:, 0])
             self.commands[:, 2] = torch.clip(0.5 * wrap_to_pi(self.commands[:, 3] - heading), -1.0, 1.0)
 
@@ -356,7 +356,7 @@ class LeggedRobotEnv(AgentEnv):
         rew_buf = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
         for i in range(len(self.reward_functions)):
             name = self.reward_names[i]
-            unscaled_rew = self.reward_functions[i](self)
+            unscaled_rew = self.reward_functions[i](self, env_states)
             rew = unscaled_rew * self.reward_scales[name]
             rew_buf += rew
             self.episode_sums[name] += rew
@@ -367,9 +367,10 @@ class LeggedRobotEnv(AgentEnv):
         return rew_buf
 
     def _terminated(self, env_states):
-        # contact_forces = env_states.robots[self.name].extra["contact_forces"]
-        reset_buf = torch.any(torch.norm(self.contact_forces[:, self.termination_contact_indices, :], dim=-1) > 1.0, dim=1)
-        reset_buf |= torch.logical_or(torch.abs(self.base_euler_xyz[:, 1]) > 1.0, torch.abs(self.base_euler_xyz[:, 0]) > 0.8)
+        contact_forces = env_states.robots[self.name].extra["contact_forces"]
+        reset_buf = torch.any(torch.norm(contact_forces[:, self.termination_contact_indices, :], dim=-1) > 1.0, dim=1)
+        rpy = get_euler_xyz(env_states.robots[self.name].root_state[:, 3:7])
+        reset_buf |= torch.logical_or(torch.abs(rpy[:, 1]) > 1.0, torch.abs(rpy[:, 0]) > 0.8)
         return reset_buf
 
     def _time_out(self, env_states: TensorState | None) -> torch.BoolTensor:

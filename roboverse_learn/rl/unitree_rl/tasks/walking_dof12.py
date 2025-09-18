@@ -1,5 +1,7 @@
 import torch
 
+from metasim.types import TensorState
+from metasim.utils.math import quat_apply, quat_rotate_inverse, wrap_to_pi
 from metasim.utils import configclass
 from roboverse_learn.rl.unitree_rl.configs.cfg_base import BaseEnvCfg, RslRlTrainCfg
 from roboverse_learn.rl.unitree_rl.envs.env_humanoid import HumanoidEnv
@@ -117,8 +119,14 @@ class WalkingDof12Env(HumanoidEnv):
 
         return noise_vec
 
-    def _observation(self, env_states):
-        phase = self._get_leg_phase()
+    def _observation(self, env_states: TensorState):
+        robot_state = env_states.robots[self.name]
+        base_quat = robot_state.root_state[:, 3:7]
+        base_lin_vel = quat_rotate_inverse(base_quat, robot_state.root_state[:, 7:10])
+        base_ang_vel = quat_rotate_inverse(base_quat, robot_state.root_state[:, 10:13])
+        projected_gravity = quat_rotate_inverse(base_quat, self.gravity_vec)
+
+        phase = self.get_leg_phase()
         sin_phase = torch.sin(2 * torch.pi * phase).unsqueeze(1)
         cos_phase = torch.cos(2 * torch.pi * phase).unsqueeze(1)
 
@@ -126,8 +134,8 @@ class WalkingDof12Env(HumanoidEnv):
         dq = env_states.robots[self.name].joint_vel * self.cfg.normalization.obs_scales.dof_vel
 
         obs_buf = torch.cat((
-            self.base_ang_vel * self.cfg.normalization.obs_scales.ang_vel,  # 3
-            self.projected_gravity,  # 3
+            base_ang_vel * self.cfg.normalization.obs_scales.ang_vel,  # 3
+            projected_gravity,  # 3
             self.commands[:, :3] * self.commands_scale,  # 3
             q,  # num_actions
             dq,  # num_actions
@@ -141,9 +149,9 @@ class WalkingDof12Env(HumanoidEnv):
             obs_buf += (2 * torch.rand_like(obs_buf) - 1) * self.noise_scale_vec
 
         priv_obs_buf = torch.cat((
-            self.base_lin_vel * self.cfg.normalization.obs_scales.lin_vel,
-            self.base_ang_vel * self.cfg.normalization.obs_scales.ang_vel,
-            self.projected_gravity,
+            base_lin_vel * self.cfg.normalization.obs_scales.lin_vel,
+            base_ang_vel * self.cfg.normalization.obs_scales.ang_vel,
+            projected_gravity,
             self.commands[:, :3] * self.commands_scale,
             q,  # num_actions
             dq,  # num_actions
