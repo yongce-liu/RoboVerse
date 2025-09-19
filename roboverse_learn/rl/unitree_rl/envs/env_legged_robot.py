@@ -169,25 +169,23 @@ class LeggedRobotEnv(AgentEnv):
 
     def _init_initial_state(self):
         # objects = self.cfg.initial_states.objects
-        robots = self.cfg.initial_states.robots
-        pos = torch.tensor(robots[self.name]["pos"], dtype=torch.float, device=self.device).unsqueeze(0).repeat(self.num_envs, 1)
-        rot = torch.tensor(robots[self.name]["rot"], dtype=torch.float, device=self.device).unsqueeze(0).repeat(self.num_envs, 1)
+        robot_state = self.cfg.initial_states.robots[self.name]
+        pos = torch.tensor(robot_state["pos"], dtype=torch.float, device=self.device).unsqueeze(0).repeat(self.num_envs, 1)
+        _rot = robot_state["rot"] if "rot" in robot_state else [1.0, 0.0, 0.0, 0.0]
+        rot = torch.tensor(_rot, dtype=torch.float, device=self.device).unsqueeze(0).repeat(self.num_envs, 1)
         root_state = torch.zeros(size=(self.num_envs, 13), dtype=torch.float, device=self.device)
         root_state[:, 0:3] = pos
         root_state[:, 3:7] = rot
-        joint_pos = torch.tensor(
-            [robots[self.name]["joint_pos"][name] for name in self.sorted_joint_names],
-            device=self.device,
-            dtype=torch.float,
-        ).unsqueeze(0).repeat(self.num_envs, 1)
+        _joint_pos = robot_state["joint_pos"] if "joint_pos" in robot_state else self.robot.default_joint_positions
+        joint_pos = torch.tensor([_joint_pos[name] for name in self.sorted_joint_names], device=self.device, dtype=torch.float).unsqueeze(0).repeat(self.num_envs, 1)
         self.initial_state = RobotState(root_state=root_state,
-                                     joint_pos=joint_pos,
-                                     joint_vel=joint_pos.clone()*0.0,
-                                     body_names=self.sorted_body_names,
-                                     body_state=torch.zeros(size=(self.num_envs, len(self.sorted_body_names), 13), dtype=torch.float, device=self.device),
-                                     joint_pos_target=torch.zeros(size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device),
-                                     joint_vel_target=torch.zeros(size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device),
-                                     joint_effort_target=torch.zeros(size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device))
+                                        joint_pos=joint_pos,
+                                        joint_vel=joint_pos.clone()*0.0,
+                                        body_names=self.sorted_body_names,
+                                        body_state=torch.zeros(size=(self.num_envs, len(self.sorted_body_names), 13), dtype=torch.float, device=self.device),
+                                        joint_pos_target=torch.zeros(size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device),
+                                        joint_vel_target=torch.zeros(size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device),
+                                        joint_effort_target=torch.zeros(size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device))
         _ = self._register_initial_state(self.initial_state)
 
     def _compute_torques(self, env_states: TensorState, actions: torch.Tensor) -> torch.Tensor:

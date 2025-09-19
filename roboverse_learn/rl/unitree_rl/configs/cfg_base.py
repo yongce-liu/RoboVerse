@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Callable
+from typing import Callable, Literal
 from dataclasses import MISSING
 
 from metasim.utils import configclass
@@ -143,6 +143,15 @@ class BaseEnvCfg:
         noise_level = 1.0 # scales other values
         scales = Scales()
     noise = Noise()
+
+    class InitialStates:
+        objects = {}
+        robots = {
+            "g1_dof12": {"pos": [0.0, 0.0, 0.8]},
+            "g1_dof23": {"pos": [0.0, 0.0, 0.8]},
+                }
+    initial_states = InitialStates()
+
 
 @configclass
 class RslRlTrainCfg:

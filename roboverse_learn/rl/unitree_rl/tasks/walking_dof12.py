@@ -55,30 +55,6 @@ class WalkingDof12EnvCfg(BaseEnvCfg):
         extras = RewardExtras()
     )
 
-    class InitialStates:
-        objects = {}
-        robots = {"g1_dof12":
-                    {"pos": [0.0, 0.0, 0.8],
-                     "rot": [1.0, 0.0, 0.0, 0.0],
-                     "joint_pos": {
-                            # Hips & legs
-                            "left_hip_yaw_joint": 0.0,
-                            "left_hip_roll_joint": 0.0,
-                            "left_hip_pitch_joint": -0.1,
-                            "left_knee_joint": 0.3,
-                            "left_ankle_pitch_joint": -0.2,
-                            "left_ankle_roll_joint": 0.0,
-                            "right_hip_yaw_joint": 0.0,
-                            "right_hip_roll_joint": 0.0,
-                            "right_hip_pitch_joint": -0.1,
-                            "right_knee_joint": 0.3,
-                            "right_ankle_pitch_joint": -0.2,
-                            "right_ankle_roll_joint": 0.0,
-                        },
-                    },
-                }
-    initial_states = InitialStates()
-
 @configclass
 class WalkingDof12RslRlTrainCfg(RslRlTrainCfg):
     """Environment configuration for 12-DOF walking task."""
@@ -92,7 +68,7 @@ class WalkingDof12RslRlTrainCfg(RslRlTrainCfg):
         rnn_num_layers = 1,
     )
     algorithm = RslRlTrainCfg.Algorithm(entropy_coef = 0.01)
-    runner = RslRlTrainCfg.Runner(policy_class_name = "ActorCriticRecurrent",)
+    policy_class_name = "ActorCriticRecurrent"
 
 
 class WalkingDof12Env(HumanoidEnv):
