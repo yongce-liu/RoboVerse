@@ -148,14 +148,12 @@ def get_load_root_dir(args: argparse.Namespace, scenario) -> str:
     load_root = f"./outputs/unitree_rl/{task_name}/{args.load_run}"
     return load_root
 
-
 def make_robots(robots_str: str) -> list[any]:
     robot_names = robots_str.split()
     robots = []
     for _name in robot_names:
         robots.append(get_robot(_name))
     return robots
-
 
 def find_unique_candidate(candidates: list[any], data_base: list[any]) -> int:
     found_candidates = []
@@ -173,7 +171,6 @@ def find_unique_candidate(candidates: list[any], data_base: list[any]) -> int:
 
     return found_indices[0]
 
-
 def get_indices_from_substring(candidates_list: list[list[any]], data_base: list[any]) -> torch.Tensor:
     found_indices = []
     for candidate in candidates_list:
@@ -182,7 +179,6 @@ def get_indices_from_substring(candidates_list: list[list[any]], data_base: list
                 found_indices.append(i)
     return torch.tensor(found_indices, dtype=torch.int32, requires_grad=False)
 
-
 def reindex_func(data: torch.Tensor, new_idx: torch.Tensor, start_idx: int | torch.Tensor) -> torch.Tensor:
     assert data.dim() == 2, "data must be a 2D tensor"
     assert new_idx.dim() == 1, "new_idx must be a 1D tensor"
@@ -190,48 +186,3 @@ def reindex_func(data: torch.Tensor, new_idx: torch.Tensor, start_idx: int | tor
     for start in start_idx:
         data[:, start : start + reindex_length] = data[:, start : start + reindex_length][:, new_idx]
     return data
-
-
-def export_policy_as_jit(actor, path, filename=None):
-    """Export the policy as a JIT model."""
-    model = copy.deepcopy(actor).to("cpu")
-    traced_script_module = torch.jit.script(model)
-    traced_script_module.save(path)
-
-
-def get_export_jit_path(args: argparse.Namespace, scenario) -> str:
-    """Get the path to export the JIT model."""
-    load_root = get_load_root_dir(args, scenario)
-    exported_root_dir = f"{load_root}/exported"
-    os.makedirs(exported_root_dir, exist_ok=True)
-    return f"{load_root}/exported/model_exported_jit.pt"
-
-
-
-class PolicyExporterLSTM(torch.nn.Module):
-    def __init__(self, actor_critic):
-        super().__init__()
-        self.actor = copy.deepcopy(actor_critic.actor)
-        self.is_recurrent = actor_critic.is_recurrent
-        self.memory = copy.deepcopy(actor_critic.memory_a.rnn)
-        self.memory.cpu()
-        self.register_buffer("hidden_state", torch.zeros(self.memory.num_layers, 1, self.memory.hidden_size))
-        self.register_buffer("cell_state", torch.zeros(self.memory.num_layers, 1, self.memory.hidden_size))
-
-    def forward(self, x):
-        out, (h, c) = self.memory(x.unsqueeze(0), (self.hidden_state, self.cell_state))
-        self.hidden_state[:] = h
-        self.cell_state[:] = c
-        return self.actor(out.squeeze(0))
-
-    @torch.jit.export
-    def reset_memory(self):
-        self.hidden_state[:] = 0.0
-        self.cell_state[:] = 0.0
-
-    def export(self, path):
-        if not path.endswith(".pt"):
-            path = os.path.join(path, "policy.pt")
-        self.to("cpu")
-        traced_script_module = torch.jit.script(self)
-        traced_script_module.save(path)

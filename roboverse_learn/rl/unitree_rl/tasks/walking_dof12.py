@@ -3,8 +3,55 @@ import torch
 from metasim.types import TensorState
 from metasim.utils.math import quat_apply, quat_rotate_inverse, wrap_to_pi
 from metasim.utils import configclass
-from roboverse_learn.rl.unitree_rl.configs.cfg_base import BaseEnvCfg, RslRlTrainCfg
+from roboverse_learn.rl.unitree_rl.configs.cfg_base import BaseEnvCfg
 from roboverse_learn.rl.unitree_rl.envs.env_humanoid import HumanoidEnv
+from roboverse_learn.rl.unitree_rl.third_party.isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, RslRlPpoAlgorithmCfg
+
+'''
+@configclass
+class WalkingDof12RslRlTrainCfg(RslRlTrainCfg):
+    """Environment configuration for 12-DOF walking task."""
+    policy = RslRlTrainCfg.Policy(
+        init_noise_std = 0.8,
+        actor_hidden_dims = [32],
+        critic_hidden_dims = [32],
+        activation = 'elu',
+        rnn_type = 'lstm',
+        rnn_hidden_size = 64,
+        rnn_num_layers = 1,
+    )
+    algorithm = RslRlTrainCfg.Algorithm(entropy_coef = 0.01)
+    policy_class_name = "ActorCriticRecurrent"
+'''
+
+@configclass
+class WalkingDof12RslRlTrainCfg(RslRlOnPolicyRunnerCfg):
+    num_steps_per_env = 24
+    max_iterations = 50000
+    save_interval = 100
+    experiment_name = ""  # same as task name
+    empirical_normalization = False
+    policy = RslRlPpoActorCriticCfg(
+        init_noise_std=1.0,
+        actor_hidden_dims=[512, 256, 128],
+        critic_hidden_dims=[512, 256, 128],
+        activation="elu",
+    )
+    algorithm = RslRlPpoAlgorithmCfg(
+        value_loss_coef=1.0,
+        use_clipped_value_loss=True,
+        clip_param=0.2,
+        entropy_coef=0.01,
+        num_learning_epochs=5,
+        num_mini_batches=4,
+        learning_rate=1.0e-3,
+        schedule="adaptive",
+        gamma=0.99,
+        lam=0.95,
+        desired_kl=0.01,
+        max_grad_norm=1.0,
+    )
+
 
 @configclass
 class WalkingDof12EnvCfg(BaseEnvCfg):
@@ -54,22 +101,6 @@ class WalkingDof12EnvCfg(BaseEnvCfg):
         scales = RewardsScales(),
         extras = RewardExtras()
     )
-
-@configclass
-class WalkingDof12RslRlTrainCfg(RslRlTrainCfg):
-    """Environment configuration for 12-DOF walking task."""
-    policy = RslRlTrainCfg.Policy(
-        init_noise_std = 0.8,
-        actor_hidden_dims = [32],
-        critic_hidden_dims = [32],
-        activation = 'elu',
-        rnn_type = 'lstm',
-        rnn_hidden_size = 64,
-        rnn_num_layers = 1,
-    )
-    algorithm = RslRlTrainCfg.Algorithm(entropy_coef = 0.01)
-    policy_class_name = "ActorCriticRecurrent"
-
 
 class WalkingDof12Env(HumanoidEnv):
     def _init_buffers(self):

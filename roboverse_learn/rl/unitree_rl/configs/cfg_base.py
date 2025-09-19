@@ -152,7 +152,7 @@ class BaseEnvCfg:
                 }
     initial_states = InitialStates()
 
-
+'''
 @configclass
 class RslRlTrainCfg:
     """
@@ -207,3 +207,4 @@ class RslRlTrainCfg:
     policy = Policy()
     algorithm = Algorithm()
     runner = Runner()
+'''

@@ -1,12 +1,13 @@
 from __future__ import annotations
 from typing import Union
 import torch
+from tensordict import TensorDict
 
 from roboverse_learn.rl.unitree_rl.envs import AgentEnv
-from roboverse_learn.rl.unitree_rl.configs.cfg_base import RslRlTrainCfg
 from .master import BaseRunnerWrapper
 
 
+'''
 class RslRlEnvWrapper:
     def __init__(self, env: AgentEnv):
         self.env = env
@@ -77,12 +78,66 @@ class RslRlEnvWrapper:
     @property
     def device(self):
         return self.env.device
+'''
+
+class RslRlEnvWrapper:
+    def __init__(self, env: AgentEnv, train_cfg: dict | object=None):
+        self.env = env
+        self.train_cfg = train_cfg
+
+    def get_observations(self) -> TensorDict:
+        """Return the current observations.
+
+        Returns:
+            observations (TensorDict): Observations from the environment.
+        """
+        raise
+
+    def step(self, actions: torch.Tensor) -> tuple[torch.Tensor, Union[torch.Tensor, None], torch.Tensor, torch.Tensor, dict]:
+        _ = self.env.step(actions)
+        return self.obs_buf, self.env.rew_buf, self.env.reset_buf, self.env.extras
+
+    def get_observations(self) -> TensorDict:
+        return self.obs_buf
+
+    @property
+    def num_envs(self):
+        return self.env.num_envs
+
+    @property
+    def num_actions(self):
+        return self.env.num_actions
+
+    @property
+    def max_episode_length(self):
+        return self.env.max_episode_steps
+
+    @property
+    def episode_length_buf(self):
+        return self.env.episode_steps
+
+    @episode_length_buf.setter
+    def episode_length_buf(self, value):
+        self.env.episode_steps = value
+
+    @property
+    def device(self):
+        return self.env.device
+
+    @property
+    def cfg(self):
+        return self.train_cfg
+
+    @property
+    def obs_buf(self) -> TensorDict:
+        return TensorDict(policy=self.env.obs_buf,
+                          critic=self.env.priv_obs_buf)
 
 
 class RslRlWrapper(BaseRunnerWrapper):
-    def __init__(self, env: AgentEnv, train_cfg: dict|RslRlTrainCfg, log_dir:str):
+    def __init__(self, env: AgentEnv, train_cfg: dict, log_dir:str):
         super().__init__(env, train_cfg, log_dir)
-        from rsl_rl.runners.on_policy_runner import OnPolicyRunner
+        from rsl_rl.runners import OnPolicyRunner, DistillationRunner
 
         self.env_wrapper = RslRlEnvWrapper(self.env)
         self.runner = OnPolicyRunner(
