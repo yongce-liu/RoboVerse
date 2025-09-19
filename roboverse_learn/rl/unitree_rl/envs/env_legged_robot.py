@@ -50,9 +50,9 @@ class LeggedRobotEnv(AgentEnv):
         robot: Union[G1Dof12Cfg, Go2Cfg] = self.robot
         sorted_body_names: list[str] = self.sorted_body_names
 
-        self.feet_indices = get_indices_from_substring(robot.feet_links, sorted_body_names)
-        self.termination_contact_indices = get_indices_from_substring(robot.terminate_contacts_links, sorted_body_names)
-        self.penalised_contact_indices = get_indices_from_substring(robot.penalized_contacts_links, sorted_body_names)
+        self.feet_indices = get_indices_from_substring(robot.feet_links, sorted_body_names).to(self.device)
+        self.termination_contact_indices = get_indices_from_substring(robot.terminate_contacts_links, sorted_body_names).to(self.device)
+        self.penalised_contact_indices = get_indices_from_substring(robot.penalized_contacts_links, sorted_body_names).to(self.device)
 
     def _init_joint_cfg(self):
         """
@@ -83,7 +83,7 @@ class LeggedRobotEnv(AgentEnv):
 
         _mid = (self.dof_pos_limits[:, 0] + self.dof_pos_limits[:, 1]) / 2.0
         _diff = self.dof_pos_limits[:, 1] - self.dof_pos_limits[:, 0]
-        soft_dof_pos_limits = torch.zeros_like(self.dof_pos_limits)
+        soft_dof_pos_limits = torch.zeros_like(self.dof_pos_limits, device=self.device)
         soft_dof_pos_limits[:, 0] = _mid - 0.5 * _diff * self.cfg.rewards.extras.soft_dof_pos_limit
         soft_dof_pos_limits[:, 1] = _mid + 0.5 * _diff * self.cfg.rewards.extras.soft_dof_pos_limit
         self.dof_pos_limits = soft_dof_pos_limits
