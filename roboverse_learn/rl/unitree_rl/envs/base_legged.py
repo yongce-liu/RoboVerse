@@ -410,24 +410,10 @@ class LeggedRobot(RslRlWrapper):
         self.feet_indices = get_body_reindexed_indices_from_substring(
             self.handler, robot.name, feet_names, device=self.device
         )
-        if SimType(self.scenario.simulator) is SimType.ISAACSIM:
-            names = self.handler.contact_sensor.body_names
-            termination_contact_indices = []
-            for i, body_name in enumerate(names):
-                for term_name in termination_contact_names:
-                    if term_name in body_name:
-                        termination_contact_indices.append(i)
-            self.termination_contact_indices = torch.tensor(termination_contact_indices, device=self.device)
-        elif SimType(self.scenario.simulator) is SimType.ISAACGYM:
-            self.termination_contact_indices = get_body_reindexed_indices_from_substring(
-                self.handler, robot.name, termination_contact_names, device=self.device
-            )
-        elif SimType(self.scenario.simulator) is SimType.MUJOCO:
-            self.termination_contact_indices = get_body_reindexed_indices_from_substring(
-                self.handler, robot.name, termination_contact_names, device=self.device
-            )
-        else:
-            raise NotImplementedError(f"Simulator {self.scenario.simulator} not supported yet.")
+
+        self.termination_contact_indices = get_body_reindexed_indices_from_substring(
+            self.handler, robot.name, termination_contact_names, device=self.device
+        )
         self.penalised_contact_indices = get_body_reindexed_indices_from_substring(
             self.handler, robot.name, penalised_contact_names, device=self.device
         )
