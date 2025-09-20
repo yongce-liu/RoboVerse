@@ -56,7 +56,7 @@ def prepare(args):
 
     sensors = SensorsCfg()
     master_simulator = MasterSimulator(scenario=scenario, sensors=sensors, device=device)
-    master_runner = MasterRunner(simulator=master_simulator, task_name=args.task, lib_name='rsl_rl')
+    master_runner = MasterRunner(simulator=master_simulator, log_path=args.resume ,task_name=args.task, lib_name='rsl_rl')
 
     return master_runner
 
@@ -113,7 +113,7 @@ if __name__ == "__main__":
     # args.robot = "g1_dof12"
     # args.headless = True
     # args.seed = 0
-    # args.resume = "2025_0920_063751"
+    # args.resume = "2025_0920_075050"
     # args.eval = True
     set_seed(args.seed)
     if args.eval:

@@ -132,8 +132,6 @@ class LeggedRobotEnv(AgentEnv):
         # self.contact_forces = torch.zeros(size=(self.num_envs, len(self.sorted_body_names), 3), dtype=torch.float, device=self.device)
 
         # self.common_step_counter = 0
-        self.obs_buf_queue = deque([torch.zeros(size=(self.num_envs, self.cfg.num_obs_single), dtype=torch.float, device=self.device, requires_grad=False) for _ in range(self.cfg.obs_len_history + 1)], maxlen=self.cfg.obs_len_history + 1)
-        self.priv_obs_buf_queue = deque([torch.zeros(size=(self.num_envs, self.cfg.num_priv_obs_single), dtype=torch.float, device=self.device, requires_grad=False) for _ in range(self.cfg.priv_obs_len_history + 1)], maxlen=self.cfg.priv_obs_len_history + 1)
 
         self.commands = torch.zeros(size=(self.num_envs, self.cfg.commands.num_commands), dtype=torch.float, device=self.device, requires_grad=False)
         self.commands_scale = torch.tensor(
@@ -154,6 +152,11 @@ class LeggedRobotEnv(AgentEnv):
 
         # self.env_frictions = torch.zeros(self.num_envs, 1, dtype=torch.float, device=self.device)
         # self.body_mass = torch.zeros(self.num_envs, 1, dtype=torch.float, device=self.device, requires_grad=False)
+
+        _obs, _priv_obs = self._observation(self.get_states())
+        self.obs_buf_queue = deque([_obs.clone() for _ in range(self.cfg.obs_len_history + 1)], maxlen=self.cfg.obs_len_history + 1)
+        if _priv_obs is not None:
+            self.priv_obs_buf_queue = deque([_priv_obs.clone() for _ in range(self.cfg.priv_obs_len_history + 1)], maxlen=self.cfg.priv_obs_len_history + 1)
 
         # history buffer for reward computation
         self.history_buffer = {}
@@ -436,11 +439,3 @@ class LeggedRobotEnv(AgentEnv):
         params = torch.where(zs == 1.0, value, zs)
         params[0] = x_value
         return params.tolist()
-
-    @property
-    def num_obs(self) -> int:
-        return int(self.cfg.num_obs_single * self.obs_buf_queue.maxlen)
-
-    @property
-    def num_priv_obs(self) -> int:
-        return int(self.cfg.num_priv_obs_single * self.priv_obs_buf_queue.maxlen)

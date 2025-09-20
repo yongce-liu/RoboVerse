@@ -13,9 +13,7 @@ class WalkingHumanoidEnvCfg(BaseEnvCfg):
     """
     Environment configuration for humanoid walking task.
     """
-    num_obs_single = 0
     obs_len_history = 5
-    num_priv_obs_single = 0
     priv_obs_len_history = 5
     class noise(BaseEnvCfg.noise):
         add_noise = True

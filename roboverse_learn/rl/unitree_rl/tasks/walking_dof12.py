@@ -42,9 +42,7 @@ class WalkingDof12RslRlTrainCfg(RslRlOnPolicyRunnerCfg):
 
 @configclass
 class WalkingDof12EnvCfg(BaseEnvCfg):
-    num_obs_single = 6 + 3 + 3 * 12 + 2
     obs_len_history = 0
-    num_priv_obs_single = 9 + 3 + 3 * 12 + 2
     priv_obs_len_history = 0
 
     domain_rand = BaseEnvCfg.DomainRand(
@@ -95,7 +93,7 @@ class WalkingDof12Env(HumanoidEnv):
         return super()._init_buffers()
 
     def _get_noise_scale_vec(self):
-        noise_vec = torch.zeros(size=(self.cfg.num_obs_single,), dtype=torch.float, device=self.device)
+        noise_vec = torch.zeros(size=(47,), dtype=torch.float, device=self.device)
         self.add_noise = self.cfg.noise.add_noise
         noise_scales = self.cfg.noise.scales
         noise_level = self.cfg.noise.noise_level

@@ -7,7 +7,15 @@ from metasim.sim.base import BaseSimHandler, BaseQueryType
 from metasim.utils import configclass
 import numpy as np
 
+try:
+    import isaacgym  # noqa: F401
+except ImportError:
+    pass
 
+try:
+    import mujoco  # noqa: F401
+except ImportError:
+    pass
 class ContactForces(BaseQueryType):
     """Optional query to fetch per-body net contact forces for each robot.
 
@@ -22,13 +30,12 @@ class ContactForces(BaseQueryType):
         self.simulator = handler.scenario.simulator
         self.num_envs = handler.scenario.num_envs
         self.robots = handler.robots
-        self.body_ids_reindex = handler.get_body_reindex(self.robots[0].name)
+        self.body_ids_reindex = handler._get_body_ids_reindex(self.robots[0].name) if hasattr(self.handler, '_get_body_ids_reindex') else handler.get_body_reindex(self.robots[0].name)
         self.initialize()
 
     def initialize(self):
         if self.simulator == "isaacgym":
-            from isaacgym import gymtorch
-            self.contact_forces = gymtorch.wrap_tensor(self.handler.gym.acquire_net_contact_force_tensor(self.handler.sim))
+            self.contact_forces = isaacgym.gymtorch.wrap_tensor(self.handler.gym.acquire_net_contact_force_tensor(self.handler.sim))
         elif self.simulator == "isaacsim":
             self.contact_forces = self.handler.contact_sensor.data.net_forces_w
         elif self.simulator == "mujoco":
@@ -59,6 +66,7 @@ class ContactForces(BaseQueryType):
             contact_forces[body2] -= f_contact
 
         return contact_forces
+
 
     def __call__(self):
         if self.simulator == "isaacgym":

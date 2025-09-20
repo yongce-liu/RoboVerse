@@ -332,6 +332,13 @@ class MujocoHandler(BaseSimHandler):
             robot_attached = mjcf_model.attach(robot_xml)
             if not robot.fix_base_link:
                 robot_attached.add("freejoint")
+            if not hasattr(robot_attached, "inertial") or robot_attached.inertial is None:
+                child_body = robot_attached.find_all("body")[0]
+                pos = child_body.inertial.pos
+                robot_attached.pos = child_body.pos
+                child_body.pos = "0 0 0"  # Reset child body position to origin with respect to the attached robot
+                robot_attached.quat = child_body.quat if child_body.quat is not None else "1 0 0 0"
+                robot_attached.add("inertial", mass="1e-9", diaginertia="1e-9 1e-9 1e-9", pos=pos)
             self.mj_objects[robot.name] = robot_xml
             self._mujoco_robot_names.append(robot_xml.full_identifier)
 
