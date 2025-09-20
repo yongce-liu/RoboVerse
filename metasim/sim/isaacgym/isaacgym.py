@@ -117,10 +117,11 @@ class IsaacgymHandler(BaseSimHandler):
         self.gym.refresh_mass_matrix_tensors(self.sim)
         self.gym.refresh_net_contact_force_tensor(self.sim)
 
-        if self.optional_queries is None:
-            self.optional_queries = {}
-        for query_name, query_type in self.optional_queries.items():
-            query_type.bind_handler(self)
+        # if self.optional_queries is None:
+        #     self.optional_queries = {}
+        # for query_name, query_type in self.optional_queries.items():
+        #     query_type.bind_handler(self)
+        return super().launch()
 
     def _init_gym(self) -> None:
         physics_engine = gymapi.SIM_PHYSX

@@ -147,7 +147,6 @@ class IsaacsimHandler(BaseSimHandler):
                 raise ValueError(f"Unsupported camera type: {type(camera)}")
 
     def launch(self) -> None:
-        super().launch()
         self._init_scene()
         self._load_robots()
         self._load_sensors()
@@ -175,6 +174,8 @@ class IsaacsimHandler(BaseSimHandler):
             self.sim.render()
         for sensor in self.scene.sensors.values():
             sensor.update(dt=0)
+
+        return super().launch()
 
     def close(self) -> None:
         log.info("close Isaacsim Handler")

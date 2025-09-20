@@ -22,7 +22,7 @@ class ContactForces(BaseQueryType):
         self.simulator = handler.scenario.simulator
         self.num_envs = handler.scenario.num_envs
         self.robots = handler.robots
-        self.body_ids_reindex = handler._get_body_ids_reindex(self.robots[0].name)
+        self.body_ids_reindex = handler.get_body_reindex(self.robots[0].name)
         self.initialize()
 
     def initialize(self):
