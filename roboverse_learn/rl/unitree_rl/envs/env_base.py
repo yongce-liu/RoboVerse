@@ -1,5 +1,6 @@
 from __future__ import annotations
 from dataclasses import MISSING, asdict
+from collections import deque
 
 import torch
 
@@ -78,9 +79,9 @@ class AgentEnv:
         self.actions = torch.zeros(size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device, requires_grad=False)
         self.torques = torch.zeros(size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device, requires_grad=False)
         # self.num_obs: int = MISSING
-        self.obs_buf_history: list = MISSING
+        self.obs_buf_queue: deque = MISSING
         # self.num_priv_obs: int = MISSING
-        self.priv_obs_buf_history: list | None = MISSING
+        self.priv_obs_buf_queue: deque | None = MISSING
         self.rew_buf = torch.zeros(size=(self.num_envs,), dtype=torch.float, device=self.device)
         self.reset_buf = torch.ones(size=(self.num_envs,), device=self.device, dtype=torch.bool)
         self.time_out_buf = torch.zeros(size=(self.num_envs,), device=self.device, dtype=torch.bool)
@@ -172,8 +173,8 @@ class AgentEnv:
 
     @property
     def obs_buf(self):
-        return None if self.num_obs == 0 else torch.cat(list(self.obs_buf_history), dim=1)
+        return None if self.num_obs == 0 else torch.cat(list(self.obs_buf_queue), dim=1)
 
     @property
     def priv_obs_buf(self):
-        return None if self.num_priv_obs == 0 else torch.cat(list(self.priv_obs_buf_history), dim=1)
+        return None if self.num_priv_obs == 0 else torch.cat(list(self.priv_obs_buf_queue), dim=1)

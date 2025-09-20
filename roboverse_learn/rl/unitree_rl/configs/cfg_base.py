@@ -12,9 +12,9 @@ class BaseEnvCfg:
     """
     episode_length_s = 20.0
     num_obs_single = 0
-    obs_len_history = 0 # number of past + current observations to include in the observation
+    obs_len_history = 0 # number of past observations to include in the observation
     num_priv_obs_single = 0
-    priv_obs_len_history = 0 # number of past + current privileged observations to include in the privileged observation
+    priv_obs_len_history = 0 # number of past privileged observations to include in the privileged observation
     '''
     env_spacing = 2.5
     sim_params = SimParamCfg(dt=0.005,

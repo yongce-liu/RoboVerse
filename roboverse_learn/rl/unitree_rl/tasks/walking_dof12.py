@@ -43,9 +43,9 @@ class WalkingDof12RslRlTrainCfg(RslRlOnPolicyRunnerCfg):
 @configclass
 class WalkingDof12EnvCfg(BaseEnvCfg):
     num_obs_single = 6 + 3 + 3 * 12 + 2
-    obs_len_history = 1
+    obs_len_history = 0
     num_priv_obs_single = 9 + 3 + 3 * 12 + 2
-    priv_obs_len_history = 1
+    priv_obs_len_history = 0
 
     domain_rand = BaseEnvCfg.DomainRand(
         randomize_friction = True,
