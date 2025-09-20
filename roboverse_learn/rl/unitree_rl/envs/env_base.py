@@ -1,5 +1,5 @@
 from __future__ import annotations
-from dataclasses import MISSING
+from dataclasses import MISSING, asdict
 
 import torch
 
@@ -9,12 +9,16 @@ from metasim.sim.base import BaseSimHandler
 from metasim.types import Action, Info, TensorState, Reward, Success, Termination, TimeOut, RobotState
 from metasim.scenario.robot import RobotCfg
 from metasim.utils.setup_util import get_sim_handler_class
+from metasim.utils.configclass import class_to_dict
+
+from roboverse_learn.rl.unitree_rl.configs import SensorsCfg
 
 
 class MasterSimulator:
     def __init__(
         self,
         scenario: ScenarioCfg | None = None,
+        sensors: SensorsCfg | dict | None = None,
         device: str | torch.device | None = None,
     ) -> None:
         """Initialize the task env.
@@ -23,6 +27,7 @@ class MasterSimulator:
             scenario: The scenario configuration. If None, it will use the class variable "scenario".
             device: The device to use for the environment. If None, it will use "cuda" if available, otherwise "cpu".
         """
+        self.sensors: dict = sensors if isinstance(sensors, (dict, type(None))) else asdict(sensors)
         self.device : str = str(device) if device is not None else ("cuda" if torch.cuda.is_available() else "cpu")
         self._instantiate_env(scenario)
         self.initial_states: TensorState = self.handler.get_states()
@@ -42,7 +47,7 @@ class MasterSimulator:
         self.num_envs = self.scenario.num_envs
         # handlers & start
         handler_class = get_sim_handler_class(SimType(scenario.simulator))
-        self.handler: BaseSimHandler = handler_class(scenario)
+        self.handler: BaseSimHandler = handler_class(scenario, self.optional_queries)
         self.handler.launch()
 
     def _physics_step(self, actions: Action) -> TensorState:
@@ -55,6 +60,10 @@ class MasterSimulator:
     def close(self) -> None:
         """Close the environment."""
         self.handler.close()
+
+    @property
+    def optional_queries(self):
+        return self.sensors
 
 
 class AgentEnv:

@@ -13,8 +13,7 @@ from metasim.queries.base import BaseQueryType
 from metasim.utils.tensor_util import torch_rand_float
 from metasim.utils import configclass
 
-from roboverse_learn.rl.unitree_rl.configs.optional_queries import NetContactForce
-from roboverse_learn.rl.unitree_rl.configs.cfg_terrain import GroundCfg
+from roboverse_learn.rl.unitree_rl.configs import ContactForces, GroundCfg
 
 
 # Training Config
@@ -432,7 +431,7 @@ class BaseLeggedTaskCfg:
         }
     ]
     """Initial states for the environment. Only used for legged robots, e.g., go2-12dof, g1-12dof, h1-12dof."""
-    extra_spec: dict[str, BaseQueryType] = {"contact_forces": NetContactForce()}
+    extra_spec: dict[str, BaseQueryType] = {"contact_forces": ContactForces()}
 
 
     def __post_init__(self):

@@ -64,7 +64,7 @@ def reward_collision(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
     """
     Penalize collisions.
     """
-    contact_forces = env_states.robots[env.name].extra["contact_forces"]
+    contact_forces = env_states.extras["contact_forces"][env.name]
     return torch.sum(1.0 * (torch.norm(contact_forces[:, env.penalised_contact_indices, :], dim=-1) > 0.1),dim=1)
 
 def reward_termination(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
@@ -174,7 +174,7 @@ def reward_feet_contact_forces(env: EnvTypes, env_states: TensorState) -> torch.
 '''
 
 def reward_contact(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
-    contact_forces = env_states.robots[env.name].extra["contact_forces"]
+    contact_forces = env_states.extras["contact_forces"][env.name]
     contact = contact_forces[:, env.feet_indices, 2] > 1.0
 
     """Add phase into states"""

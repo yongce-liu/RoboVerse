@@ -289,18 +289,18 @@ class LeggedRobotEnv(AgentEnv):
         self.reset_buf[:] = torch.logical_or(self._terminated(env_states), self.time_out_buf)
         self.rew_buf[:] = self._reward(env_states)
 
+        clip_obs_limit = self.cfg.normalization.clip_observations
+        _tmp_obs_buf_single, _tmp_priv_obs_buf_single = self._observation(env_states)
+        self.obs_buf_history.append(_tmp_obs_buf_single.clip(-clip_obs_limit, clip_obs_limit))
+        if _tmp_priv_obs_buf_single is not None:
+            self.priv_obs_buf_history.append(_tmp_priv_obs_buf_single.clip(-clip_obs_limit, clip_obs_limit))
+
         # reset envs
         reset_env_idx = self.reset_buf.nonzero(as_tuple=False).flatten().tolist()
         env_states = self.reset(reset_env_idx)
         # simulate the push operation
         if self.cfg.domain_rand.push_robots:
             self._push_robots(env_states)
-
-        clip_obs_limit = self.cfg.normalization.clip_observations
-        _tmp_obs_buf_single, _tmp_priv_obs_buf_single = self._observation(env_states)
-        self.obs_buf_history.append(_tmp_obs_buf_single.clip(-clip_obs_limit, clip_obs_limit))
-        if _tmp_priv_obs_buf_single is not None:
-            self.priv_obs_buf_history.append(_tmp_priv_obs_buf_single.clip(-clip_obs_limit, clip_obs_limit))
 
         # copy to the history buffer
         for _key, _val in self.history_buffer.items():
@@ -365,7 +365,7 @@ class LeggedRobotEnv(AgentEnv):
         return rew_buf
 
     def _terminated(self, env_states):
-        contact_forces = env_states.robots[self.name].extra["contact_forces"]
+        contact_forces = env_states.extras["contact_forces"][self.name]
         reset_buf = torch.any(torch.norm(contact_forces[:, self.termination_contact_indices, :], dim=-1) > 1.0, dim=1)
         rpy = get_euler_xyz(env_states.robots[self.name].root_state[:, 3:7])
         reset_buf |= torch.logical_or(torch.abs(rpy[:, 1]) > 1.0, torch.abs(rpy[:, 0]) > 0.8)
