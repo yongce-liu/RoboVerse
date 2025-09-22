@@ -24,7 +24,7 @@ def prepare(args):
     robots: list = [make_robots(args.robots)[0]]  # get the first robot
 
     # should move the parameters in a common used config files
-    env_spacing = 2.0
+    env_spacing = 2.5
     # decimation = 4
     device = "cpu" if args.sim == "mujoco" else "cuda" if torch.cuda.is_available() else "cpu"
     sim_params = SimParamCfg(dt=0.005,

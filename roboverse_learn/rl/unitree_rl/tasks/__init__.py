@@ -1,2 +1,2 @@
 # ruff: noqa: F401
-from .walking_dof12 import WalkingDof12Env, WalkingDof12EnvCfg, WalkingDof12RslRlTrainCfg
+from .locomotion.walk_dof12 import WalkDof12Env, WalkDof12EnvCfg, WalkDof12RslRlTrainCfg

@@ -56,9 +56,10 @@ class MasterRunner:
             runner: BaseRunnerWrapper = runner_cls(env=env, train_cfg=train_cfg, log_dir=log_dir)
             self.runners[_robot.name] = runner
             if not log_path:
-                shutil.copy2(env_cls_path, log_dir)
-                pkl.dump(env_cfg, open(f"{log_dir}/env_cfg.pkl", "wb"))
-                pkl.dump(train_cfg, open(f"{log_dir}/train_cfg.pkl", "wb"))
+                params_path = f"{log_dir}/params"
+                shutil.copy2(env_cls_path, params_path)
+                pkl.dump(env_cfg, open(f"{params_path}/env_cfg.pkl", "wb"))
+                pkl.dump(train_cfg, open(f"{params_path}/train_cfg.pkl", "wb"))
 
     def learn(self, max_iterations=10000):
         tmp_runner = self.runners[list(self.runners.keys())[0]]
