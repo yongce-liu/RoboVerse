@@ -190,6 +190,7 @@ class LeggedRobotEnv(AgentEnv):
                                         joint_vel_target=torch.zeros(size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device),
                                         joint_effort_target=torch.zeros(size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device))
         _ = self._register_initial_state(self.initial_state)
+        self.reset()
 
     def _compute_torques(self, env_states: TensorState, actions: torch.Tensor) -> torch.Tensor:
         dof_pos = env_states.robots[self.name].joint_pos

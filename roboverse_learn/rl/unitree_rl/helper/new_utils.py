@@ -69,6 +69,7 @@ def get_args(test=False):
     custom_parameters = [
         {"name": "--task", "type": str, "default": "WalkingHumanoid", "help": "Task name for training/testing."},
         {"name": "--robots", "type": str, "default": "g1_dof12", "help": "The used robots."},
+        {"name": "--objects", "type": str, "default": None, "help": "The used objects."},
         {"name": "--num_envs", "type": int, "default": 128, "help": "number of parallel environments."},
         {"name": "--iter", "type": int, "default": 15000, "help": "Max number of training iterations."},
         {"name": "--sim", "type": str, "default": "isaacgym", "help": "simulator type, currently only isaacgym is supported"},
@@ -106,7 +107,7 @@ def get_log_dir(task_name:str, robot_name:str, now=None) -> str:
     """Get the log directory."""
     if now is None:
         now = datetime.datetime.now().strftime("%Y_%m%d_%H%M%S")
-    log_dir = f"./outputs/unitree_rl/{task_name}/{now}/{robot_name}/"
+    log_dir = f"./outputs/unitree_rl/{task_name}/{now}/{robot_name}"
     if not os.path.exists(log_dir):
         os.makedirs(log_dir, exist_ok=True)
     log.info("Log directory: {}", log_dir)
@@ -156,6 +157,13 @@ def make_robots(robots_str: str) -> list[any]:
     for _name in robot_names:
         robots.append(get_robot(_name))
     return robots
+
+def make_objects(objects_str: str) -> list[any]:
+    object_names = objects_str.split()
+    objects = []
+    for _name in object_names:
+        objects.append(get_class(_name, suffix="Cfg", library="roboverse_learn.rl.unitree_rl.configs.cfg_objects")())
+    return objects
 
 def find_unique_candidate(candidates: list[any], data_base: list[any]) -> int:
     found_candidates = []

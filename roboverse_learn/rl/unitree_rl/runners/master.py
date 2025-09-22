@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import Union
 
+import os
 import sys
 import shutil
 import datetime
@@ -57,6 +58,8 @@ class MasterRunner:
             self.runners[_robot.name] = runner
             if not log_path:
                 params_path = f"{log_dir}/params"
+                if not os.path.exists(params_path):
+                    os.makedirs(params_path, exist_ok=True)
                 shutil.copy2(env_cls_path, params_path)
                 pkl.dump(env_cfg, open(f"{params_path}/env_cfg.pkl", "wb"))
                 pkl.dump(train_cfg, open(f"{params_path}/train_cfg.pkl", "wb"))
