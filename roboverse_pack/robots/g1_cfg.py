@@ -23,18 +23,21 @@ class G1Dof12Cfg(RobotCfg):
     collapse_fixed_joints: bool = True
 
     actuators: dict[str, BaseActuatorCfg] = {
-        "left_hip_pitch_joint": BaseActuatorCfg(stiffness=100, damping=2, torque_limit=88),
-        "left_hip_roll_joint": BaseActuatorCfg(stiffness=100, damping=2, torque_limit=139),
-        "left_hip_yaw_joint": BaseActuatorCfg(stiffness=100, damping=2, torque_limit=88),
-        "left_knee_joint": BaseActuatorCfg(stiffness=150, damping=4, torque_limit=139),
-        "left_ankle_pitch_joint": BaseActuatorCfg(stiffness=40, damping=2, torque_limit=50),
-        "left_ankle_roll_joint": BaseActuatorCfg(stiffness=40, damping=2, torque_limit=50),
-        "right_hip_pitch_joint": BaseActuatorCfg(stiffness=100, damping=2, torque_limit=88),
-        "right_hip_roll_joint": BaseActuatorCfg(stiffness=100, damping=2, torque_limit=139),
-        "right_hip_yaw_joint": BaseActuatorCfg(stiffness=100, damping=2, torque_limit=88),
-        "right_knee_joint": BaseActuatorCfg(stiffness=150, damping=4, torque_limit=139),
-        "right_ankle_pitch_joint": BaseActuatorCfg(stiffness=40, damping=2, torque_limit=50),
-        "right_ankle_roll_joint": BaseActuatorCfg(stiffness=40, damping=2, torque_limit=50),
+        # N7520-14.3: hip_pitch, hip_yaw (stiffness 100, damping 2, torque 88, vel 32)
+        "left_hip_pitch_joint": BaseActuatorCfg(stiffness=100, damping=2, torque_limit=88, velocity_limit=32.0),
+        "left_hip_yaw_joint": BaseActuatorCfg(stiffness=100, damping=2, torque_limit=88, velocity_limit=32.0),
+        "right_hip_pitch_joint": BaseActuatorCfg(stiffness=100, damping=2, torque_limit=88, velocity_limit=32.0),
+        "right_hip_yaw_joint": BaseActuatorCfg(stiffness=100, damping=2, torque_limit=88, velocity_limit=32.0),
+        # N7520-22.5: hip_roll, knee (hip_roll stiffness 100/damping 2; knee stiffness 150/damping 4; torque 139; vel 20)
+        "left_hip_roll_joint": BaseActuatorCfg(stiffness=100, damping=2, torque_limit=139, velocity_limit=20.0),
+        "right_hip_roll_joint": BaseActuatorCfg(stiffness=100, damping=2, torque_limit=139, velocity_limit=20.0),
+        "left_knee_joint": BaseActuatorCfg(stiffness=150, damping=4, torque_limit=139, velocity_limit=20.0),
+        "right_knee_joint": BaseActuatorCfg(stiffness=150, damping=4, torque_limit=139, velocity_limit=20.0),
+        # N5020-16: ankles (stiffness 40, damping 2, torque 25, vel 37)
+        "left_ankle_pitch_joint": BaseActuatorCfg(stiffness=40, damping=2, torque_limit=25, velocity_limit=37.0),
+        "left_ankle_roll_joint": BaseActuatorCfg(stiffness=40, damping=2, torque_limit=25, velocity_limit=37.0),
+        "right_ankle_pitch_joint": BaseActuatorCfg(stiffness=40, damping=2, torque_limit=25, velocity_limit=37.0),
+        "right_ankle_roll_joint": BaseActuatorCfg(stiffness=40, damping=2, torque_limit=25, velocity_limit=37.0),
     }
 
     joint_limits: dict[str, tuple[float, float]] = {
@@ -59,14 +62,14 @@ class G1Dof12Cfg(RobotCfg):
         "left_hip_roll_joint": 139,
         "left_hip_yaw_joint": 88,
         "left_knee_joint": 139,
-        "left_ankle_pitch_joint": 50,
-        "left_ankle_roll_joint": 50,
+        "left_ankle_pitch_joint": 25,
+        "left_ankle_roll_joint": 25,
         "right_hip_pitch_joint": 88,
         "right_hip_roll_joint": 139,
         "right_hip_yaw_joint": 88,
         "right_knee_joint": 139,
-        "right_ankle_pitch_joint": 50,
-        "right_ankle_roll_joint": 50,
+        "right_ankle_pitch_joint": 25,
+        "right_ankle_roll_joint": 25,
     }
 
     default_joint_positions: dict[str, float] = {
@@ -127,20 +130,23 @@ class G1Dof23Cfg(G1Dof12Cfg):
     usd_path: str = "roboverse_data/robots/g1/usd/g1_23dof/g1_23dof_rev_1_0.usd"
     xml_path: str = "roboverse_data/robots/g1/xml/g1_23dof.xml"
     urdf_path: str = "roboverse_data/robots/g1/urdf/g1_23dof.urdf"
+    mjcf_path = xml_path
 
     actuators = {
         **G1Dof12Cfg().actuators,
-        "waist_yaw_joint": BaseActuatorCfg(stiffness=200, damping=5, torque_limit=88),
-        "left_shoulder_pitch_joint": BaseActuatorCfg(stiffness=40, damping=10, torque_limit=25),
-        "left_shoulder_roll_joint": BaseActuatorCfg(stiffness=40, damping=10, torque_limit=25),
-        "left_shoulder_yaw_joint": BaseActuatorCfg(stiffness=40, damping=10, torque_limit=25),
-        "left_elbow_joint": BaseActuatorCfg(stiffness=40, damping=10, torque_limit=25),
-        "left_wrist_roll_joint": BaseActuatorCfg(stiffness=20, damping=4, torque_limit=25),
-        "right_shoulder_pitch_joint": BaseActuatorCfg(stiffness=40, damping=10, torque_limit=25),
-        "right_shoulder_roll_joint": BaseActuatorCfg(stiffness=40, damping=10, torque_limit=25),
-        "right_shoulder_yaw_joint": BaseActuatorCfg(stiffness=40, damping=10, torque_limit=25),
-        "right_elbow_joint": BaseActuatorCfg(stiffness=40, damping=10, torque_limit=25),
-        "right_wrist_roll_joint": BaseActuatorCfg(stiffness=20, damping=4, torque_limit=25),
+        # N7520-14.3: waist_yaw (stiffness 200, damping 5, torque 88, vel 32)
+        "waist_yaw_joint": BaseActuatorCfg(stiffness=200, damping=5, torque_limit=88, velocity_limit=32.0),
+        # N5020-16: shoulders, elbows, wrist_roll (stiffness 40, damping 1, torque 25, vel 37)
+        "left_shoulder_pitch_joint": BaseActuatorCfg(stiffness=40, damping=1, torque_limit=25, velocity_limit=37.0),
+        "left_shoulder_roll_joint": BaseActuatorCfg(stiffness=40, damping=1, torque_limit=25, velocity_limit=37.0),
+        "left_shoulder_yaw_joint": BaseActuatorCfg(stiffness=40, damping=1, torque_limit=25, velocity_limit=37.0),
+        "left_elbow_joint": BaseActuatorCfg(stiffness=40, damping=1, torque_limit=25, velocity_limit=37.0),
+        "left_wrist_roll_joint": BaseActuatorCfg(stiffness=40, damping=1, torque_limit=25, velocity_limit=37.0),
+        "right_shoulder_pitch_joint": BaseActuatorCfg(stiffness=40, damping=1, torque_limit=25, velocity_limit=37.0),
+        "right_shoulder_roll_joint": BaseActuatorCfg(stiffness=40, damping=1, torque_limit=25, velocity_limit=37.0),
+        "right_shoulder_yaw_joint": BaseActuatorCfg(stiffness=40, damping=1, torque_limit=25, velocity_limit=37.0),
+        "right_elbow_joint": BaseActuatorCfg(stiffness=40, damping=1, torque_limit=25, velocity_limit=37.0),
+        "right_wrist_roll_joint": BaseActuatorCfg(stiffness=40, damping=1, torque_limit=25, velocity_limit=37.0),
     }
 
     joint_limits = {
@@ -219,13 +225,15 @@ class G1Dof27Cfg(G1Dof23Cfg):
     usd_path: str = MISSING
     xml_path: str = "roboverse_data/robots/g1/xml/g1_27dof.xml"
     urdf_path: str = "roboverse_data/robots/g1/urdf/g1_27dof.urdf"
+    mjcf_path = xml_path
 
     actuators = {
         **G1Dof23Cfg().actuators,
-        "left_wrist_pitch_joint": BaseActuatorCfg(stiffness=20, damping=4, torque_limit=5),
-        "left_wrist_yaw_joint": BaseActuatorCfg(stiffness=20, damping=4, torque_limit=5),
-        "right_wrist_pitch_joint": BaseActuatorCfg(stiffness=20, damping=4, torque_limit=5),
-        "right_wrist_yaw_joint": BaseActuatorCfg(stiffness=20, damping=4, torque_limit=5),
+        # W4010-25: wrist_pitch/yaw (stiffness 40, damping 1, torque 5, vel 22)
+        "left_wrist_pitch_joint": BaseActuatorCfg(stiffness=40, damping=1, torque_limit=5, velocity_limit=22.0),
+        "left_wrist_yaw_joint": BaseActuatorCfg(stiffness=40, damping=1, torque_limit=5, velocity_limit=22.0),
+        "right_wrist_pitch_joint": BaseActuatorCfg(stiffness=40, damping=1, torque_limit=5, velocity_limit=22.0),
+        "right_wrist_yaw_joint": BaseActuatorCfg(stiffness=40, damping=1, torque_limit=5, velocity_limit=22.0),
     }
 
     joint_limits = {
@@ -266,13 +274,15 @@ class G1Dof29Cfg(G1Dof27Cfg):
     name: str = "g1_dof29"
     num_joints: int = 29
     usd_path: str = "roboverse_data/robots/g1/usd/g1_29dof_rev_1_0/g1_29dof_rev_1_0.usd"
-    xml_path: str = "roboverse_data/robots/g1/xml/g1_29dof.xml"
-    urdf_path: str = "roboverse_data/robots/g1/urdf/g1_29dof.urdf"
+    xml_path: str = "roboverse_data/robots/g1/xml/g1_29dof_rev_1_0.xml"
+    urdf_path: str = "roboverse_data/robots/g1/urdf/g1_29dof_rev_1_0.urdf"
+    mjcf_path = xml_path
 
     actuators = {
         **G1Dof27Cfg().actuators,
-        "waist_roll_joint": BaseActuatorCfg(stiffness=200, damping=5, torque_limit=35),
-        "waist_pitch_joint": BaseActuatorCfg(stiffness=200, damping=5, torque_limit=35),
+        # N5020-16: waist roll/pitch (stiffness 40, damping 5, torque 25, vel 37)
+        "waist_roll_joint": BaseActuatorCfg(stiffness=40, damping=5, torque_limit=25, velocity_limit=37.0),
+        "waist_pitch_joint": BaseActuatorCfg(stiffness=40, damping=5, torque_limit=25, velocity_limit=37.0),
     }
 
     joint_limits = {
@@ -283,8 +293,8 @@ class G1Dof29Cfg(G1Dof27Cfg):
 
     torque_limits = {
         **G1Dof27Cfg().torque_limits,
-        "waist_roll_joint": 35,
-        "waist_pitch_joint": 35,
+        "waist_roll_joint": 25,
+        "waist_pitch_joint": 25,
     }
 
     default_joint_positions = {
@@ -307,6 +317,7 @@ class G1Dof29Dex3(G1Dof29Cfg):
     usd_path: str = "roboverse_data/robots/g1/usd/g1_29dof_dex3/g1_29dof_with_dex3_rev_1_0.usd"
     xml_path: str = "roboverse_data/robots/g1/xml/g1_29dof_dex3.xml"
     urdf_path: str = "roboverse_data/robots/g1/urdf/g1_29dof_dex3.urdf"
+    mjcf_path = xml_path
 
     actuators = {
         **G1Dof29Cfg().actuators,
