@@ -850,8 +850,8 @@ class IsaacgymHandler(BaseSimHandler):
             new_dof_states = self._dof_states.view(self.num_envs, -1, 2)
             for idx, obj in enumerate(self.objects):
                 obj_state = states.objects[obj.name]
-                roo_state = self._reorder_quat_xyzw_to_wxyz(obj_state.root_state, reverse=True)
-                new_root_states[env_ids, idx, :] = roo_state[env_ids, :]
+                root_state = self._reorder_quat_xyzw_to_wxyz(obj_state.root_state, reverse=True)
+                new_root_states[env_ids, idx, :] = root_state[env_ids, :]
                 if isinstance(obj, ArticulationObjCfg):
                     joint_pos = obj_state.joint_pos
                     joint_vel = obj_state.joint_vel
@@ -868,19 +868,24 @@ class IsaacgymHandler(BaseSimHandler):
                 new_dof_states[env_ids, self._obj_num_dof :, 0] = joint_pos[env_ids, :][:, joint_ids_reindex]
                 new_dof_states[env_ids, self._obj_num_dof :, 1] = joint_vel[env_ids, :][:, joint_ids_reindex]
 
-            env_ids_int32_tensor = torch.tensor(env_ids, dtype=torch.int32, device=self.device)
-            self.gym.set_actor_root_state_tensor_indexed(
+            env_ids = torch.tensor(env_ids, dtype=torch.int32, device=self.device)
+            env_offset = len(self.objects) + len(self.robots)
+            env_ids_with_objs = (
+                env_ids.unsqueeze(1) * env_offset + torch.arange(env_offset, device=self.device, dtype=torch.int32)
+            ).flatten()
+            _res1 = self.gym.set_actor_root_state_tensor_indexed(
                 self.sim,
                 gymtorch.unwrap_tensor(new_root_states),
-                gymtorch.unwrap_tensor(env_ids_int32_tensor),
-                len(env_ids),
+                gymtorch.unwrap_tensor(env_ids_with_objs),
+                len(env_ids_with_objs),
             )
-            self.gym.set_dof_state_tensor_indexed(
+            _res2 = self.gym.set_dof_state_tensor(
                 self.sim,
-                gymtorch.unwrap_tensor(new_dof_states),
-                gymtorch.unwrap_tensor(env_ids_int32_tensor),
-                len(env_ids),
+                gymtorch.unwrap_tensor(new_dof_states.view(-1, 2)),
+                # gymtorch.unwrap_tensor(env_ids),
+                # len(env_ids),
             )
+            assert _res1 and _res2
         else:
             raise Exception("Unsupported state type, must be DictEnvState or TensorState")
 

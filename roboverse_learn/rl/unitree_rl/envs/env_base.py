@@ -32,7 +32,7 @@ class MasterSimulator:
         self.sensors: dict = sensors if isinstance(sensors, (dict, type(None))) else asdict(sensors)
         self.device : str = str(device) if device is not None else ("cuda" if torch.cuda.is_available() else "cpu")
         self._instantiate_env(scenario)
-        self.initial_states: TensorState = self.handler.get_states()
+        self._initialize_states()
         assert isinstance(self.initial_states, TensorState), "initial_states should be of type TensorState"
 
     def _instantiate_env(self, scenario: ScenarioCfg) -> None:
@@ -51,6 +51,14 @@ class MasterSimulator:
         handler_class = get_sim_handler_class(SimType(scenario.simulator))
         self.handler: BaseSimHandler = handler_class(scenario, self.optional_queries)
         self.handler.launch()
+
+    def _initialize_states(self) -> None:
+        self.initial_states: TensorState = deepcopy(self.handler.get_states())
+        for obj in self.objects:
+            if hasattr(obj, "init_position"):
+                self.initial_states.objects[obj.name].root_state[:, :3] = torch.tensor(obj.init_position, device=self.device)
+            if hasattr(obj, "init_rotation"):
+                self.initial_states.objects[obj.name].root_state[:, 3:7] = torch.tensor(obj.init_rotation, device=self.device)
 
     def _physics_step(self, actions: Action) -> TensorState:
         """Physics step callback."""
