@@ -881,7 +881,7 @@ class IsaacgymHandler(BaseSimHandler):
             )
             _res2 = self.gym.set_dof_state_tensor(
                 self.sim,
-                gymtorch.unwrap_tensor(new_dof_states.view(-1, 2)),
+                gymtorch.unwrap_tensor(new_dof_states),
                 # gymtorch.unwrap_tensor(env_ids),
                 # len(env_ids),
             )
