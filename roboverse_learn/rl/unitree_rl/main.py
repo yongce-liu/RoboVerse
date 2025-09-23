@@ -47,6 +47,7 @@ def prepare(args):
     scenario = ScenarioCfg(
         robots=robots,
         objects=objects,
+        cameras=[camera for robot in robots if hasattr(robot, 'cameras') for camera in robot.cameras],
         num_envs=args.num_envs,
         simulator=args.sim,
         renderer=args.sim,

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import MISSING
 from typing import Literal
 
+from metasim.scenario.cameras import PinholeCameraCfg
 from metasim.scenario.robot import BaseActuatorCfg, RobotCfg
 from metasim.utils import configclass
 
@@ -311,7 +312,7 @@ class G1Dof29Cfg(G1Dof27Cfg):
 
 
 @configclass
-class G1Dof29Dex3(G1Dof29Cfg):
+class G1Dof29Dex3Cfg(G1Dof29Cfg):
     name: str = "g1_dof29_dex3"
     num_joints: int = 43
     usd_path: str = "roboverse_data/robots/g1/usd/g1_29dof_dex3/g1_29dof_with_dex3_rev_1_0.usd"
@@ -412,3 +413,22 @@ class G1Dof29Dex3(G1Dof29Cfg):
         "right_hand_index_0_joint": "effort",
         "right_hand_index_1_joint": "effort",
     }
+
+    def __post_init__(self):
+        self.cameras: list = [
+            PinholeCameraCfg(
+                name="front_cam",
+                data_types=["rgb"],
+                height=480,
+                width=640,
+                focal_length=7.6,
+                focus_distance=400.0,
+                clipping_range=(0.1, 1.0e5),
+                mount_to=self.name,
+                mount_link="d435_link",
+                mount_pos=(0, 0.0, 0),
+                mount_quat=(0.5, -0.5, 0.5, -0.5),
+                # update_period: float = 0.02,
+            )
+        ]
+        return super().__post_init__()
