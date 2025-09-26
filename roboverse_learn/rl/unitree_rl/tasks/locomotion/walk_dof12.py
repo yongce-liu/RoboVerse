@@ -92,7 +92,7 @@ class WalkDof12Env(HumanoidEnv):
         return super()._init_buffers()
 
     def _get_noise_scale_vec(self):
-        noise_vec = torch.zeros(size=(47,), dtype=torch.float, device=self.device)
+        noise_vec = torch.zeros(size=(140,), dtype=torch.float, device=self.device)
         self.add_noise = self.cfg.noise.add_noise
         noise_scales = self.cfg.noise.scales
         noise_level = self.cfg.noise.noise_level

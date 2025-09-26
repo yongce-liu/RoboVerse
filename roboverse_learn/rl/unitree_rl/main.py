@@ -11,6 +11,7 @@ except ImportError:
 import torch
 
 from metasim.scenario.scenario import ScenarioCfg
+from metasim.scenario.lights import DomeLightCfg, DistantLightCfg, DiskLightCfg
 from metasim.scenario.simulator_params import SimParamCfg
 
 from roboverse_learn.rl.unitree_rl.configs import SensorsCfg
@@ -47,7 +48,8 @@ def prepare(args):
     scenario = ScenarioCfg(
         robots=robots,
         objects=objects,
-        cameras=[camera for robot in robots if hasattr(robot, 'cameras') for camera in robot.cameras],
+        cameras=[camera for robot in robots if hasattr(robot, 'cameras')
+         for camera in robot.cameras],
         num_envs=args.num_envs,
         simulator=args.sim,
         renderer=args.sim,
@@ -55,6 +57,13 @@ def prepare(args):
         env_spacing=env_spacing,
         sim_params=sim_params,
         # decimation=decimation,
+        lights=[
+                # Sky dome light - provides soft ambient lighting from all directions
+                DomeLightCfg(
+                    intensity=800.0,  # Moderate ambient lighting
+                    color=(0.85, 0.9, 1.0),  # Slightly blue sky color
+                )
+        ]
     )
 
     sensors = SensorsCfg()

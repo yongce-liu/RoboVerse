@@ -53,12 +53,10 @@ class MasterSimulator:
         self.handler.launch()
 
     def _initialize_states(self) -> None:
-        self.initial_states: TensorState = deepcopy(self.handler.get_states())
+        self.initial_states: TensorState = deepcopy(self.handler.get_states(mode="tensor"))
         for obj in self.objects:
-            if hasattr(obj, "init_position"):
-                self.initial_states.objects[obj.name].root_state[:, :3] = torch.tensor(obj.init_position, device=self.device)
-            if hasattr(obj, "init_rotation"):
-                self.initial_states.objects[obj.name].root_state[:, 3:7] = torch.tensor(obj.init_rotation, device=self.device)
+            if hasattr(obj, "root_state"):
+                self.initial_states.objects[obj.name].root_state[:, :] = torch.tensor(obj.root_state, device=self.device).unsqueeze(0).repeat(self.num_envs, 1)
 
     def _physics_step(self, actions: Action) -> TensorState:
         """Physics step callback."""

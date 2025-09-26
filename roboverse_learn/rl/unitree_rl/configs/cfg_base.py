@@ -147,6 +147,7 @@ class BaseEnvCfg:
         robots = {
             "g1_dof12": {"pos": [0.0, 0.0, 0.8]},
             "g1_dof23": {"pos": [0.0, 0.0, 0.8]},
+            "g1_dof29_dex3": {"pos": [0.0, 0.0, 0.8]},
                 }
     initial_states = InitialStates()
 
