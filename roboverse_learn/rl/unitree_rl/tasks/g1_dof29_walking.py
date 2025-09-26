@@ -49,17 +49,17 @@ class G1Dof29WalkingCfg(BaseLeggedTaskCfg):
                     "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
                     "dof_pos": {
                         # Hips & legs
-                        "left_hip_pitch_joint": -0.4,
+                        "left_hip_pitch_joint": -0.1,
                         "left_hip_roll_joint": 0.0,
                         "left_hip_yaw_joint": 0.0,
-                        "left_knee_joint": 0.8,
-                        "left_ankle_pitch_joint": -0.4,
+                        "left_knee_joint": 0.3,
+                        "left_ankle_pitch_joint": -0.2,
                         "left_ankle_roll_joint": 0.0,
-                        "right_hip_pitch_joint": -0.4,
+                        "right_hip_pitch_joint": -0.1,
                         "right_hip_roll_joint": 0.0,
                         "right_hip_yaw_joint": 0.0,
-                        "right_knee_joint": 0.8,
-                        "right_ankle_pitch_joint": -0.4,
+                        "right_knee_joint": 0.3,
+                        "right_ankle_pitch_joint": -0.2,
                         "right_ankle_roll_joint": 0.0,
                         # Waist
                         "waist_yaw_joint": 0.0,
@@ -91,54 +91,38 @@ class G1Dof29WalkingCfg(BaseLeggedTaskCfg):
     frame_stack = 1
     c_frame_stack = 3
 
-    reward_cfg = BaseLeggedTaskCfg.RewardCfg(base_height_target=0.80, tracking_sigma=1 / 0.2, max_contact_force=700)
+    reward_cfg = BaseLeggedTaskCfg.RewardCfg(base_height_target=0.76, tracking_sigma=1 / 0.25, max_contact_force=700)
 
     reward_weights: dict[str, float] = {
-        # safety/termination
-        "termination": -0.0,
-        # base dynamics
-        "ang_vel_xy": -0.2,
-        "base_height": 0.2,
-        "lin_vel_z": -2.0,
-        "orientation_sq": -1.0,
-        "base_height_sq": -5.0,
-        # contacts
-        "collision": -1.0,
-        "feet_stumble": -0.0,
-        "feet_clearance": 2.0,
-        "feet_contact_number": 2.4,
-        "feet_contact_forces": -0.05,
-        "contact": 0.18,
-        # gait/kinematics
-        "joint_pos": 1.6,
-        "feet_air_time": 0.0,
-        "foot_slip": -0.05,
-        "feet_distance": 0.3,
-        "knee_distance": 0.2,
-        # velocity tracking
-        "tracking_lin_vel": 6.0,
-        "tracking_ang_vel": 3.0,
-        "vel_mismatch_exp": 0.5,
-        "low_speed": 0.2,
-        "track_vel_hard": 1.0,
-        # posture/constraints
-        "default_joint_pos": 1.0,
-        "contact_no_vel": -0.2,
-        "upper_body_pos": 1.0,
-        "orientation": 1.0,
-        "base_acc": 0.4,
-        "waist_joint_stability": 10.0,
-        "hip_upright_axis": 6.0,
-        # energy/effort
-        "action_smoothness": -0.08,
-        "torques": -1e-5,
-        "dof_vel": -1e-3,
-        "dof_acc": -2e-6,
-        "torque_limits": -0.001,
-        "hip_pos": -1.0,
-        "dof_pos_limits": -5.0,
-        # optional
-        "action_rate": -0.015,
+        # task tracking (mapped to your existing tracking funcs)
+        "tracking_lin_vel": 1.0,      # from track_lin_vel_xy_yaw_frame_exp
+        "tracking_ang_vel": 0.5,      # from track_ang_vel_z_exp
+        "alive": 0.15,                # is_alive
+
+        # base dynamics / effort
+        "lin_vel_z": -2.0,            # lin_vel_z_l2
+        "ang_vel_xy": -0.05,          # ang_vel_xy_l2
+        "dof_vel": -0.001,            # joint_vel_l2
+        "dof_acc": -2.5e-7,           # joint_acc_l2
+        "action_rate": -0.05,         # action_rate_l2
+        "dof_pos_limits": -5.0,       # joint_pos_limits
+        "energy": -2e-5,              # energy
+
+        # stability
+        # "hip_upright_axis": 5.0,
+        "waist_joint_stability": 2.0,  # waist_joint_stability
+
+        # robot posture
+        "orientation_l2": -5.0,       # flat_orientation_l2 -> orientation_l2 (your func name)
+        "base_height_sq": -10.0,      # base_height_l2 -> base_height_sq (your L2 version)
+
+        # feet / gait
+        "feet_gait": 0.5,             # feet_gait
+        "foot_slip": -0.2,            # feet_slide -> foot_slip (your equivalent)
+        "foot_clearance_exp": 1.0,    # foot_clearance_reward -> foot_clearance_exp (your port)
+
+        # other contacts
+        "collision": -1.0,            # undesired_contacts -> collision (your penalised contacts)
     }
 
     def __post_init__(self):
@@ -190,7 +174,7 @@ class G1Dof29WalkingTask(Humanoid):
             candidates=name_extend_func("right_ankle") + name_extend_func("right_ankle_pitch")
         )
 
-    def _compute_ref_state(self):
+    def _compute_ref_state(self, envstate):
         """Compute reference target position for walking task."""
         phase = self._get_phase()
         sin_pos = torch.sin(2 * torch.pi * phase)
@@ -220,6 +204,7 @@ class G1Dof29WalkingTask(Humanoid):
         self.ref_dof_pos[torch.abs(sin_pos) < 0.1] = 0
         self.ref_dof_pos = 2 * self.ref_dof_pos
         self.ref_dof_pos *= speed_factor
+        envstate.robots[self.robot.name].extra["phase"] = phase
 
     def _parse_ref_pos(self, envstate):
         envstate.robots[self.robot.name].extra["ref_dof_pos"] = self.ref_dof_pos
@@ -227,7 +212,7 @@ class G1Dof29WalkingTask(Humanoid):
     def _parse_state_for_reward(self, envstate):
         """Prepare state for reward computation."""
         super()._parse_state_for_reward(envstate)
-        self._compute_ref_state()
+        self._compute_ref_state(envstate)
         self._parse_ref_pos(envstate)
 
     def _get_noise_scale_vec(self) -> torch.Tensor:

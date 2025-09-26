@@ -6,6 +6,27 @@ import torch
 
 from metasim.types import DictEnvState
 
+# ----------------------------- small utils -----------------------------
+def _quat_conj(q):  # (B,4) -> (B,4)
+    # q = [w, x, y, z]
+    return torch.stack([q[:, 0], -q[:, 1], -q[:, 2], -q[:, 3]], dim=1)
+
+def _quat_rotate(q, v):  # q: (B,4); v: (B,N,3) -> (B,N,3)
+    # rotate v by quaternion q (assumes q normalized)
+    w, x, y, z = q[:, 0:1], q[:, 1:2], q[:, 2:3], q[:, 3:4]  # (B,1)
+    q_vec = torch.cat([x, y, z], dim=1)                     # (B,3)
+    # cross(q_vec, v)
+    t = 2.0 * torch.cross(q_vec.unsqueeze(1).expand_as(v), v, dim=2)
+    return v + w.unsqueeze(1) * t + torch.cross(q_vec.unsqueeze(1).expand_as(v), t, dim=2)
+
+def _quat_rotate_inv(q, v):  # rotate v by q^{-1}
+    return _quat_rotate(_quat_conj(q), v)
+
+def _cmd_norm(base):
+    # Handles [vx] or [vx, vy, wz]
+    if base.extra["command"].ndim == 2:
+        return torch.norm(base.extra["command"], dim=1)
+    return torch.abs(base.extra["command"][:, 0])
 
 # =====================reward functions=====================
 def reward_lin_vel_z(states: DictEnvState, robot_name: str, cfg) -> torch.Tensor:
@@ -63,7 +84,7 @@ def reward_base_height(states: DictEnvState, robot_name: str, cfg):
     h = z_root - (z_foot_ref - clearance)
 
     # target & shaping
-    h_tgt = getattr(cfg.reward_cfg, "base_height_target", 0.9)
+    h_tgt = cfg.reward_cfg.base_height_target
     err = h - h_tgt
 
     # Huber-ish: deadband then squared
@@ -558,3 +579,215 @@ def reward_hip_upright_axis(states: DictEnvState, robot_name: str, cfg) -> torch
     hip_upright_reward = torch.exp(-alignment_error * 5.0)  # Scale factor 5.0 for sensitivity
 
     return hip_upright_reward
+
+## ======================== Unitree Lab RL ========================
+def reward_energy(states, robot_name, cfg) -> torch.Tensor:
+    """Sum |qdot|*|tau| across joints (\"energy\" usage)."""
+    base = states.robots[robot_name]
+    qvel = torch.abs(base.joint_vel)
+    tau  = torch.abs(base.joint_effort_target)
+    return torch.sum(qvel * tau, dim=1)  # matches Unitree's energy()
+
+
+def reward_stand_still_unitree(states, robot_name, cfg) -> torch.Tensor:
+    return reward_stand_still(states, robot_name, cfg)  # uses your implementation
+
+
+def reward_joint_position_penalty(states, robot_name, cfg,
+                                  stand_still_scale: float = 1.0,
+                                  velocity_threshold: float = 0.05) -> torch.Tensor:
+    """
+    Penalize ||q - q_default||; scale it up when the robot is basically standing still
+    (low command AND low base xy-speed), as in Unitree's joint_position_penalty().
+    """
+    base = states.robots[robot_name]
+    q     = base.joint_pos
+    q_ref = cfg.default_joint_pd_target  # shape: (n_dof,) or (1,n_dof) broadcast OK
+    err_l2 = torch.linalg.norm(q - q_ref, dim=1)
+
+    cmd = _cmd_norm(base)
+    body_vel_xy = torch.linalg.norm(base.extra["base_lin_vel"][:, :2], dim=1)  # world XY ok here
+
+    idle = torch.logical_and(cmd <= 0.0, body_vel_xy <= velocity_threshold)
+    return torch.where(idle, stand_still_scale * err_l2, err_l2)
+
+
+# ----------------------------- base orientation -----------------------------
+
+
+
+def reward_orientation_l2(states, robot_name, cfg, desired_gravity=(0.0, 0.0, 1.0)) -> torch.Tensor:
+    """
+    L2-squared kernel on cosine alignment between projected gravity in body frame and desired vector.
+    normalized = 0.5 * cos + 0.5 ; return normalized**2. Matches Unitree's orientation_l2().
+    """
+    base = states.robots[robot_name]
+    g_b = base.extra["projected_gravity"]  # (B,3), gravity dir in base frame
+    desired = torch.as_tensor(desired_gravity, device=g_b.device, dtype=g_b.dtype)
+    cos_dist = torch.sum(g_b * desired, dim=-1)
+    normalized = 0.5 * cos_dist + 0.5
+    return torch.square(normalized)
+
+
+def reward_upward(states, robot_name, cfg) -> torch.Tensor:
+    """
+    Square of (1 - g_b.z) where g_b is gravity projected in base frame.
+    Matches Unitree's upward(). Lower is better when gz->1.
+    """
+    gz = states.robots[robot_name].extra["projected_gravity"][:, 2]
+    return torch.square(1.0 - gz)
+
+
+# ----------------------------- feet rewards -----------------------------
+def reward_feet_stumble(states, robot_name, cfg, xy_over_z_ratio: float = 4.0) -> torch.Tensor:
+    """
+    Penalize \"hitting vertical surfaces\": any foot with ||F_xy|| > k * |F_z|.
+    Unitree uses k=4 (your 'reward_stumble' used 5).
+    """
+    F = states.robots[robot_name].extra["contact_forces"][:, cfg.feet_indices, :]  # (B,2,3)
+    Fz = torch.abs(F[:, :, 2])
+    Fxy = torch.linalg.norm(F[:, :, :2], dim=2)
+    return torch.any(Fxy > xy_over_z_ratio * Fz, dim=1).float()
+
+
+def reward_feet_height_body(states, robot_name, cfg,
+                            target_height: float,
+                            tanh_mult: float = 3.0) -> torch.Tensor:
+    """
+    Swing feet height tracking (body frame) weighted by foot XY speed (body frame),
+    gated by |command|>0.1 and scaled by clamp(-g_b.z, 0, 0.7)/0.7 (per Unitree).
+    """
+    base = states.robots[robot_name]
+    B, Nfeet = base.body_state.shape[0], len(cfg.feet_indices)
+
+    # world positions/velocities
+    foot_pos_w = base.body_state[:, cfg.feet_indices, 0:3]      # (B,2,3)
+    foot_lin_w = base.body_state[:, cfg.feet_indices, 7:10]     # (B,2,3)
+    root_pos_w = base.root_state[:, 0:3].unsqueeze(1)           # (B,1,3)
+    root_quat  = base.root_state[:, 3:7]                        # (B,4) [w,x,y,z]
+
+    # translate to root, then rotate into body frame
+    rel_pos_w = foot_pos_w - root_pos_w
+    pos_b = _quat_rotate_inv(root_quat, rel_pos_w)              # (B,2,3)
+    vel_b = _quat_rotate_inv(root_quat, foot_lin_w)             # (B,2,3)
+
+    foot_z_err2 = torch.square(pos_b[:, :, 2] - target_height)  # (B,2)
+    vel_xy_tanh = torch.tanh(tanh_mult * torch.linalg.norm(vel_b[:, :, :2], dim=2))  # (B,2)
+
+    reward = torch.sum(foot_z_err2 * vel_xy_tanh, dim=1)
+    # gates/scales
+    cmd_gate = (_cmd_norm(base) > 0.1).float()
+    gz = base.extra["projected_gravity"][:, 2]
+    grav_scale = torch.clamp(-gz, 0.0, 0.7) / 0.7
+    return reward * cmd_gate * grav_scale
+
+
+def reward_foot_clearance_exp(states, robot_name, cfg,
+                              std: float = 0.03,
+                              tanh_mult: float = 3.0) -> torch.Tensor:
+    """
+    Exponential swing clearance reward in world frame (Unitree's foot_clearance_reward).
+    """
+    base = states.robots[robot_name]
+    foot_z = base.body_state[:, cfg.feet_indices, 2]
+    foot_v_xy = torch.linalg.norm(base.body_state[:, cfg.feet_indices, 7:10][:, :, :2], dim=2)
+    term = torch.square(foot_z - cfg.reward_cfg.target_feet_height) * torch.tanh(tanh_mult * foot_v_xy)
+    return torch.exp(-torch.sum(term, dim=1) / std)
+
+
+def reward_feet_too_near(states, robot_name, cfg, threshold: float = 0.2) -> torch.Tensor:
+    """
+    (threshold - distance_between_feet).clamp(min=0). Matches Unitree's feet_too_near().
+    """
+    base = states.robots[robot_name]
+    feet_pos = base.body_state[:, cfg.feet_indices, 0:3]  # (B,2,3)
+    dist = torch.linalg.norm(feet_pos[:, 0] - feet_pos[:, 1], dim=-1)
+    return torch.clamp(threshold - dist, min=0.0)
+
+
+def reward_feet_contact_without_cmd(states, robot_name, cfg) -> torch.Tensor:
+    """
+    Sum of foot-contacts when |cmd|<0.1 (\"stand without moving\").
+    """
+    base = states.robots[robot_name]
+    is_contact = (base.extra["contact_forces"][:, cfg.feet_indices, 2] > 0.0)  # bool (B,2)
+    reward = torch.sum(is_contact, dim=1).float()
+    return reward * (_cmd_norm(base) < 0.1).float()
+
+
+def reward_air_time_variance_penalty(states, robot_name, cfg) -> torch.Tensor:
+    """
+    Var(air_time) + Var(contact_time) capped at 0.5s. If contact_time isn't available, use zeros.
+    Mirrors Unitree's air_time_variance_penalty().
+    """
+    base = states.robots[robot_name]
+    air = base.extra.get("feet_air_time", None)        # (B,2)
+    con = base.extra.get("feet_contact_time", None)    # (B,2) optional
+
+    if air is None:
+        return torch.zeros(base.root_state.shape[0], device=base.root_state.device)
+
+    air_c = torch.clamp(air, max=0.5)
+    var_air = torch.var(air_c, dim=1, unbiased=False)
+
+    if con is None:
+        var_con = torch.zeros_like(var_air)
+    else:
+        con_c = torch.clamp(con, max=0.5)
+        var_con = torch.var(con_c, dim=1, unbiased=False)
+
+    return var_air + var_con
+
+
+# ----------------------------- gait reward -----------------------------
+def reward_feet_gait(states, robot_name, cfg, gate_with_command: bool = False) -> torch.Tensor:
+    """
+    Compare desired stance (from leg phase = (global_phase + offset) % 1) to actual contact.
+    If per-leg phase already exists at states.extra['leg_phase'] (shape BxNfeet), we use it.
+    Otherwise we synthesize phases from a global phase in states.extra['global_phase'] if present.
+    Mirrors Unitree's feet_gait() behavior.
+    """
+    base = states.robots[robot_name]
+    contact = (base.extra["contact_forces"][:, cfg.feet_indices, 2] > 0.0)  # (B,2) bool
+    B = contact.shape[0]
+
+    is_stance = states.robots[robot_name].extra["gait_phase"]
+    # XNOR: reward +1 when desired stance matches contact
+    xnor = ~(is_stance ^ contact)
+    rew = torch.sum(xnor, dim=1).float()
+
+    if gate_with_command:
+        rew *= (_cmd_norm(base) > 0.1).float()
+    return rew
+
+
+# ----------------------------- other rewards -----------------------------
+def reward_joint_mirror(states, robot_name, cfg, mirror_joints) -> torch.Tensor:
+    """
+    Sum of squared joint position differences for mirror pairs.
+    `mirror_joints` can be:
+      - a list of (left_indices, right_indices) integer pairs, or
+      - a list of (\"left_name\", \"right_name\") where cfg.joint_name_to_index maps names->idx.
+    Matches Unitree's joint_mirror().
+    """
+    base = states.robots[robot_name]
+    q = base.joint_pos  # (B, ndof)
+
+    # resolve names to indices if needed
+    resolved = []
+    for a, b in mirror_joints:
+        if isinstance(a, str):
+            a_idx = cfg.joint_name_to_index[a]
+            b_idx = cfg.joint_name_to_index[b]
+        else:
+            a_idx, b_idx = a, b
+        resolved.append((a_idx, b_idx))
+
+    if len(resolved) == 0:
+        return torch.zeros(q.shape[0], device=q.device)
+
+    total = torch.zeros(q.shape[0], device=q.device)
+    for a_idx, b_idx in resolved:
+        total += torch.sum(torch.square(q[:, a_idx] - q[:, b_idx]), dim=-1)
+
+    return total * (1.0 / len(resolved))
