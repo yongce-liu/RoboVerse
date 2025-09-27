@@ -5,7 +5,7 @@ Train and deploy locomotion policies for Unitree robots across three stages:
 - Sim2Sim evaluation in MuJoCo
 - Real-world deployment (networked controller)
 
-Well Supported robots: `g1_dex3` (full-body with dexterous hands), `g1_dof29` (full-body without hands)  and `g1_dof12` (12-DoF legs).
+Well Supported robots: `g1_dof29_dex3` (full-body with dexterous hands), `g1_dof29` (full-body without hands)  and `g1_dof12` (12-DoF legs).
 
 Directory: `roboverse_learn/rl/unitree_rl`
 
@@ -40,7 +40,7 @@ python roboverse_learn/rl/unitree_rl/train.py \
 Examples:
 - G1Dex3 humanoid walking (IsaacGym):
 ```
-python roboverse_learn/rl/unitree_rl/train.py --task humanoid_walking --sim isaacgym --num_envs 8192 --robot g1_dex3 --run_name g1dex3_walk
+python roboverse_learn/rl/unitree_rl/train.py --task humanoid_walking --sim isaacgym --num_envs 8192 --robot g1_dof29_dex3 --run_name g1dex3_walk
 ```
 - G1Dof12 walking (IsaacGym):
 ```
@@ -63,7 +63,7 @@ python roboverse_learn/rl/unitree_rl/play.py \
   --task humanoid_walking \
   --sim isaacgym \
   --num_envs 1 \
-  --robot g1_dex3 \
+  --robot g1_dof29_dex3 \
   --load_run <datetime_from_outputs> \
   --checkpoint <iter>
 ```
@@ -106,7 +106,7 @@ python roboverse_learn/rl/unitree_rl/deploy/deploy_real.py <network_interface> <
 ```
 Example:
 ```
-python roboverse_learn/rl/unitree_rl/deploy/deploy_real.py eno1 g1_dex3.yaml
+python roboverse_learn/rl/unitree_rl/deploy/deploy_real.py eno1 g1_dof29_dex3.yaml
 ```
 where you should modify the corresponding `yaml` file in `roboverse_learn/rl/unitree_rl/deploy/configs`, setting the `policy_path` to the exported jit policy.
 This will initialize the real controller and stream commands to the robot. Ensure your networking and safety interlocks are correctly configured.
@@ -115,7 +115,7 @@ This will initialize the real controller and stream commands to the robot. Ensur
 
 The most relevant flags (see `helper/utils.py`):
 - `--task` (str): Task name. CamelCase or snake_case accepted. Examples: `humanoid_walking`, `dof12_walking`.
-- `--robot` (str): Robot identifier. Common: `g1_dex3`, `g1_dof12`.
+- `--robot` (str): Robot identifier. Common: `g1_dof29_dex3`, `g1_dof12`.
 - `--num_envs` (int): Number of parallel environments.
 - `--sim` (str): Simulator. Supported: `isaacgym` (training), `mujoco` (evaluation).
 - `--run_name` (str): Required run tag for training logs/checkpoints.

@@ -570,7 +570,7 @@ class MujocoHandler(BaseSimHandler):
         try:
             states_flat = [state["objects"] | state["robots"] for state in states]
         except:
-            # ToFix: for g1_dex3, objects are empty
+            # ToFix: for g1_dof29_dex3, objects are empty
             states_flat = [state["robots"] for state in states]
 
         states_flat = [{**state["objects"], **state["robots"]} for state in states]

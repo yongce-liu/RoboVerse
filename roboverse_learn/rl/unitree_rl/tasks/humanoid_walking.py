@@ -45,59 +45,7 @@ class HumanoidWalkingCfg(BaseLeggedTaskCfg):
         {
             "objects": {},
             "robots": {
-                "h1_wrist": {
-                    "pos": torch.tensor([0.0, 0.0, 1.0]),
-                    "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
-                    "dof_pos": {
-                        "left_hip_yaw": 0.0,
-                        "left_hip_roll": 0.0,
-                        "left_hip_pitch": -0.4,
-                        "left_knee": 0.8,
-                        "left_ankle": -0.4,
-                        "right_hip_yaw": 0.0,
-                        "right_hip_roll": 0.0,
-                        "right_hip_pitch": -0.4,
-                        "right_knee": 0.8,
-                        "right_ankle": -0.4,
-                        "torso": 0.0,
-                        "left_shoulder_pitch": 0.0,
-                        "left_shoulder_roll": 0.0,
-                        "left_shoulder_yaw": 0.0,
-                        "left_elbow": 0.0,
-                        "right_shoulder_pitch": 0.0,
-                        "right_shoulder_roll": 0.0,
-                        "right_shoulder_yaw": 0.0,
-                        "right_elbow": 0.0,
-                    },
-                },
-                "g1": {
-                    "pos": torch.tensor([0.0, 0.0, 0.735]),
-                    "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
-                    "dof_pos": {
-                        "left_hip_pitch": -0.4,
-                        "left_hip_roll": 0,
-                        "left_hip_yaw": 0.0,
-                        "left_knee": 0.8,
-                        "left_ankle_pitch": -0.4,
-                        "left_ankle_roll": 0,
-                        "right_hip_pitch": -0.4,
-                        "right_hip_roll": 0,
-                        "right_hip_yaw": 0.0,
-                        "right_knee": 0.8,
-                        "right_ankle_pitch": -0.4,
-                        "right_ankle_roll": 0,
-                        "waist_yaw": 0.0,
-                        "left_shoulder_pitch": 0.0,
-                        "left_shoulder_roll": 0.0,
-                        "left_shoulder_yaw": 0.0,
-                        "left_elbow": 0.0,
-                        "right_shoulder_pitch": 0.0,
-                        "right_shoulder_roll": 0.0,
-                        "right_shoulder_yaw": 0.0,
-                        "right_elbow": 0.0,
-                    },
-                },
-                "g1_dex3": {
+                "g1_dof29_dex3": {
                     "pos": torch.tensor([0.0, 0.0, 0.76]),
                     "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
                     "dof_pos": {
@@ -162,51 +110,35 @@ class HumanoidWalkingCfg(BaseLeggedTaskCfg):
     reward_cfg = BaseLeggedTaskCfg.RewardCfg(base_height_target=0.80, tracking_sigma=1 / 0.2, max_contact_force=700)
 
     reward_weights: dict[str, float] = {
-        "termination": -0.0,
-        "ang_vel_xy": -0.2,  # Increased penalty for xy angular velocity to reduce waist waving
-        "base_height": 0.2,
-        "lin_vel_z": -2.0,
-        # "feet_swing_height": -20.0,
-        "feet_air_time": 0.0,
-        "orientation_sq": -1.0,
-        "base_height_sq": -5.0,
-        "collision": -1.0,
-        "feet_stumble": -0.0,
-        "stand_still": -0.0,
-        "joint_pos": 1.6,
-        "feet_clearance": 2.0,
-        "feet_contact_number": 2.4,
-        # gait
-        "foot_slip": -0.05,
-        "feet_distance": 0.3,
-        "knee_distance": 0.2,
-        # contact
-        "feet_contact_forces": -0.05,
-        "contact": 0.18,
-        # vel tracking
-        "tracking_lin_vel": 6.0,
-        "tracking_ang_vel": 3.0,
-        "vel_mismatch_exp": 0.5,
-        "low_speed": 0.2,
-        "track_vel_hard": 1.0,
-        # base pos
-        "default_joint_pos": 1.0,
-        "contact_no_vel": -0.2,
-        "upper_body_pos": 1.0,  # Increased to keep upper body more stable
-        "orientation": 1.0,
-        "base_acc": 0.4,  # Increased penalty for base acceleration to reduce jerkiness
-        "waist_joint_stability": 10.0,  # New reward for waist joint stability
-        "hip_upright_axis": 6.0,  # NEW: Reward for keeping hip axis pointing upward
-        # energy
-        "action_smoothness": -0.08,  # Increased penalty for jerky actions
-        "torques": -1e-5,
-        "dof_vel": -1e-3,
-        "dof_acc": -2e-6,  # Increased penalty for joint accelerations
-        "torque_limits": -0.001,
-        "hip_pos": -1.0,
-        "dof_pos_limits": -5,
-        # optional
-        "action_rate": -0.015,  # Increased penalty for action rate changes
+        # task tracking (mapped to your existing tracking funcs)
+        "tracking_lin_vel": 1.0,      # from track_lin_vel_xy_yaw_frame_exp
+        "tracking_ang_vel": 0.5,      # from track_ang_vel_z_exp
+        "alive": 0.15,                # is_alive
+
+        # base dynamics / effort
+        "lin_vel_z": -2.0,            # lin_vel_z_l2
+        "ang_vel_xy": -0.05,          # ang_vel_xy_l2
+        "dof_vel": -0.001,            # joint_vel_l2
+        "dof_acc": -2.5e-7,           # joint_acc_l2
+        "action_rate": -0.05,         # action_rate_l2
+        "dof_pos_limits": -5.0,       # joint_pos_limits
+        "energy": -2e-5,              # energy
+
+        # stability
+        # "hip_upright_axis": 5.0,
+        "waist_joint_stability": 2.0,  # waist_joint_stability
+
+        # robot posture
+        "orientation_l2": -5.0,       # flat_orientation_l2 -> orientation_l2 (your func name)
+        "base_height_sq": -10.0,      # base_height_l2 -> base_height_sq (your L2 version)
+
+        # feet / gait
+        "feet_gait": 0.5,             # feet_gait
+        "foot_slip": -0.2,            # feet_slide -> foot_slip (your equivalent)
+        "foot_clearance_exp": 1.0,    # foot_clearance_reward -> foot_clearance_exp (your port)
+
+        # other contacts
+        "collision": -1.0,            # undesired_contacts -> collision (your penalised contacts)
     }
 
     def __post_init__(self):
