@@ -20,12 +20,13 @@ from metasim.queries.base import BaseQueryType
 from metasim.utils.math import quat_apply, quat_rotate_inverse, wrap_to_pi
 from metasim.utils.state import TensorState
 from metasim.task.base import BaseTaskEnv
-from roboverse_learn.rl.rsl_rl.rsl_rl_wrapper import RslRlWrapper
+from rsl_rl.env import VecEnv
 from roboverse_learn.rl.unitree_rl.configs.base_legged import BaseLeggedTaskCfg
 from roboverse_learn.rl.unitree_rl.helper.utils import get_body_reindexed_indices_from_substring, torch_rand_float
 from metasim.constants import SimType
+from metasim.utils.state import list_state_to_tensor
 
-class LeggedRobot(RslRlWrapper):
+class LeggedRobot(BaseTaskEnv, VecEnv):
     """
     This env define the legged robot base env,
     which canbe put into the RslRlWrapper to be used in the RL training.
@@ -38,10 +39,45 @@ class LeggedRobot(RslRlWrapper):
     def __init__(self, scenario: ScenarioCfg):
         super().__init__(scenario)
         self._parse_cfg(scenario)
+        self._get_init_states(scenario)
         self._parse_rigid_body_indices(self.cfg.robots[0])
         self._parse_joint_cfg(self.cfg)
         self._prepare_reward_function(self.cfg)
         self._init_buffers()
+
+    def _get_init_states(self, scenario):
+        """ Get initial states from the scenario configuration."""
+
+        init_states_list = getattr(self.cfg, 'init_states', None)
+        if init_states_list is None:
+            raise AttributeError(f"'task cfg' has no attribute 'init_states', please add it in your scenario config!")
+        init_states_list = [{
+            "objects": {key: es["objects"][key] for key in es["objects"] if key in self.object_names},
+            "robots": {key: es["robots"][key] for key in es["robots"] if key in self.robot_names}}
+                            for es in init_states_list]
+        if len(init_states_list) < self.num_envs:
+            init_states_list = (
+                init_states_list * (self.num_envs // len(init_states_list))
+                + init_states_list[: self.num_envs % len(init_states_list)]
+            )
+        else:
+            init_states_list = init_states_list[: self.num_envs]
+
+        self.init_states = init_states_list
+
+        if scenario.simulator == SimType.ISAACGYM:
+            #tensorize the initial states as TensorState, now we only support IsaacGym
+            self.init_states = list_state_to_tensor(self.handler, init_states_list, device=self.device)
+
+
+    def get_observations(self):
+        """design from config"""
+        return self.obs_buf
+
+    def get_privileged_observations(self):
+        """design from config"""
+        return self.privileged_obs_buf
+
 
     def reset(self, env_ids=None):
         """
@@ -391,7 +427,12 @@ class LeggedRobot(RslRlWrapper):
 
     # region: Parse configs & Get the necessary parametres
     def _parse_cfg(self, scenario):
-        super()._parse_cfg(scenario)
+        # super()._parse_cfg(scenario)
+        self.scenario = scenario
+        self.robot = scenario.robots[0]
+        self.num_envs = scenario.num_envs
+        self.object_names = sorted({obj.name for obj in scenario.objects})
+        self.robot_names = sorted({robot.name for robot in scenario.robots})
         self.decimation = self.cfg.decimation = scenario.decimation
         self.dt = self.cfg.dt = self.cfg.sim_params.dt
         self.command_ranges = self.cfg.commands.ranges

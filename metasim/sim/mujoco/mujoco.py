@@ -622,7 +622,7 @@ class MujocoHandler(BaseSimHandler):
         for robot_idx, robot in enumerate(self.robots):
             if any((robot_idx, i) in self._effort_controlled_joints for i in range(self._robot_num_dofs[robot_idx])):
                 # effort = self._compute_effort(actions, robot_idx)
-                effort = actions.squeeze(0)
+                effort = actions
                 joint_names = self._get_joint_names(robot.name, sort=True)
                 for i in range(self._robot_num_dofs[robot_idx]):
                     if (robot_idx, i) in self._effort_controlled_joints:
