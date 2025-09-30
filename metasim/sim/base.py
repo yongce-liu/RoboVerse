@@ -30,7 +30,7 @@ class BaseSimHandler(ABC):
         self.objects = scenario.objects
         self.lights = scenario.lights if hasattr(scenario, "lights") else []
         self._num_envs = scenario.num_envs
-        # self.decimation = scenario.decimation
+        self.decimation = scenario.decimation
         self.headless = scenario.headless
         self.object_dict = {obj.name: obj for obj in self.objects + self.robots}
         self._state_cache_expire = True
