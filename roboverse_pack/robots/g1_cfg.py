@@ -310,6 +310,27 @@ class G1Dof29Cfg(G1Dof27Cfg):
         "waist_pitch_joint": "effort",
     }
 
+    def __post_init__(self):
+        self.cameras: list = [
+            PinholeCameraCfg(
+                name="front_cam",
+                data_types=["rgb"],
+                height=480,
+                width=640,
+                focal_length=7.6,
+                focus_distance=400.0,
+                horizontal_aperture=20.0,
+                clipping_range=(0.1, 1.0e5),
+                mount_to=self.name,
+                mount_link="d435_link",
+                mount_pos=(0, 0.0, 0),
+                # mount_quat=(0.5, -0.5, 0.5, -0.5), # ros convention
+                mount_quat=(1, 0, 0, 0),  # world convention
+                # update_period: float = 0.02,
+            )
+        ]
+        return super().__post_init__()
+
 
 @configclass
 class G1Dof29Dex3Cfg(G1Dof29Cfg):
