@@ -188,7 +188,7 @@ class MujocoHandler(BaseSimHandler):
             log.info(f"Loaded scene from: {self.scenario.scene.mjcf_path}")
         else:
             mjcf_model = mjcf.RootElement()
-            self._add_default_ground(mjcf_model)
+            self.hfield_name, self.hfield_measure = self._add_ground(mjcf_model=mjcf_model, if_random=False)
 
         if self.scenario.sim_params.dt is not None:
             mjcf_model.option.timestep = self.scenario.sim_params.dt
