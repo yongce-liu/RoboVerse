@@ -13,8 +13,7 @@ from metasim.queries.base import BaseQueryType
 from metasim.utils.tensor_util import torch_rand_float
 from metasim.utils import configclass
 
-from roboverse_learn.rl.unitree_rl.configs import ContactForces, GroundCfg
-
+from roboverse_learn.rl.unitree_rl.configs import LidarPointCloud, ContactForces, GroundCfg
 
 # Training Config
 @configclass
@@ -431,7 +430,7 @@ class BaseLeggedTaskCfg:
         }
     ]
     """Initial states for the environment. Only used for legged robots, e.g., go2-12dof, g1-12dof, h1-12dof."""
-    extra_spec: dict[str, BaseQueryType] = {"contact_forces": ContactForces()}
+    extra_spec: dict[str, BaseQueryType] = {"contact_forces": ContactForces(), "lidar_pointcloud": LidarPointCloud(enabled=False)}
 
 
     def __post_init__(self):

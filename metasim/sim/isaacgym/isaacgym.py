@@ -1078,6 +1078,8 @@ class IsaacgymHandler(BaseSimHandler):
             )  # add terrain to sim
             height_measure = tg.height_measure  ## get the actual height of each grid
             horizontal_scale = tg.horizontal_scale
+            self._ground_mesh_vertices = vertices
+            self._ground_mesh_triangles = triangles
         else:
             plane_params = gymapi.PlaneParams()
             plane_params.normal = gymapi.Vec3(0, 0, 1)
@@ -1089,6 +1091,34 @@ class IsaacgymHandler(BaseSimHandler):
             plane_params.restitution = 0.0
             self.gym.add_ground(self.sim, plane_params)
             height_measure, horizontal_scale = None, None
+
+            # Generate a flat grid mesh for Warp registration based on env grid layout.
+            step = float(self.scenario.env_spacing)
+            num_per_row = math.sqrt(self.num_envs) if self.num_envs > 0 else 1
+            num_rows = math.ceil(self.num_envs / max(num_per_row, 1)) if self.num_envs > 0 else 1
+            width = max(1, num_per_row) * step
+            height = max(1, num_rows) * step
+            hw, hh = width * 0.5, height * 0.5
+
+            # 4 corner vertices (x, y, z=0)
+            self._ground_mesh_vertices = np.array(
+                [
+                    [-hw, -hh, 0.0],  # 0
+                    [hw, -hh, 0.0],  # 1
+                    [-hw, hh, 0.0],  # 2
+                    [hw, hh, 0.0],  # 3
+                ],
+                dtype=np.float32,
+            )
+
+            # two triangles covering the quad (CCW winding, normal +Z)
+            self._ground_mesh_triangles = np.array(
+                [
+                    [0, 2, 1],
+                    [1, 2, 3],
+                ],
+                dtype=np.int32,
+            )
         return (height_measure, horizontal_scale)
 
     @property

@@ -88,73 +88,6 @@ class ContactForces(BaseQueryType):
         return {self.robots[0].name: self.contact_forces.view(self.num_envs, -1, 3)[:, self.body_ids_reindex, :]}
 
 
-class LidarLinkPose(BaseQueryType):
-    """Optional query to fetch the pose of a LiDAR link (e.g., Livox Mid-360) per env.
-
-    This provides a lightweight, zero-dependency way to expose LiDAR mounting pose
-    so downstream code can attach external LiDAR simulation or consume the pose directly.
-
-    Returned quaternion format is (w, x, y, z), consistent with Metasim math utils.
-    """
-
-    def __init__(
-        self,
-        link_name: str = "mid360_link",
-        apply_optical_center_offset: bool = True,
-        optical_center_offset_z: float = 0.03503,  # meters (per Livox Mid-360 datasheet)
-        enabled: bool = False,
-    ):
-        super().__init__()
-        self.link_name = link_name
-        self.apply_optical_center_offset = apply_optical_center_offset
-        self.optical_center_offset_z = optical_center_offset_z
-        self.enabled = enabled
-
-    def bind_handler(self, handler: BaseSimHandler, *args, **kwargs):
-        super().bind_handler(handler, *args, **kwargs)
-        self.simulator = handler.scenario.simulator
-        self.num_envs = handler.scenario.num_envs
-        self.robots = handler.robots
-        # Defer initialization until first call to support generic access through handler.get_states()
-
-    def __call__(self):
-        # If disabled, return empty payload to avoid breaking downstream consumers
-        if not self.enabled:
-            return {self.robots[0].name: {"pos": None, "quat": None, "link": self.link_name}}
-
-        # Use generic state API so this works across IsaacGym/MuJoCo/IsaacSim handlers
-        states = self.handler.get_states()
-        robot_name = self.robots[0].name
-        if robot_name not in states.robots:
-            raise KeyError(f"Robot '{robot_name}' not found in states")
-
-        robot_state = states.robots[robot_name]
-        if robot_state.body_state is None or robot_state.body_names is None:
-            raise RuntimeError("Robot body states are not available from the handler.")
-
-        try:
-            link_idx = robot_state.body_names.index(self.link_name)
-        except ValueError:
-            raise ValueError(
-                f"Link '{self.link_name}' is not present in robot body names: {robot_state.body_names}"
-            )
-
-        # body_state shape: (num_envs, n_bodies, 13) with rot reordered to (w,x,y,z)
-        link_states = robot_state.body_state[:, link_idx, :]
-        pos = link_states[:, 0:3]
-        quat_wxyz = link_states[:, 3:7]
-
-        if self.apply_optical_center_offset and self.optical_center_offset_z != 0.0:
-            # Apply local +Z offset (optical center above mounting base) to world frame
-            local_offset = torch.tensor([0.0, 0.0, self.optical_center_offset_z], device=pos.device).view(1, 3)
-            local_offset = local_offset.repeat(pos.shape[0], 1)
-            # quat_apply expects (w,x,y,z)
-            world_offset = quat_apply(quat_wxyz, local_offset)
-            pos = pos + world_offset
-
-        return {robot_name: {"pos": pos, "quat": quat_wxyz, "link": self.link_name}}
-
-
 class LidarPointCloud(BaseQueryType):
     """Optional query that produces a LiDAR point cloud using LidarSensor + Warp.
 
@@ -183,10 +116,11 @@ class LidarPointCloud(BaseQueryType):
     def bind_handler(self, handler: BaseSimHandler, *args, **kwargs):
         super().bind_handler(handler, *args, **kwargs)
         self.simulator = handler.scenario.simulator
+        self.handler = handler
         self.num_envs = handler.scenario.num_envs
         self.robots = handler.robots
         self.device = handler.device
-        self._initialized = False
+        self._init_backend()
 
     def _init_backend(self):
         try:
@@ -223,13 +157,14 @@ class LidarPointCloud(BaseQueryType):
         translation = self.trimesh.transformations.translation_matrix(np.array([-border, -border, 0.0]))
         terrain_mesh.apply_transform(translation)
 
-        vertices = terrain_mesh.vertices.astype(np.float32)
-        triangles = terrain_mesh.faces.astype(np.int32)
+        vertices = self.handler._ground_mesh_vertices
+
+        triangles = self.handler._ground_mesh_triangles
 
         import torch
 
         vertex_tensor = torch.tensor(vertices, device=self.device, dtype=torch.float32)
-        faces_wp_int32_array = self.wp.from_numpy(triangles.reshape(-1), dtype=self.wp.int32, device=self.device)
+        faces_wp_int32_array = self.wp.from_numpy(triangles.reshape(-1), dtype=self.wp.int32)
         vertex_vec3_array = self.wp.from_torch(vertex_tensor, dtype=self.wp.vec3)
         self.wp_mesh = self.wp.Mesh(points=vertex_vec3_array, indices=faces_wp_int32_array)
         self.mesh_ids = self.wp.array([self.wp_mesh.id], dtype=self.wp.uint64)
@@ -261,7 +196,6 @@ class LidarPointCloud(BaseQueryType):
 
         self.sensor = self.LidarSensor(self.warp_tensor_dict, None, self.sensor_cfg, 1, self.device)
         self._backend_ready = True
-        self._initialized = True
 
     def __call__(self):
         import torch
@@ -269,10 +203,6 @@ class LidarPointCloud(BaseQueryType):
         if not self.enabled:
             return {self.robots[0].name: None}
 
-        if not getattr(self, "_initialized", False):
-            self._init_backend()
-            if not getattr(self, "_backend_ready", False):
-                return {self.robots[0].name: None}
 
         # Fetch current sensor pose from handler states
         states = self.handler.get_states()
@@ -332,5 +262,4 @@ class LidarPointCloud(BaseQueryType):
 class SensorsCfg:
     contact_forces: ContactForces = ContactForces()
     # Disabled by default to avoid extra overhead/missing-link issues unless explicitly enabled by user
-    lidar_link_pose: LidarLinkPose = LidarLinkPose(enabled=False)
     lidar_pointcloud: LidarPointCloud = LidarPointCloud(enabled=False)
