@@ -5,7 +5,9 @@ import torch
 
 from metasim.sim.base import BaseSimHandler, BaseQueryType
 from metasim.utils import configclass
+from metasim.utils.math import quat_apply
 import numpy as np
+import warnings
 
 try:
     import isaacgym  # noqa: F401
@@ -85,6 +87,250 @@ class ContactForces(BaseQueryType):
             raise NotImplementedError
         return {self.robots[0].name: self.contact_forces.view(self.num_envs, -1, 3)[:, self.body_ids_reindex, :]}
 
+
+class LidarLinkPose(BaseQueryType):
+    """Optional query to fetch the pose of a LiDAR link (e.g., Livox Mid-360) per env.
+
+    This provides a lightweight, zero-dependency way to expose LiDAR mounting pose
+    so downstream code can attach external LiDAR simulation or consume the pose directly.
+
+    Returned quaternion format is (w, x, y, z), consistent with Metasim math utils.
+    """
+
+    def __init__(
+        self,
+        link_name: str = "mid360_link",
+        apply_optical_center_offset: bool = True,
+        optical_center_offset_z: float = 0.03503,  # meters (per Livox Mid-360 datasheet)
+        enabled: bool = False,
+    ):
+        super().__init__()
+        self.link_name = link_name
+        self.apply_optical_center_offset = apply_optical_center_offset
+        self.optical_center_offset_z = optical_center_offset_z
+        self.enabled = enabled
+
+    def bind_handler(self, handler: BaseSimHandler, *args, **kwargs):
+        super().bind_handler(handler, *args, **kwargs)
+        self.simulator = handler.scenario.simulator
+        self.num_envs = handler.scenario.num_envs
+        self.robots = handler.robots
+        # Defer initialization until first call to support generic access through handler.get_states()
+
+    def __call__(self):
+        # If disabled, return empty payload to avoid breaking downstream consumers
+        if not self.enabled:
+            return {self.robots[0].name: {"pos": None, "quat": None, "link": self.link_name}}
+
+        # Use generic state API so this works across IsaacGym/MuJoCo/IsaacSim handlers
+        states = self.handler.get_states()
+        robot_name = self.robots[0].name
+        if robot_name not in states.robots:
+            raise KeyError(f"Robot '{robot_name}' not found in states")
+
+        robot_state = states.robots[robot_name]
+        if robot_state.body_state is None or robot_state.body_names is None:
+            raise RuntimeError("Robot body states are not available from the handler.")
+
+        try:
+            link_idx = robot_state.body_names.index(self.link_name)
+        except ValueError:
+            raise ValueError(
+                f"Link '{self.link_name}' is not present in robot body names: {robot_state.body_names}"
+            )
+
+        # body_state shape: (num_envs, n_bodies, 13) with rot reordered to (w,x,y,z)
+        link_states = robot_state.body_state[:, link_idx, :]
+        pos = link_states[:, 0:3]
+        quat_wxyz = link_states[:, 3:7]
+
+        if self.apply_optical_center_offset and self.optical_center_offset_z != 0.0:
+            # Apply local +Z offset (optical center above mounting base) to world frame
+            local_offset = torch.tensor([0.0, 0.0, self.optical_center_offset_z], device=pos.device).view(1, 3)
+            local_offset = local_offset.repeat(pos.shape[0], 1)
+            # quat_apply expects (w,x,y,z)
+            world_offset = quat_apply(quat_wxyz, local_offset)
+            pos = pos + world_offset
+
+        return {robot_name: {"pos": pos, "quat": quat_wxyz, "link": self.link_name}}
+
+
+class LidarPointCloud(BaseQueryType):
+    """Optional query that produces a LiDAR point cloud using LidarSensor + Warp.
+
+    Notes
+    - Supports IsaacGym and MuJoCo via common state interface; raycasting is done against a generated terrain mesh.
+    - Robot self-geometry is not included in the mesh to keep this query generic and lightweight.
+    - Requires packages: LidarSensor, warp, trimesh. If unavailable, returns None payload when enabled.
+    - Quaternions: handler states use (w,x,y,z). LidarSensor expects (x,y,z,w). Conversion is handled internally.
+    """
+
+    def __init__(
+        self,
+        link_name: str = "mid360_link",
+        sensor_type: str = "mid360",
+        apply_optical_center_offset: bool = True,
+        optical_center_offset_z: float = 0.03503,
+        enabled: bool = False,
+    ):
+        super().__init__()
+        self.link_name = link_name
+        self.sensor_type = sensor_type
+        self.apply_optical_center_offset = apply_optical_center_offset
+        self.optical_center_offset_z = optical_center_offset_z
+        self.enabled = enabled
+
+    def bind_handler(self, handler: BaseSimHandler, *args, **kwargs):
+        super().bind_handler(handler, *args, **kwargs)
+        self.simulator = handler.scenario.simulator
+        self.num_envs = handler.scenario.num_envs
+        self.robots = handler.robots
+        self.device = handler.device
+        self._initialized = False
+
+    def _init_backend(self):
+        try:
+            import warp as wp  # type: ignore
+            import trimesh  # type: ignore
+            from LidarSensor.lidar_sensor import LidarSensor  # type: ignore
+            from LidarSensor.sensor_config.lidar_sensor_config import LidarConfig  # type: ignore
+            from LidarSensor.example.isaacgym.utils.terrain.terrain import Terrain  # type: ignore
+            from LidarSensor.example.isaacgym.utils.terrain.terrain_cfg import Terrain_cfg  # type: ignore
+        except Exception as e:
+            warnings.warn(f"LidarPointCloud init failed due to missing deps: {e}")
+            self._backend_ready = False
+            return
+
+        self.wp = wp
+        self.trimesh = trimesh
+        self.LidarSensor = LidarSensor
+        self.LidarConfig = LidarConfig
+        self.Terrain = Terrain
+        self.Terrain_cfg = Terrain_cfg
+
+        try:
+            self.wp.init()
+        except Exception:
+            # wp.init() may be already called; ignore
+            pass
+
+        # Build terrain mesh once
+        self.terrain_cfg = self.Terrain_cfg()
+        self.terrain = self.Terrain(self.terrain_cfg, self.num_envs)
+        terrain_mesh = self.trimesh.Trimesh(vertices=self.terrain.vertices, faces=self.terrain.triangles)
+        # translate so (0,0) aligns to sim origin similar to example
+        border = float(getattr(self.terrain_cfg, "border_size", 0.0))
+        translation = self.trimesh.transformations.translation_matrix(np.array([-border, -border, 0.0]))
+        terrain_mesh.apply_transform(translation)
+
+        vertices = terrain_mesh.vertices.astype(np.float32)
+        triangles = terrain_mesh.faces.astype(np.int32)
+
+        import torch
+
+        vertex_tensor = torch.tensor(vertices, device=self.device, dtype=torch.float32)
+        faces_wp_int32_array = self.wp.from_numpy(triangles.reshape(-1), dtype=self.wp.int32, device=self.device)
+        vertex_vec3_array = self.wp.from_torch(vertex_tensor, dtype=self.wp.vec3)
+        self.wp_mesh = self.wp.Mesh(points=vertex_vec3_array, indices=faces_wp_int32_array)
+        self.mesh_ids = self.wp.array([self.wp_mesh.id], dtype=self.wp.uint64)
+
+        # Prepare sensor config and buffers
+        self.sensor_cfg = self.LidarConfig()
+        self.sensor_cfg.sensor_type = self.sensor_type
+
+        num_envs = self.num_envs
+        num_sensors = int(getattr(self.sensor_cfg, "num_sensors", 1))
+        v_lines = int(getattr(self.sensor_cfg, "vertical_line_num", 128))
+        h_lines = int(getattr(self.sensor_cfg, "horizontal_line_num", 512))
+
+        self.lidar_tensor = torch.zeros((num_envs, num_sensors, v_lines, h_lines, 3), device=self.device)
+        self.sensor_dist_tensor = torch.zeros((num_envs, num_sensors, v_lines, h_lines), device=self.device)
+        self.sensor_pos_tensor = torch.zeros((num_envs, 3), device=self.device)
+        # LidarSensor expects XYZW ordering
+        self.sensor_quat_tensor_xyzw = torch.zeros((num_envs, 4), device=self.device)
+
+        self.warp_tensor_dict = {
+            "sensor_dist_tensor": self.sensor_dist_tensor,
+            "device": str(self.device),
+            "num_envs": num_envs,
+            "num_sensors": num_sensors,
+            "sensor_pos_tensor": self.sensor_pos_tensor,
+            "sensor_quat_tensor": self.sensor_quat_tensor_xyzw,
+            "mesh_ids": self.mesh_ids,
+        }
+
+        self.sensor = self.LidarSensor(self.warp_tensor_dict, None, self.sensor_cfg, 1, self.device)
+        self._backend_ready = True
+        self._initialized = True
+
+    def __call__(self):
+        import torch
+
+        if not self.enabled:
+            return {self.robots[0].name: None}
+
+        if not getattr(self, "_initialized", False):
+            self._init_backend()
+            if not getattr(self, "_backend_ready", False):
+                return {self.robots[0].name: None}
+
+        # Fetch current sensor pose from handler states
+        states = self.handler.get_states()
+        robot_name = self.robots[0].name
+        robot_state = states.robots[robot_name]
+        if robot_state.body_state is None or robot_state.body_names is None:
+            return {robot_name: None}
+
+        try:
+            link_idx = robot_state.body_names.index(self.link_name)
+        except ValueError:
+            warnings.warn(f"LidarPointCloud: link '{self.link_name}' not found. Available: {robot_state.body_names}")
+            return {robot_name: None}
+
+        link_states = robot_state.body_state[:, link_idx, :]
+        pos_w = link_states[:, 0:3]
+        quat_wxyz = link_states[:, 3:7]
+
+        if self.apply_optical_center_offset and self.optical_center_offset_z != 0.0:
+            offset_local = torch.tensor([0.0, 0.0, self.optical_center_offset_z], device=pos_w.device).view(1, 3)
+            offset_local = offset_local.repeat(pos_w.shape[0], 1)
+            pos_w = pos_w + quat_apply(quat_wxyz, offset_local)
+
+        # Update sensor pose buffers
+        self.sensor_pos_tensor[:, :] = pos_w
+        # Convert to XYZW for LidarSensor
+        self.sensor_quat_tensor_xyzw[:, 0] = quat_wxyz[:, 1]
+        self.sensor_quat_tensor_xyzw[:, 1] = quat_wxyz[:, 2]
+        self.sensor_quat_tensor_xyzw[:, 2] = quat_wxyz[:, 3]
+        self.sensor_quat_tensor_xyzw[:, 3] = quat_wxyz[:, 0]
+
+        # Run LiDAR update
+        lidar_tensor_local, dist_tensor = self.sensor.update()
+
+        # Compute world coordinates from local points
+        # lidar_tensor_local: (E, S, V, H, 3)
+        E, S, V, H, _ = lidar_tensor_local.shape
+        pts_local = lidar_tensor_local.view(E, -1, 3)
+        # Expand pose to match points
+        quat_rep = quat_wxyz.unsqueeze(1).repeat(1, pts_local.shape[1], 1).view(-1, 4)
+        vec = pts_local.view(-1, 3)
+        rot = quat_apply(quat_rep, vec).view(E, -1, 3)
+        pos_rep = pos_w.unsqueeze(1).repeat(1, pts_local.shape[1], 1)
+        pts_world = rot + pos_rep
+        pts_world = pts_world.view(E, S, V, H, 3)
+
+        return {
+            robot_name: {
+                "points_local": lidar_tensor_local,
+                "points_world": pts_world,
+                "dist": dist_tensor,
+                "link": self.link_name,
+            }
+        }
+
 @configclass
 class SensorsCfg:
     contact_forces: ContactForces = ContactForces()
+    # Disabled by default to avoid extra overhead/missing-link issues unless explicitly enabled by user
+    lidar_link_pose: LidarLinkPose = LidarLinkPose(enabled=False)
+    lidar_pointcloud: LidarPointCloud = LidarPointCloud(enabled=False)
