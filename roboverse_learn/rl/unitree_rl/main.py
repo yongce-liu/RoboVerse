@@ -52,7 +52,7 @@ def prepare(args):
          for camera in robot.cameras],
         num_envs=args.num_envs,
         simulator=args.sim,
-        renderer=args.sim,
+        # renderer=args.sim,
         headless=args.headless,
         env_spacing=env_spacing,
         sim_params=sim_params,
