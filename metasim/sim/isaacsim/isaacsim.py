@@ -175,7 +175,8 @@ class IsaacsimHandler(BaseSimHandler):
         for sensor in self.scene.sensors.values():
             sensor.update(dt=0)
 
-        return super().launch()
+        super().launch()
+        self.sim.reset()  # crucial for calling _initialize_callbacks in binded sensors
 
     def close(self) -> None:
         log.info("close Isaacsim Handler")

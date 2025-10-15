@@ -223,7 +223,7 @@ class LidarPointCloud(BaseQueryType):
         # Keep params conservative for performance; adjust as needed by caller
         lidar_cfg = LidarSensorCfg(
             prim_path=prim_path,
-            offset=LidarSensorCfg.OffsetCfg(pos=(0.0, 0.0, 0.0), rot=(1.0, 0.0, 0.0, 0.0), convention="world"),
+            offset=LidarSensorCfg.OffsetCfg(pos=(0.0, 0.0, 0.0), rot=(1.0, 0.0, 0.0, 0.0)),
             attach_yaw_only=False,
             ray_alignment="world",
             pattern_cfg=LivoxPatternCfg(sensor_type=self.sensor_type, samples=24000),
@@ -294,9 +294,6 @@ class LidarPointCloud(BaseQueryType):
 
         Returns a dict containing local and world point clouds for the target robot.
         """
-        if not getattr(self, "_backend_ready", False):
-            warnings.warn("LidarPointCloud(isaacsim): Backend not initialized. Returning None.")
-            return {robot_name: None}
 
         # Ensure the sensor produces up-to-date data; if scene already updates it, this is a no-op
         self._isaacsim_lidar.update(dt=0.0)
