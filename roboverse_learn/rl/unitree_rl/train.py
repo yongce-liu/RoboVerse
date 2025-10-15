@@ -50,8 +50,7 @@ def train(args):
         num_envs=args.num_envs,
         simulator=args.sim,
         headless=args.headless,
-        cameras=[camera for robot in robots if hasattr(robot, 'cameras')
-         for camera in robot.cameras],
+        cameras=[],
         decimation=args.decimation,
     )
 
