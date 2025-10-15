@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING
 
 try:
@@ -774,6 +775,12 @@ class MujocoHandler(BaseSimHandler):
             restitution = getattr(self.scenario.random.terrain_cfg, "restitution", 0.0)
 
             height_mat = tg.generate_terrain(self.scenario.random.terrain_cfg, type="heightfield")
+            # Also create a triangular mesh representation for queries (e.g., LiDAR warp raycasts),
+            # consistent with IsaacGym handler's ground mesh exposure.
+            vertices, triangles = tg.generate_terrain(self.scenario.random.terrain_cfg, type="trimesh")
+            # Store mesh for external consumers (e.g., LidarPointCloud)
+            self._ground_mesh_vertices = vertices
+            self._ground_mesh_triangles = triangles.astype(np.int32)
             hfield_name = "terrain"
             mjcf_model.asset.add(
                 "hfield",
@@ -828,6 +835,32 @@ class MujocoHandler(BaseSimHandler):
             )
             hfield_name = None
             hfield_measure = None
+
+            # Expose a simple quad mesh centered at origin, similar to IsaacGym handler.
+            step = float(self.scenario.env_spacing)
+            num_per_row = math.sqrt(1)  # MujocoHandler supports single env
+            num_rows = 1
+            width = max(1, num_per_row) * step
+            height = max(1, num_rows) * step
+            border_offset = 20.0
+            hw, hh = width * 0.5 + border_offset, height * 0.5 + border_offset
+
+            self._ground_mesh_vertices = np.array(
+                [
+                    [-hw, -hh, 0.0],
+                    [hw, -hh, 0.0],
+                    [-hw, hh, 0.0],
+                    [hw, hh, 0.0],
+                ],
+                dtype=np.float32,
+            )
+            self._ground_mesh_triangles = np.array(
+                [
+                    [0, 2, 1],
+                    [1, 2, 3],
+                ],
+                dtype=np.int32,
+            )
         return hfield_name, hfield_measure
 
     ############################################################

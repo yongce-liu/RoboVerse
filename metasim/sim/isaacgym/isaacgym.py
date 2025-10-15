@@ -1098,7 +1098,8 @@ class IsaacgymHandler(BaseSimHandler):
             num_rows = math.ceil(self.num_envs / max(num_per_row, 1)) if self.num_envs > 0 else 1
             width = max(1, num_per_row) * step
             height = max(1, num_rows) * step
-            hw, hh = width * 0.5, height * 0.5
+            border_offset = 20.0  # extend the ground a bit
+            hw, hh = width * 0.5 + border_offset, height * 0.5 + border_offset
 
             # 4 corner vertices (x, y, z=0)
             self._ground_mesh_vertices = np.array(

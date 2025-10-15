@@ -430,7 +430,7 @@ class BaseLeggedTaskCfg:
         }
     ]
     """Initial states for the environment. Only used for legged robots, e.g., go2-12dof, g1-12dof, h1-12dof."""
-    extra_spec: dict[str, BaseQueryType] = {"contact_forces": ContactForces(), "lidar_pointcloud": LidarPointCloud(enabled=False)}
+    extra_spec: dict[str, BaseQueryType] = {"contact_forces": ContactForces(), "lidar_pointcloud": LidarPointCloud(enabled=True)}
 
 
     def __post_init__(self):

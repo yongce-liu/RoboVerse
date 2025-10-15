@@ -5,7 +5,7 @@ import torch
 
 from metasim.sim.base import BaseSimHandler, BaseQueryType
 from metasim.utils import configclass
-from metasim.utils.math import quat_apply
+from metasim.utils.math import quat_apply, convert_quat
 import numpy as np
 import warnings
 
@@ -119,7 +119,7 @@ class LidarPointCloud(BaseQueryType):
         self.handler = handler
         self.num_envs = handler.scenario.num_envs
         self.robots = handler.robots
-        self.device = handler.device
+        self.device = str(handler.device) # warp only accepts str device
         self._init_backend()
 
     def _init_backend(self):
@@ -158,16 +158,15 @@ class LidarPointCloud(BaseQueryType):
         terrain_mesh.apply_transform(translation)
 
         vertices = self.handler._ground_mesh_vertices
-
         triangles = self.handler._ground_mesh_triangles
 
         import torch
 
         vertex_tensor = torch.tensor(vertices, device=self.device, dtype=torch.float32)
-        faces_wp_int32_array = self.wp.from_numpy(triangles.reshape(-1), dtype=self.wp.int32)
+        faces_wp_int32_array = self.wp.from_numpy(triangles.reshape(-1), dtype=self.wp.int32, device=self.device)
         vertex_vec3_array = self.wp.from_torch(vertex_tensor, dtype=self.wp.vec3)
         self.wp_mesh = self.wp.Mesh(points=vertex_vec3_array, indices=faces_wp_int32_array)
-        self.mesh_ids = self.wp.array([self.wp_mesh.id], dtype=self.wp.uint64)
+        self.mesh_ids = self.wp.array([self.wp_mesh.id], dtype=self.wp.uint64, device=self.device)
 
         # Prepare sensor config and buffers
         self.sensor_cfg = self.LidarConfig()
@@ -198,41 +197,69 @@ class LidarPointCloud(BaseQueryType):
         self._backend_ready = True
 
     def __call__(self):
-        import torch
-
         if not self.enabled:
             return {self.robots[0].name: None}
 
-
-        # Fetch current sensor pose from handler states
-        states = self.handler.get_states()
         robot_name = self.robots[0].name
-        robot_state = states.robots[robot_name]
-        if robot_state.body_state is None or robot_state.body_names is None:
+
+        # Obtain the lidar link pose directly from the simulator backend
+        # to avoid re-entering handler.get_states() (which calls queries again).
+        sim_type = self.simulator
+        if sim_type == "isaacgym":
+            # Refresh tensors and read rigid body state tensor (xyzw from IsaacGym)
+            self.handler.gym.refresh_rigid_body_state_tensor(self.handler.sim)
+            rb_states = self.handler._rigid_body_states  # (N_total_bodies, 13)
+
+            # Resolve global rigid body indices for the target link once
+            if not hasattr(self, "_gym_link_gidxs"):
+                gidxs = []
+                for i in range(self.num_envs):
+                    gidx = self.handler._env_rigid_body_global_indices[i]["robot"][self.link_name]
+                    gidxs.append(gidx)
+                self._gym_link_gidxs = gidxs
+
+            link_states = rb_states[self._gym_link_gidxs, :]
+            pos_w = link_states[:, 0:3]
+            quat_xyzw = link_states[:, 3:7]
+            # Convert to (w,x,y,z)
+            quat_wxyz = convert_quat(quat_xyzw, to="wxyz")
+
+        elif sim_type == "mujoco":
+            # Resolve body id using cached names from handler (avoid mj_name2id signature mismatch)
+            if not hasattr(self, "_mj_link_bid"):
+                bid = None
+                body_names = self.handler.body_names
+                for i, bn in enumerate(body_names):
+                    if bn == self.link_name or bn.endswith("/" + self.link_name) or bn.split("/")[-1] == self.link_name:
+                        bid = i
+                        break
+                if bid is None:
+                    warnings.warn(f"LidarPointCloud: link '{self.link_name}' not found in MuJoCo body names.")
+                    return {robot_name: None}
+                self._mj_link_bid = int(bid)
+
+            # MuJoCo xquat is (w,x,y,z)
+            pos_np = self.handler.physics.data.xpos[self._mj_link_bid]
+            quat_np = self.handler.physics.data.xquat[self._mj_link_bid]
+            pos_w = torch.as_tensor(pos_np, device=self.device, dtype=torch.float32).view(1, 3)
+            quat_wxyz = torch.as_tensor(quat_np, device=self.device, dtype=torch.float32).view(1, 4)
+
+        else:
+            # IsaacSim or other backends not yet supported here
+            warnings.warn(f"LidarPointCloud: simulator '{sim_type}' not supported for LiDAR pose fetch.")
             return {robot_name: None}
 
-        try:
-            link_idx = robot_state.body_names.index(self.link_name)
-        except ValueError:
-            warnings.warn(f"LidarPointCloud: link '{self.link_name}' not found. Available: {robot_state.body_names}")
-            return {robot_name: None}
-
-        link_states = robot_state.body_state[:, link_idx, :]
-        pos_w = link_states[:, 0:3]
-        quat_wxyz = link_states[:, 3:7]
-
+        # Apply optical center offset in the sensor's local +Z (after model-specific mounting rotations)
         if self.apply_optical_center_offset and self.optical_center_offset_z != 0.0:
-            offset_local = torch.tensor([0.0, 0.0, self.optical_center_offset_z], device=pos_w.device).view(1, 3)
-            offset_local = offset_local.repeat(pos_w.shape[0], 1)
+            offset_local = torch.tensor([0.0, 0.0, self.optical_center_offset_z], device=pos_w.device).view(-1, 3)
+            if offset_local.shape[0] != pos_w.shape[0]:
+                offset_local = offset_local.repeat(pos_w.shape[0], 1)
             pos_w = pos_w + quat_apply(quat_wxyz, offset_local)
 
-        # Update sensor pose buffers
-        self.sensor_pos_tensor[:, :] = pos_w
-        # Convert to XYZW for LidarSensor
-        self.sensor_quat_tensor_xyzw[:, 0] = quat_wxyz[:, 1]
-        self.sensor_quat_tensor_xyzw[:, 1] = quat_wxyz[:, 2]
-        self.sensor_quat_tensor_xyzw[:, 2] = quat_wxyz[:, 3]
-        self.sensor_quat_tensor_xyzw[:, 3] = quat_wxyz[:, 0]
+        # Update sensor pose buffers (LidarSensor expects XYZW)
+        self.sensor_pos_tensor[:, :pos_w.shape[1]] = pos_w
+        quat_xyzw = convert_quat(quat_wxyz, to="xyzw")
+        self.sensor_quat_tensor_xyzw[:, :quat_xyzw.shape[1]] = quat_xyzw
 
         # Run LiDAR update
         lidar_tensor_local, dist_tensor = self.sensor.update()
