@@ -101,3 +101,6 @@ id_rsa*
 *.convex.stl
 
 .history
+
+# for test cache
+.pytest_cache/
