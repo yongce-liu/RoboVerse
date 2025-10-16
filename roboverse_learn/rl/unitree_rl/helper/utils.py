@@ -128,7 +128,7 @@ def get_log_dir(args: argparse.Namespace, task, now=None) -> str:
     return log_dir
 
 
-def get_class(name: str, suffix: str, library="roboverse_learn.rl.unitree_rl"):
+def get_class(name: str, suffix: str, library="roboverse_pack.tasks.unitree_rl"):
     """Get the class wrappers.
     Example:
         get_class("ReachOrigin", "Cfg") -> ReachOriginCfg

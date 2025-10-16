@@ -4,9 +4,13 @@ from collections import deque
 from typing import Callable
 
 import torch
+from rsl_rl.env import VecEnv
 
 import metasim.types as mstypes
+from metasim.queries.base import BaseQueryType
 from metasim.scenario.scenario import ScenarioCfg
+from metasim.sim.base import BaseSimHandler
+from metasim.task.rl_task import RLTaskEnv
 from metasim.utils.humanoid_robot_util import (
     contact_forces_tensor,
     dof_vel_tensor,
@@ -16,23 +20,18 @@ from metasim.utils.humanoid_robot_util import (
     robot_rotation_tensor,
     robot_velocity_tensor,
 )
-from metasim.queries.base import BaseQueryType
 from metasim.utils.math import quat_apply, quat_rotate_inverse, wrap_to_pi
 from metasim.utils.state import TensorState
-from metasim.task.rl_task import RLTaskEnv
-from rsl_rl.env import VecEnv
 from roboverse_learn.rl.unitree_rl.configs.base_legged import BaseLeggedTaskCfg
 from roboverse_learn.rl.unitree_rl.helper.utils import get_body_reindexed_indices_from_substring, torch_rand_float
-from metasim.constants import SimType
-from metasim.utils.state import list_state_to_tensor
-from metasim.sim.base import BaseSimHandler
+
 
 class LeggedRobot(RLTaskEnv, VecEnv):
-    """
-    This env define the legged robot base env,
-    which canbe put into the RslRlWrapper to be used in the RL training.
-    Note that Training only for Gym, Lab, Genesis
-    Mujoco can be used fvaluation/render only.
+    """Base environment for legged robots.
+
+    This environment can be wrapped by RslRlWrapper for RL training. Note that
+    training is supported for Gym, Lab, Genesis; Mujoco can be used for
+    evaluation/render only.
     """
 
     cfg: BaseLeggedTaskCfg
@@ -51,15 +50,17 @@ class LeggedRobot(RLTaskEnv, VecEnv):
         self._init_buffers()
 
     def _get_initial_states(self):
-        """ Get initial states from the scenario configuration."""
-
-        initial_states_list = getattr(self.cfg, 'init_states', None)
+        """Get initial states from the scenario configuration."""
+        initial_states_list = getattr(self.cfg, "init_states", None)
         if initial_states_list is None:
-            raise AttributeError(f"'task cfg' has no attribute 'init_states', please add it in your scenario config!")
-        initial_states_list = [{
-            "objects": {key: es["objects"][key] for key in es["objects"] if key in self.object_names},
-            "robots": {key: es["robots"][key] for key in es["robots"] if key in self.robot_names}}
-                            for es in initial_states_list]
+            raise AttributeError("'task cfg' has no attribute 'init_states', please add it in your scenario config!")
+        initial_states_list = [
+            {
+                "objects": {key: es["objects"][key] for key in es["objects"] if key in self.object_names},
+                "robots": {key: es["robots"][key] for key in es["robots"] if key in self.robot_names},
+            }
+            for es in initial_states_list
+        ]
         if len(initial_states_list) < self.num_envs:
             initial_states_list = (
                 initial_states_list * (self.num_envs // len(initial_states_list))
@@ -72,18 +73,15 @@ class LeggedRobot(RLTaskEnv, VecEnv):
         return initial_states
 
     def get_observations(self):
-        """design from config"""
+        """Design from config."""
         return self.obs_buf
 
     def get_privileged_observations(self):
-        """design from config"""
+        """Design from config."""
         return self.privileged_obs_buf
 
-
     def reset(self, env_ids=None):
-        """
-        Reset state in the env and buffer in this wrapper
-        """
+        """Reset state in the env and buffer in this wrapper."""
         if env_ids is None:
             env_ids = list(range(self.num_envs))
         if len(env_ids) == 0:
@@ -135,7 +133,7 @@ class LeggedRobot(RLTaskEnv, VecEnv):
         return None, None
 
     def step(self, actions: torch.Tensor):
-        """Apply actions, simulate, call self.post_physics_step()
+        """Apply actions, simulate, call self.post_physics_step().
 
         Args:
             actions (torch.Tensor): Tensor of shape (num_envs, num_actions_per_env)
@@ -150,9 +148,10 @@ class LeggedRobot(RLTaskEnv, VecEnv):
     # Termination logic
     # ------------------------------------------------------------------
     def _terminated(self, env_states: TensorState) -> torch.Tensor:
-        """
-        Judge early termination based on contacts and base orientation, matching
-        the logic used in RoboVerse. An episode is terminated when either:
+        """Judge early termination based on contacts and base orientation.
+
+        Matches the logic used in RoboVerse. An episode is terminated when
+        either:
         - Any body in `termination_contact_indices` has contact force above a threshold.
         - Base roll/pitch exceeds configured thresholds (approximately fall-over).
         """
@@ -196,7 +195,7 @@ class LeggedRobot(RLTaskEnv, VecEnv):
     """The necessary functions for the child class to implement"""
 
     def compute_observations(self, envstate: TensorState):
-        """compute observations and priviledged observation"""
+        """Compute observations and priviledged observation."""
         raise NotImplementedError(
             "compute_observations should be implemented in the child class, "
             "e.g. HumanoidWalkingTask, LeggedWalkingTask, etc."
@@ -212,15 +211,12 @@ class LeggedRobot(RLTaskEnv, VecEnv):
         clip_action_limit = self.cfg.normalization.clip_actions
         actions = torch.clip(actions, -clip_action_limit, clip_action_limit).to(self.device)
 
-
         # TODO: add the support of multi-embodiments
         # should return actions_list, [List, Action:[str, RobotAction:[...]]]
         return actions
 
     def _physics_step(self, actions: torch.Tensor | list[mstypes.Action]):
-        """
-        Task physics step
-        """
+        """Task physics step."""
         env_states = self.handler.get_states()
         for i in range(self.decimation):
             # Apply PD control if needed
@@ -273,8 +269,10 @@ class LeggedRobot(RLTaskEnv, VecEnv):
         return self.obs_buf, self.privileged_obs_buf, self.rew_buf
 
     def _post_physics_step_callback(self):
-        """Callback called before computing terminations, rewards, and observations
-        Default behaviour: Compute ang vel command based on target and heading, compute measured terrain heights and randomly push robots
+        """Callback before computing terminations, rewards, and observations.
+
+        Default behaviour: Compute ang vel command based on target and
+        heading, compute measured terrain heights and randomly push robots.
         """
         env_ids = (
             (self._episode_steps % int(self.cfg.commands.resampling_time / self.dt) == 0)
@@ -317,14 +315,13 @@ class LeggedRobot(RLTaskEnv, VecEnv):
 
     # region: PD Control
     def _compute_effort(self, actions: torch.Tensor, env_states: TensorState) -> torch.Tensor:
-        """Compute effort from actions using PD control"""
+        """Compute effort from actions using PD control."""
         # Scale the actions (generally output from policy)
         action_scaled = self.cfg.control.action_scale * actions
 
         # Get current joint positions and velocities
         sorted_dof_pos = env_states.robots[self.robot.name].joint_pos
         sorted_dof_vel = env_states.robots[self.robot.name].joint_vel
-
 
         # Compute PD control effort
         if self.cfg.control.action_offset:
@@ -340,9 +337,7 @@ class LeggedRobot(RLTaskEnv, VecEnv):
         return effort.to(torch.float32)
 
     def _apply_pd_control(self, actions: torch.Tensor, env_states: TensorState) -> torch.Tensor:
-        """
-        Compute torque using PD controller for effort actuator and return torques.
-        """
+        """Compute torque using PD controller for effort actuator and return torques."""
         effort = self._compute_effort(actions, env_states)
         return effort
 
@@ -361,7 +356,7 @@ class LeggedRobot(RLTaskEnv, VecEnv):
         self.projected_gravity[:] = quat_rotate_inverse(self.base_quat, self.gravity_vec)
 
     def _update_history(self, envstate):
-        """update history buffer at the the of the frame, called after reset"""
+        """Update history buffer at the end of the frame, called after reset."""
         # we should always make a copy here
         # check whether torch.clone is necessary
         self.last_last_actions[:] = self.last_actions[:].clone()
@@ -371,10 +366,10 @@ class LeggedRobot(RLTaskEnv, VecEnv):
         # robot_root_state_tensor(envstate, self.robot.name)[:, 7:13]
 
     def _resample_commands(self, env_ids):
-        """Randommly select commands of some environments
+        """Randomly select commands for some environments.
 
         Args:
-            env_ids (List[int]): Environments ids for which new commands are needed
+            env_ids (List[int]): Environments ids for which new commands are needed.
         """
         self.commands[env_ids, 0] = torch_rand_float(
             self.command_ranges.lin_vel_x[0],
@@ -408,6 +403,7 @@ class LeggedRobot(RLTaskEnv, VecEnv):
 
     @staticmethod
     def get_reward_fn(target: str, reward_functions: list[Callable] | str) -> Callable:
+        """Resolve a reward function by name from a list or module path."""
         if isinstance(reward_functions, (list, tuple)):
             fn = next((f for f in reward_functions if f.__name__ == target), None)
         elif isinstance(reward_functions, str):
@@ -421,7 +417,7 @@ class LeggedRobot(RLTaskEnv, VecEnv):
 
     @staticmethod
     def get_axis_params(value, axis_idx, x_value=0.0, n_dims=3):
-        """construct arguments to `Vec` according to axis index."""
+        """Construct arguments to `Vec` according to axis index."""
         zs = torch.zeros((n_dims,))
         assert axis_idx < n_dims, "the axis dim should be within the vector dimensions"
         zs[axis_idx] = 1.0
@@ -446,9 +442,7 @@ class LeggedRobot(RLTaskEnv, VecEnv):
         self.use_vision = self.cfg.use_vision
 
     def _parse_rigid_body_indices(self, robot):
-        """
-        Parse rigid body indices from robot cfg.
-        """
+        """Parse rigid body indices from robot cfg."""
         feet_names = robot.feet_links
         termination_contact_names = robot.terminate_contacts_links
         penalised_contact_names = robot.penalized_contacts_links
@@ -470,9 +464,7 @@ class LeggedRobot(RLTaskEnv, VecEnv):
         self.cfg.penalised_contact_indices = self.penalised_contact_indices
 
     def _parse_joint_cfg(self, cfg: BaseLeggedTaskCfg):
-        """
-        parse default joint positions and torque limits from cfg.
-        """
+        """Parse default joint positions and torque limits from cfg."""
         torque_limits = (
             cfg.robots[0].torque_limits
             if hasattr(cfg.robots[0], "torque_limits")
@@ -516,9 +508,7 @@ class LeggedRobot(RLTaskEnv, VecEnv):
         self.manual_pd_on = any(mode == "effort" for mode in control_types.values()) if control_types else False
 
     def _init_buffers(self):
-        """
-        Init all buffer for reward computation
-        """
+        """Init all buffer for reward computation."""
         self.up_axis_idx = 2
         self.base_pos = torch.tensor([0.0, 0.0, 0.0], device=self.device).unsqueeze(0).repeat(self.num_envs, 1)
         self.base_quat = torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device).unsqueeze(0).repeat(self.num_envs, 1)
@@ -625,20 +615,18 @@ class LeggedRobot(RLTaskEnv, VecEnv):
         self.env_frictions = torch.zeros(self.num_envs, 1, dtype=torch.float32, device=self.device)  # TODO now set 0
         self.body_mass = torch.zeros(self.num_envs, 1, dtype=torch.float32, device=self.device, requires_grad=False)
 
-
     # endregion
 
     # region: Parse states for reward computation
     def _prepare_reward_function(self, task: BaseLeggedTaskCfg):
         """Prepares a list of reward functions, which will be called to compute the total reward."""
-
         self.reward_scales = task.reward_weights
         for key in list(self.reward_scales.keys()):
             scale = self.reward_scales[key]
             if scale == 0:
                 self.reward_scales.pop(key)
             else:
-                self.reward_scales[key] *= (self.dt * self.decimation)
+                self.reward_scales[key] *= self.dt * self.decimation
         # prepare list of functions
         self.reward_functions = []
         self.reward_names = []
@@ -657,9 +645,7 @@ class LeggedRobot(RLTaskEnv, VecEnv):
         # self.episode_metrics = {name: 0 for name in self.reward_scales.keys()}
 
     def _parse_state_for_reward(self, envstate: TensorState):
-        """
-        Parse all the states to prepare for reward computation, legged_robot level reward computation.
-        """
+        """Parse all the states to prepare for reward computation, legged_robot level reward computation."""
         _state = envstate.robots[self.robot.name]  # weak reference
 
         """Adds the current action to state."""

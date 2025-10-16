@@ -6,17 +6,18 @@ from metasim.scenario.scenario import ScenarioCfg
 from metasim.utils.humanoid_robot_util import contact_forces_tensor, gait_phase_tensor
 from metasim.utils.state import TensorState
 from roboverse_learn.rl.unitree_rl.configs.base_legged import BaseLeggedTaskCfg
-from roboverse_learn.rl.unitree_rl.envs.base_legged import LeggedRobot
 from roboverse_learn.rl.unitree_rl.helper.utils import (
     get_body_reindexed_indices_from_substring,
     get_joint_reindexed_indices_from_substring,
 )
+from roboverse_pack.tasks.unitree_rl.envs.base_legged import LeggedRobot
 
 
 class Humanoid(LeggedRobot):
-    """
-    Inherit from LeggedRobot to implement a humanoid robot environment.
-    The main difference is the additional joints and rigid bodies specific to humanoid robots, e.g., knees, elbows, wrists, and torso.
+    """Inherit from LeggedRobot to implement a humanoid robot environment.
+
+    The main difference is the additional joints and rigid bodies specific to
+    humanoid robots, e.g., knees, elbows, wrists, and torso.
     """
 
     cfg: BaseLeggedTaskCfg
@@ -27,9 +28,7 @@ class Humanoid(LeggedRobot):
 
     # region: Parse configs & Get the necessary parametres
     def _parse_rigid_body_indices(self, robot):
-        """
-        Parse rigid body indices from robot cfg.
-        """
+        """Parse rigid body indices from robot cfg."""
         # parse for foot. termination_contact, penalised_contact
         super()._parse_rigid_body_indices(robot)
         knee_names = robot.knee_links
@@ -58,9 +57,7 @@ class Humanoid(LeggedRobot):
         self.cfg.torso_indices = self.torso_indices
 
     def _parse_joint_indices(self, robot):
-        """
-        Parse joint indices.
-        """
+        """Parse joint indices."""
         left_yaw_roll_names = robot.left_yaw_roll_joints
         right_yaw_roll_names = robot.right_yaw_roll_joints
         upper_body_names = robot.upper_body_joints
@@ -83,9 +80,7 @@ class Humanoid(LeggedRobot):
 
     # region: Parse states for reward computation
     def _parse_state_for_reward(self, envstate: TensorState):
-        """
-        Parse all the states to prepare for reward computation, legged_robot level reward computation.
-        """
+        """Parse all the states to prepare for reward computation, legged_robot level reward computation."""
         # self._parse_gait_phase(envstate)
         envstate.robots[self.robot.name].extra["gait_phase"] = self._get_gait_phase()
         self._parse_feet_clearance(envstate)
@@ -118,11 +113,11 @@ class Humanoid(LeggedRobot):
         # envstate.robots[self.robot.name].extra["req_airTime"] = rew_airTime
 
     def _parse_feet_clearance(self, envstate: TensorState):
-        """Calculates reward based on the clearance of the swing leg from the ground during movement.
-        Encourages appropriate lift of the feet during the swing phase of the gait.
+        """Calculates reward based on swing-leg ground clearance.
 
-
-        Directly calculates reward since no intermediate variables are reused for other reward.
+        Encourages appropriate lift of the feet during the swing phase of the
+        gait. Directly calculates reward since no intermediate variables are
+        reused for other reward.
         """
         contact = contact_forces_tensor(envstate, self.robot.name)[:, self.feet_indices, 2] > 5.0
         feet_z = envstate.robots[self.robot.name].body_state[:, self.feet_indices, 2] - 0.05
@@ -144,7 +139,7 @@ class Humanoid(LeggedRobot):
 
     # region: Utility functions
     def _get_gait_phase(self):
-        """Add phase into states"""
+        """Add phase into states."""
         phase = self._get_phase()
         sin_pos = torch.sin(2 * torch.pi * phase)
         # Add double support phase

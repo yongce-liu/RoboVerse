@@ -1,8 +1,6 @@
 import torch
 from metasim.types import TensorState
-from roboverse_learn.rl.unitree_rl.envs.env_legged_robot import LeggedRobotEnv
-from roboverse_learn.rl.unitree_rl.envs.env_humanoid import HumanoidEnv
-from roboverse_learn.rl.unitree_rl.envs import EnvTypes
+from roboverse_pack.tasks.unitree_rl.envs import EnvTypes
 from metasim.utils.math import quat_apply, quat_rotate_inverse, wrap_to_pi
 
 

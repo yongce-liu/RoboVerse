@@ -12,7 +12,7 @@ from metasim.scenario.simulator_params import SimParamCfg
 from metasim.queries.base import BaseQueryType
 from metasim.utils.tensor_util import torch_rand_float
 from metasim.utils import configclass
-
+from roboverse_learn.rl.unitree_rl.configs.cfg_algorithms import Algorithm
 from roboverse_learn.rl.unitree_rl.configs import LidarPointCloud, ContactForces, GroundCfg
 
 # Training Config
@@ -38,29 +38,6 @@ class LeggedRobotCfgPPO:
         rnn_type = None
         rnn_hidden_size = None
         rnn_num_layers = None
-
-    @configclass
-    class Algorithm:
-        """Training config class for PPO."""
-
-        value_loss_coef = 1.0
-        """Value loss coefficient."""
-        use_clipped_value_loss = True
-        """Use clipped value loss."""
-        clip_param = 0.2
-        """Clipping parameter for PPO."""
-        entropy_coef = 0.01
-        """Entropy coefficient."""
-        num_learning_epochs = 5
-        """Number of learning epochs."""
-        num_mini_batches = 4
-        """mini batch size = num_envs*n_steps / num_mini_batches"""
-        learning_rate = 1.0e-3
-        schedule = "adaptive"
-        gamma = 0.99
-        lam = 0.95
-        desired_kl = 0.01
-        max_grad_norm = 1.0
 
     @configclass
     class Runner:

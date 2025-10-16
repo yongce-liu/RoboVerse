@@ -3,7 +3,7 @@ from typing import Union
 import torch
 from tensordict import TensorDict
 
-from roboverse_learn.rl.unitree_rl.envs import AgentEnv
+from roboverse_pack.tasks.unitree_rl.envs import AgentEnv
 from .master import BaseRunnerWrapper
 
 
