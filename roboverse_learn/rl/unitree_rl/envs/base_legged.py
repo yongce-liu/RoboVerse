@@ -19,14 +19,15 @@ from metasim.utils.humanoid_robot_util import (
 from metasim.queries.base import BaseQueryType
 from metasim.utils.math import quat_apply, quat_rotate_inverse, wrap_to_pi
 from metasim.utils.state import TensorState
-from metasim.task.base import BaseTaskEnv
+from metasim.task.rl_task import RLTaskEnv
 from rsl_rl.env import VecEnv
 from roboverse_learn.rl.unitree_rl.configs.base_legged import BaseLeggedTaskCfg
 from roboverse_learn.rl.unitree_rl.helper.utils import get_body_reindexed_indices_from_substring, torch_rand_float
 from metasim.constants import SimType
 from metasim.utils.state import list_state_to_tensor
+from metasim.sim.base import BaseSimHandler
 
-class LeggedRobot(BaseTaskEnv, VecEnv):
+class LeggedRobot(RLTaskEnv, VecEnv):
     """
     This env define the legged robot base env,
     which canbe put into the RslRlWrapper to be used in the RL training.
@@ -37,38 +38,38 @@ class LeggedRobot(BaseTaskEnv, VecEnv):
     cfg: BaseLeggedTaskCfg
 
     def __init__(self, scenario: ScenarioCfg):
-        super().__init__(scenario)
         self._parse_cfg(scenario)
-        self._get_init_states(scenario)
+        if isinstance(self.scenario, BaseSimHandler):
+            self.handler = self.scenario
+        else:
+            self._instantiate_env(self.scenario)
+        self.device = self.handler.device
+        self._initial_states = self._get_initial_states()
         self._parse_rigid_body_indices(self.cfg.robots[0])
         self._parse_joint_cfg(self.cfg)
         self._prepare_reward_function(self.cfg)
         self._init_buffers()
 
-    def _get_init_states(self, scenario):
+    def _get_initial_states(self):
         """ Get initial states from the scenario configuration."""
 
-        init_states_list = getattr(self.cfg, 'init_states', None)
-        if init_states_list is None:
+        initial_states_list = getattr(self.cfg, 'init_states', None)
+        if initial_states_list is None:
             raise AttributeError(f"'task cfg' has no attribute 'init_states', please add it in your scenario config!")
-        init_states_list = [{
+        initial_states_list = [{
             "objects": {key: es["objects"][key] for key in es["objects"] if key in self.object_names},
             "robots": {key: es["robots"][key] for key in es["robots"] if key in self.robot_names}}
-                            for es in init_states_list]
-        if len(init_states_list) < self.num_envs:
-            init_states_list = (
-                init_states_list * (self.num_envs // len(init_states_list))
-                + init_states_list[: self.num_envs % len(init_states_list)]
+                            for es in initial_states_list]
+        if len(initial_states_list) < self.num_envs:
+            initial_states_list = (
+                initial_states_list * (self.num_envs // len(initial_states_list))
+                + initial_states_list[: self.num_envs % len(initial_states_list)]
             )
         else:
-            init_states_list = init_states_list[: self.num_envs]
+            initial_states_list = initial_states_list[: self.num_envs]
 
-        self.init_states = init_states_list
-
-        if scenario.simulator == SimType.ISAACGYM:
-            #tensorize the initial states as TensorState, now we only support IsaacGym
-            self.init_states = list_state_to_tensor(self.handler, init_states_list, device=self.device)
-
+        initial_states = initial_states_list
+        return initial_states
 
     def get_observations(self):
         """design from config"""
@@ -86,9 +87,9 @@ class LeggedRobot(BaseTaskEnv, VecEnv):
         if env_ids is None:
             env_ids = list(range(self.num_envs))
         if len(env_ids) == 0:
-            return
+            return None, None
 
-        env_states, _ = BaseTaskEnv.reset(self, self.init_states, env_ids)
+        self.handler.set_states(states=self._initial_states, env_ids=env_ids)
 
         if self.cfg.commands.curriculum and (self.common_step_counter % self.max_episode_length == 0):
             self.update_command_curriculum(env_ids)
@@ -96,6 +97,7 @@ class LeggedRobot(BaseTaskEnv, VecEnv):
         self._resample_commands(env_ids)
 
         # reset state buffer in the wrapper
+        self._episode_steps[env_ids] = 0
         self.actions[env_ids] = 0.0
         self.last_actions[env_ids] = 0.0
         self.last_last_actions[env_ids] = 0.0
@@ -229,9 +231,13 @@ class LeggedRobot(BaseTaskEnv, VecEnv):
                 send_action = effort
             else:
                 send_action = actions
-            # reverse_reindex = self.handler.get_joint_reindex(obj_name=self.handler.robots[0].name, inverse=True)
-            # self.handler.gym.set_dof_position_target_tensor(self.handler.sim, gymtorch.unwrap_tensor(actions[:, reverse_reindex]))
-            env_states, _, terminated, self.time_out_buf, _ = BaseTaskEnv.step(self, send_action)
+            for robot in self.handler.robots:
+                self.handler.set_dof_targets(send_action)
+            self.handler.simulate()
+            self._episode_steps = self._episode_steps + 1
+            env_states = self.handler.get_states()
+        terminated = self._terminated(env_states)
+        self.time_out_buf = self._time_out(env_states)
         self.reset_buf = torch.logical_or(terminated, self.time_out_buf)
         return env_states
 
