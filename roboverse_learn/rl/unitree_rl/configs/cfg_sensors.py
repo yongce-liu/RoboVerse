@@ -201,6 +201,34 @@ class LidarPointCloud(BaseQueryType):
                     resolved_link = bn
                     break
             if resolved_link is None:
+                # If not present as a physics body (common when fixed joints are merged), try to find the prim in the USD stage
+                # and mount the sensor to that Xform path instead.
+                import omni
+                from pxr import Usd
+
+                stage = omni.usd.get_context().get_stage()
+                # Find any env prim under /World/envs and search for robot + link under it
+                envs_prim = stage.GetPrimAtPath("/World/envs")
+                subpath = None
+                if envs_prim and envs_prim.IsValid():
+                    for env_prim in envs_prim.GetChildren():
+                        if not env_prim.GetName().startswith("env_"):
+                            continue
+                        robot_prim_path = f"{env_prim.GetPath().pathString}/{robot_name}"
+                        robot_prim = stage.GetPrimAtPath(robot_prim_path)
+                        if not robot_prim or not robot_prim.IsValid():
+                            continue
+                        for p in Usd.PrimRange(robot_prim):
+                            if p.GetName() == self.link_name:
+                                full_path = p.GetPath().pathString
+                                # compute relative subpath under robot prim
+                                subpath = full_path[len(robot_prim_path) + 1 :]
+                                break
+                        if subpath is not None:
+                            break
+                if subpath is not None and len(subpath) > 0:
+                    resolved_link = subpath
+            if resolved_link is None:
                 # heuristics for a reasonable base link name
                 for cand in ("base", "trunk", "root", "chassis"):
                     for bn in body_names:
