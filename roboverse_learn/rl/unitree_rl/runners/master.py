@@ -40,10 +40,9 @@ class MasterRunner:
                  lib_name: str = "rsl_rl"):
         self.task_name = task_name
         self.runners = {}
-        base_lib_path = "roboverse_learn.rl.unitree_rl.tasks"
-        env_cls = get_class(task_name, suffix="Env", library=base_lib_path)
-        env_cfg_cls: BaseEnvCfg = get_class(task_name, suffix="EnvCfg", library=base_lib_path)
-        train_cfg_cls = get_class(task_name+"_"+lib_name, suffix="TrainCfg", library=base_lib_path)
+        env_cls = get_class(task_name, suffix="Env", library="roboverse_pack.tasks.unitree_rl")
+        env_cfg_cls: BaseEnvCfg = get_class(task_name, suffix="EnvCfg", library="roboverse_learn.rl.unitree_rl.configs")
+        train_cfg_cls = get_class(task_name+"_"+lib_name, suffix="TrainCfg", library="roboverse_learn.rl.unitree_rl.configs")
         runner_cls = get_class(lib_name, suffix="Wrapper", library="roboverse_learn.rl.unitree_rl.runners")
         # construct the separate environment for each embodiment
         # FOR BACKUP

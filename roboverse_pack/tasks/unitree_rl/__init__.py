@@ -27,3 +27,5 @@ def _auto_import_submodules() -> None:
 
 
 _auto_import_submodules()
+
+from .locomotion.walk_legged import WalkDof12Env  # noqa: F401

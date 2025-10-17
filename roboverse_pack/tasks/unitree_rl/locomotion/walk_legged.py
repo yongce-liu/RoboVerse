@@ -1,11 +1,13 @@
 import torch
 
+from metasim.task.registry import register_task
 from metasim.types import TensorState
 from metasim.utils.math import quat_rotate_inverse
 from roboverse_pack.tasks.unitree_rl.envs.env_humanoid import HumanoidEnv
 
 
-class G1Dof12WalkingTask(HumanoidEnv):
+@register_task("roboverse_pack.tasks.unitree_rl.WalkDof12Env")
+class WalkDof12Env(HumanoidEnv):
     """Humanoid walking task for the 12-DoF G1 robot."""
 
     def _init_buffers(self):

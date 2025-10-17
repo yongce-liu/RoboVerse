@@ -532,4 +532,4 @@ class LidarPointCloud(BaseQueryType):
 class SensorsCfg:
     contact_forces: ContactForces = ContactForces()
     # Disabled by default to avoid extra overhead/missing-link issues unless explicitly enabled by user
-    lidar_pointcloud: LidarPointCloud = LidarPointCloud(enabled=False)
+    # lidar_pointcloud: LidarPointCloud = LidarPointCloud(enabled=False)

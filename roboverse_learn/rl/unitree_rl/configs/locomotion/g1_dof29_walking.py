@@ -5,14 +5,12 @@ import torch
 from metasim.utils import configclass
 
 from roboverse_learn.rl.unitree_rl.configs.base_legged import BaseLeggedTaskCfg, LeggedRobotCfgPPO
-from roboverse_learn.rl.unitree_rl.configs.cfg_algorithms import Algorithm
-
 
 @configclass
 class G1Dof29WalkingCfgPPO(LeggedRobotCfgPPO):
     seed: int = 0
 
-    algorithm = Algorithm(
+    algorithm = LeggedRobotCfgPPO.Algorithm(
         entropy_coef=0.001, learning_rate=1e-5, num_learning_epochs=2, gamma=0.994, lam=0.9
     )
     runner = LeggedRobotCfgPPO.Runner(
