@@ -19,7 +19,7 @@ from roboverse_learn.rl.unitree_rl.helper.utils import find_unique_candidate
 from roboverse_pack.tasks.unitree_rl.envs.base_humanoid import Humanoid
 
 
-@register_task("humanoid.g1_dof29.walk")
+@register_task("unitree_rl.g1_dof29.walk")
 class G1Dof29WalkingTask(Humanoid):
     """Humanoid walking wrapper for G1 29DoF robot (no hands)."""
 

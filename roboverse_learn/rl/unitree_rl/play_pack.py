@@ -33,7 +33,7 @@ def play(args):
 
     # Resolve task from registry (keep consistent with train_pack.py)
     # Current default packaged example: humanoid.g1_dof29.walk
-    task_cls = get_task_class("humanoid.g1_dof29.walk")
+    task_cls = get_task_class("unitree_rl.g1_dof29.walk")
 
     # Build scenario from the class default and override runtime params
     scenario = task_cls.scenario.update(

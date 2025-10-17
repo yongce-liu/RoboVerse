@@ -52,7 +52,7 @@ def train(args):
     #     cameras=[],
     #     decimation=args.decimation)
     # import roboverse_pack.tasks.unitree_rl.locomotion.g1_dof29_walking
-    task_cls = get_task_class("humanoid.g1_dof29.walk")
+    task_cls = get_task_class("unitree_rl.g1_dof29.walk")
     scenario = task_cls.scenario.update(
         simulator=args.sim,
         num_envs=args.num_envs,
