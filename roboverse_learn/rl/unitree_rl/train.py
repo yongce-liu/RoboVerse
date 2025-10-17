@@ -20,10 +20,10 @@ import numpy as np
 import torch
 import wandb
 from rsl_rl.runners.on_policy_runner import OnPolicyRunner
-
+from metasim.task.registry import get_task_class
 from metasim.scenario.scenario import ScenarioCfg
-from roboverse_learn.rl.unitree_rl.helper.utils import get_args, get_class, get_log_dir, make_robots
-
+from roboverse_learn.rl.unitree_rl.helper.utils import get_args, get_class, get_log_dir
+from gymnasium import make_vec
 
 def set_seed(seed):
     if seed == -1:
@@ -39,20 +39,6 @@ def set_seed(seed):
 
 
 def train(args):
-    # only support single robot for now
-    _robots_name, _robots = make_robots(args)
-    robots_name, robots = [_robots_name[0]], [_robots[0]]
-    config_wrapper = get_class(args.task, suffix="Cfg")
-    task_config = config_wrapper(robots=robots)
-    scenario = ScenarioCfg(
-        robots=robots,
-        sim_params=task_config.sim_params,
-        num_envs=args.num_envs,
-        simulator=args.sim,
-        headless=args.headless,
-        cameras=[],
-        decimation=args.decimation,
-    )
 
     use_wandb = args.use_wandb
     if use_wandb:
@@ -62,12 +48,23 @@ def train(args):
         datetime = args.load_run.split("/")[-2]
     else:
         datetime = None
-    log_dir = get_log_dir(args, task_config, datetime)
-    task_wrapper = get_class(args.task, suffix="Task")
-    task_env = task_wrapper(task_config, scenario)
+    # task_env = make_vec("humanoid.g1_dof29.walk", num_envs=args.num_envs, simulator=args.sim, headless=args.headless,
+    #     cameras=[],
+    #     decimation=args.decimation)
+    # import roboverse_pack.tasks.unitree_rl.locomotion.g1_dof29_walking
+    task_cls = get_task_class("unitree_rl.g1_dof29.walk")
+    scenario = task_cls.scenario.update(
+        simulator=args.sim,
+        num_envs=args.num_envs,
+        headless=args.headless,
+        cameras=[],
+    )
 
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    task_env = task_cls(scenario=scenario, device=device)
+    log_dir = get_log_dir(args, task_env.cfg, datetime)
     # dump snapshot of training config
-    task_path = f"roboverse_learn/rl/unitree_rl/tasks/{task_env.cfg.task_name}.py"
+    task_path = f"roboverse_pack/tasks/unitree_rl/locomotion/{task_env.cfg.task_name}.py"
     if not os.path.exists(task_path):
         log.error(f"Task path {task_path} does not exist, please check your task name in config carefully")
         return
@@ -93,7 +90,7 @@ def train(args):
         )
     if args.load_run:
         ppo_runner.load(args.load_run)
-    ppo_runner.learn(num_learning_iterations=task_config.ppo_cfg.runner.max_iterations, init_at_random_ep_len=True)
+    ppo_runner.learn(num_learning_iterations=task_env.cfg.ppo_cfg.runner.max_iterations, init_at_random_ep_len=True)
 
 
 if __name__ == "__main__":

@@ -585,7 +585,7 @@ def reward_energy(states, robot_name, cfg) -> torch.Tensor:
     """Sum |qdot|*|tau| across joints (\"energy\" usage)."""
     base = states.robots[robot_name]
     qvel = torch.abs(base.joint_vel)
-    tau  = torch.abs(base.joint_effort_target)
+    tau  = torch.abs(base.joint_effort_target if base.joint_effort_target is not None else torch.zeros_like(qvel))
     return torch.sum(qvel * tau, dim=1)  # matches Unitree's energy()
 
 

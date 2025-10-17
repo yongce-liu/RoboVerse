@@ -226,9 +226,9 @@ class LeggedRobot(RLTaskEnv, VecEnv):
                 self.handler._effort = effort
                 send_action = effort
             else:
-                send_action = actions
-            for robot in self.handler.robots:
-                self.handler.set_dof_targets(send_action)
+                send_action = actions * self.cfg.control.action_scale
+
+            self.handler.set_dof_targets(send_action)
             self.handler.simulate()
             self._episode_steps = self._episode_steps + 1
             env_states = self.handler.get_states()

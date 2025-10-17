@@ -52,9 +52,6 @@ class MujocoHandler(BaseSimHandler):
             self.cameras.append(camera)
         self._episode_length_buf = 0
 
-        self._manual_pd_on = False
-        self._effort_controlled_joints = []
-        self._position_controlled_joints = []
         self._current_action = None
         self._current_vel_target = None  # Track velocity targets
 
@@ -81,16 +78,28 @@ class MujocoHandler(BaseSimHandler):
 
     def _init_torque_control(self):
         """Initialize torque control parameters based on robot configuration."""
-        self._manual_pd_on = []
         for robot_idx, robot in enumerate(self.robots):
-            manual_pd = any(mode == "effort" for mode in self.robots[robot_idx].control_type.values())
-            self._manual_pd_on.append(manual_pd)
             joint_names = self._get_joint_names(robot.name, sort=True)
             self._robot_num_dofs.append(len(joint_names))
             for i, joint_name in enumerate(joint_names):
-                i_control_mode = self.robot.control_type.get(joint_name, "position")
-                if i_control_mode == "effort":
-                    self._effort_controlled_joints.append(i)
+                # Resolve control mode from this robot's config
+                i_control_mode = robot.control_type.get(joint_name, "position") if robot.control_type else "position"
+                if i_control_mode == "position":
+                    # Set stiffness (kp) for position actuators and joint damping if provided in the robot config.
+                    # Note: MuJoCo uses actuator_gainprm[..., 0] for position actuator kp, and dof_damping for joint damping.
+                    actuator_cfg = robot.actuators.get(joint_name) if robot.actuators else None
+                    full_name = f"{self._mujoco_robot_names[robot_idx]}{joint_name}"
+                    if actuator_cfg is not None:
+                        # Apply actuator stiffness (kp) to the corresponding position actuator
+                        if actuator_cfg.stiffness is not None:
+                            actuator = self.physics.model.actuator(full_name)
+                            self.physics.model.actuator_gainprm[actuator.id, 0] = actuator_cfg.stiffness
+
+                        # Apply joint damping to the corresponding DOF
+                        if actuator_cfg.damping is not None:
+                            j = self.physics.model.joint(full_name)
+                            dof_adr = self.physics.model.jnt_dofadr[j.id]
+                            self.physics.model.dof_damping[dof_adr] = actuator_cfg.damping
 
     def _apply_scale_to_mjcf(self, mjcf_model, scale):
         """Apply scale to all geoms, bodies, and sites in the MJCF model."""
@@ -550,17 +559,11 @@ class MujocoHandler(BaseSimHandler):
         if isinstance(actions, torch.Tensor):
             vec = actions.detach().to(dtype=torch.float32, device="cpu").numpy()
             robot_idx = 0
-            if self._manual_pd_on:
-                joint_names = self.get_joint_names(self.robot.name, sort=True)
-                for i in range(self._robot_num_dofs[robot_idx]):
-                    if i in self._effort_controlled_joints:
-                        joint_name = joint_names[i]
-                        actuator_id = self.physics.model.actuator(
-                            f"{self._mujoco_robot_names[robot_idx]}{joint_name}"
-                        ).id
-                        self.physics.data.ctrl[actuator_id] = vec[i]
-            else:
-                self.physics.data.ctrl[:] = vec
+            joint_names = self.get_joint_names(self.robot.name, sort=True)
+            for i in range(self._robot_num_dofs[robot_idx]):
+                joint_name = joint_names[i]
+                actuator_id = self.physics.model.actuator(f"{self._mujoco_robot_names[robot_idx]}{joint_name}").id
+                self.physics.data.ctrl[actuator_id] = vec[i]
             return
 
         # Dict-list path
@@ -582,24 +585,15 @@ class MujocoHandler(BaseSimHandler):
 
             # Position targets
             joint_targets = payload["dof_pos_target"]
-            if self._manual_pd_on:
-                jnames = self._get_joint_names(robot.name, sort=True)
-                self._current_action = np.zeros(self._robot_num_dofs[robot_idx], dtype=np.float32)
-                for i, jn in enumerate(jnames):
-                    if jn in joint_targets:
-                        self._current_action[i] = joint_targets[jn]
-                for i in range(self._robot_num_dofs[robot_idx]):
-                    if (robot_idx, i) in self._position_controlled_joints:
-                        jn = jnames[i]
-                        if jn in joint_targets:
-                            self.physics.data.actuator(
-                                f"{self._mujoco_robot_names[robot_idx]}{jn}"
-                            ).ctrl = joint_targets[jn]
-            else:
-                for jn, pos in joint_targets.items():
-                    if torch.is_tensor(pos):
-                        pos = pos.detach().cpu().item()
-                    self.physics.data.actuator(f"{self._mujoco_robot_names[robot_idx]}{jn}").ctrl = pos
+            jnames = self._get_joint_names(robot.name, sort=True)
+            self._current_action = np.zeros(self._robot_num_dofs[robot_idx], dtype=np.float32)
+            for i, jn in enumerate(jnames):
+                if jn in joint_targets:
+                    self._current_action[i] = joint_targets[jn]
+            for i in range(self._robot_num_dofs[robot_idx]):
+                jn = jnames[i]
+                if jn in joint_targets:
+                    self.physics.data.actuator(f"{self._mujoco_robot_names[robot_idx]}{jn}").ctrl = joint_targets[jn]
 
     def refresh_render(self) -> None:
         self.physics.forward()  # Recomputes the forward dynamics without advancing the simulation.

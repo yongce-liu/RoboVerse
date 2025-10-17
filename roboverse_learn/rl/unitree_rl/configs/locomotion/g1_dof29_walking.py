@@ -33,7 +33,7 @@ class G1Dof29WalkingCfg(BaseLeggedTaskCfg):
             "objects": {},
             "robots": {
                 "g1_dof29": {
-                    "pos": torch.tensor([0.0, 0.0, 0.76]),
+                    "pos": torch.tensor([0.0, 0.0, 0.8]),
                     "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
                     "dof_pos": {
                         # Hips & legs

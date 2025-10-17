@@ -1,128 +1,123 @@
+from __future__ import annotations
+
+import os
+
 import rootutils
 
 rootutils.setup_root(__file__, pythonpath=True)
+
 try:
     import isaacgym  # noqa: F401
 except ImportError:
     pass
 
-import os
-
 import torch
+from loguru import logger as log
 from rsl_rl.runners.on_policy_runner import OnPolicyRunner
 
-from metasim.scenario.scenario import ScenarioCfg
+from metasim.task.registry import get_task_class
 from roboverse_learn.rl.unitree_rl.helper.utils import (
-    PolicyExporterLSTM,
-    export_policy_as_jit,
-    get_args,
-    get_class,
-    get_export_jit_path,
-    get_load_path,
-    make_robots,
+    get_args, get_load_path
 )
 
 
 def play(args):
-    # device = "cuda" if torch.cuda.is_available() else "cpu"
-    _robots_name, _robots = make_robots(args)
-    robots_name, robots = [_robots_name[0]], [_robots[0]]
-    config_wrapper = get_class(args.task, "Cfg")
-    task = config_wrapper(robots=robots)
-    if args.sim == "mujoco":
-        task.sim_params.dt = 0.002
-        task.__post_init__()
-    scenario = ScenarioCfg(
-        sim_params=task.sim_params,
-        robots=robots,
-        num_envs=args.num_envs,
+    """Play/evaluate a trained policy for a packaged task (registry-based).
+
+    Mirrors train_pack.py setup: uses task registry to construct the env and
+    RSL-RL OnPolicyRunner to load and run the policy.
+    """
+
+    if not args.load_run:
+        raise ValueError("Please provide --load_run pointing to a run dir or checkpoint file.")
+
+    # Resolve task from registry (keep consistent with train_pack.py)
+    # Current default packaged example: humanoid.g1_dof29.walk
+    task_cls = get_task_class("unitree_rl.g1_dof29.walk")
+
+    # Build scenario from the class default and override runtime params
+    scenario = task_cls.scenario.update(
         simulator=args.sim,
+        num_envs=args.num_envs,
         headless=args.headless,
         cameras=[],
-        decimation=args.decimation,
     )
-    if args.sim == "mujoco":
-        scenario.decimation = 10
-    task.commands.curriculum = False
-    task.ppo_cfg.runner.resume = True
-    # Disable object property randomization in play mode by unsetting configs
-    task.random.friction = None
-    task.random.mass = None
-    task.random.push.enabled = False
-    task.noise.add_noise = False
 
-    task_wrapper = get_class(args.task, "Task")
-    env = task_wrapper(task, scenario)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    env = task_cls(scenario=scenario, device=device)
 
-    load_path = get_load_path(args, scenario)
-    # Use the existing run directory as log_dir to avoid creating new output dirs during play
-    log_dir = os.path.dirname(load_path)
-
-    obs = env.get_observations()
-    # load policy
+    # Make eval deterministic: disable curriculum, noise and random pushes
     try:
-        ppo_runner = OnPolicyRunner(
+        env.cfg.commands.curriculum = False
+        env.cfg.random.push.enabled = False
+        env.cfg.noise.add_noise = False
+    except Exception as e:
+        log.warning(f"Unable to fully disable randomization/noise for eval: {e}")
+
+    # Initialize runner and load the policy
+    load_path = get_load_path(args, scenario)
+    log_dir = os.path.dirname(load_path) if os.path.isfile(load_path) else load_path
+
+    try:
+        runner = OnPolicyRunner(
             env=env,
             train_cfg=env.train_cfg,
             device=env.device,
             log_dir=log_dir,
             args=args,
         )
-    except Exception as e:
-        ppo_runner = OnPolicyRunner(
+    except Exception:
+        runner = OnPolicyRunner(
             env=env,
             train_cfg=env.train_cfg,
             device=env.device,
             log_dir=log_dir,
-            # args=args,
         )
-    if args.jit_load:
+
+    if getattr(args, "jit_load", False):
         policy = torch.jit.load(load_path).to(env.device)
     else:
-        ppo_runner.load(load_path)
-        policy = ppo_runner.get_inference_policy(device=env.device)
+        runner.load(load_path)
+        policy = runner.get_inference_policy(device=env.device)
 
-    # export policy as a jit module (used to run it from C++)
-    if EXPORT_POLICY:
-        export_jit_path = get_export_jit_path(args, scenario)
-        actor_critic = ppo_runner.alg.actor_critic
-        if hasattr(actor_critic, "memory_a"):
-            exporter = PolicyExporterLSTM(actor_critic)
-            exporter.export(export_jit_path)
-        else:
-            export_policy_as_jit(actor_critic.actor, export_jit_path)
-        print("Exported policy as jit script to: ", export_jit_path)
-
-    # if args.reindex_actions:
+    # Optionally reindex actions to simulator joint order
     num_actions = env.num_actions
     reindex_actions_idx = env.handler.get_joint_reindex(obj_name=env.robot.name, inverse=False)
-    print(f"Reindex actions idx: {reindex_actions_idx}")
     reverse_reindex_actions_idx = env.handler.get_joint_reindex(obj_name=env.robot.name, inverse=True)
-    assert num_actions == len(reindex_actions_idx)
-    print(f"Reverse reindex actions idx: {reverse_reindex_actions_idx}")
+    if args.reindex_actions:
+        assert num_actions == len(reindex_actions_idx)
+        log.info(f"Using reindexed actions for robot '{env.robot.name}'.")
 
-    for i in range(1000):
-        # set fixed command
+    # Warm-up observation
+    obs = env.get_observations()
+
+    # Simple evaluation loop
+    for _ in range(10000):
+        # Set a fixed command: [lin_x, lin_y, ang_z, heading]
         env.commands[:, 0] = 0.5
         env.commands[:, 1] = 0.0
         env.commands[:, 2] = 1.0
         env.commands[:, 3] = 0.0
-        actions = policy(obs.detach()).detach()
+
+        with torch.no_grad():
+            actions = policy(obs.detach())
+
         if args.reindex_actions:
             actions = actions[:, reindex_actions_idx]
+
         obs, _, _, _, _ = env.step(actions)
+
+        # If we reindex actions, also align observation segments that include actions
         if args.reindex_actions:
-            # set the command
-            obs[:, 9 : 9 + num_actions] = obs[:, 9 : 9 + num_actions][:, reverse_reindex_actions_idx]
-            obs[:, 9 + num_actions : 9 + num_actions * 2] = obs[:, 9 + num_actions : 9 + num_actions * 2][
-                :, reverse_reindex_actions_idx
-            ]
-            obs[:, 9 + num_actions * 2 : 9 + num_actions * 3] = obs[:, 9 + num_actions * 2 : 9 + num_actions * 3][
+            start = 9  # observation layout matches play.py usage
+            A = num_actions
+            obs[:, start : start + A] = obs[:, start : start + A][:, reverse_reindex_actions_idx]
+            obs[:, start + A : start + 2 * A] = obs[:, start + A : start + 2 * A][:, reverse_reindex_actions_idx]
+            obs[:, start + 2 * A : start + 3 * A] = obs[:, start + 2 * A : start + 3 * A][
                 :, reverse_reindex_actions_idx
             ]
 
 
 if __name__ == "__main__":
-    EXPORT_POLICY = True
     args = get_args()
     play(args)
