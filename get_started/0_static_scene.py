@@ -157,7 +157,7 @@ if __name__ == "__main__":
         }
     ]
     handler.set_states(init_states)
-    if args.sim in ["sapien2", "sapien3"]:
+    if args.sim in ["isaacgym", "sapien2", "sapien3"]:
         handler.simulate()  # need step once to update the kinematics in sapien
     obs_tensor = handler.get_states(mode="tensor")  # get states as a tensor
 

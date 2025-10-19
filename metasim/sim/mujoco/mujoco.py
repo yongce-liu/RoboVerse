@@ -552,11 +552,11 @@ class MujocoHandler(BaseSimHandler):
 
     def set_dof_targets(self, actions) -> None:
         """Unified: Tensor/ndarray -> write ctrl (or cache for PD); dict-list -> name-based."""
-        actions = actions.squeeze()
         self._actions_cache = actions
 
         # Fast path: tensor-like controls
         if isinstance(actions, torch.Tensor):
+            actions = actions.squeeze()
             vec = actions.detach().to(dtype=torch.float32, device="cpu").numpy()
             robot_idx = 0
             joint_names = self.get_joint_names(self.robot.name, sort=True)
