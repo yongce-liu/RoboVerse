@@ -151,6 +151,7 @@ class IsaacgymHandler(BaseSimHandler):
 
         compute_device_id = 0
         graphics_device_id = 0
+        # TODO: resolve the conflict for this setting beween training and getting started 4
         if self.headless:
             graphics_device_id = -1
         self.sim = self.gym.create_sim(compute_device_id, graphics_device_id, physics_engine, sim_params)
