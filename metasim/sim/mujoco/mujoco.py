@@ -84,22 +84,22 @@ class MujocoHandler(BaseSimHandler):
             for i, joint_name in enumerate(joint_names):
                 # Resolve control mode from this robot's config
                 i_control_mode = robot.control_type.get(joint_name, "position") if robot.control_type else "position"
-                if i_control_mode == "position":
-                    # Set stiffness (kp) for position actuators and joint damping if provided in the robot config.
-                    # Note: MuJoCo uses actuator_gainprm[..., 0] for position actuator kp, and dof_damping for joint damping.
-                    actuator_cfg = robot.actuators.get(joint_name) if robot.actuators else None
-                    full_name = f"{self._mujoco_robot_names[robot_idx]}{joint_name}"
-                    if actuator_cfg is not None:
-                        # Apply actuator stiffness (kp) to the corresponding position actuator
-                        if actuator_cfg.stiffness is not None:
-                            actuator = self.physics.model.actuator(full_name)
-                            self.physics.model.actuator_gainprm[actuator.id, 0] = actuator_cfg.stiffness
+                # if i_control_mode == "position":
+                #     # Set stiffness (kp) for position actuators and joint damping if provided in the robot config.
+                #     # Note: MuJoCo uses actuator_gainprm[..., 0] for position actuator kp, and dof_damping for joint damping.
+                #     actuator_cfg = robot.actuators.get(joint_name) if robot.actuators else None
+                #     full_name = f"{self._mujoco_robot_names[robot_idx]}{joint_name}"
+                #     if actuator_cfg is not None:
+                #         # Apply actuator stiffness (kp) to the corresponding position actuator
+                #         if actuator_cfg.stiffness is not None:
+                #             actuator = self.physics.model.actuator(full_name)
+                #             self.physics.model.actuator_gainprm[actuator.id, 0] = actuator_cfg.stiffness
 
-                        # Apply joint damping to the corresponding DOF
-                        if actuator_cfg.damping is not None:
-                            j = self.physics.model.joint(full_name)
-                            dof_adr = self.physics.model.jnt_dofadr[j.id]
-                            self.physics.model.dof_damping[dof_adr] = actuator_cfg.damping
+                #         # Apply joint damping to the corresponding DOF
+                #         if actuator_cfg.damping is not None:
+                #             j = self.physics.model.joint(full_name)
+                #             dof_adr = self.physics.model.jnt_dofadr[j.id]
+                #             self.physics.model.dof_damping[dof_adr] = actuator_cfg.damping
 
     def _apply_scale_to_mjcf(self, mjcf_model, scale):
         """Apply scale to all geoms, bodies, and sites in the MJCF model."""
