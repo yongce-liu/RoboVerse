@@ -148,8 +148,7 @@ class IsaacgymHandler(BaseSimHandler):
         sim_params.physx.bounce_threshold_velocity = self.scenario.sim_params.bounce_threshold_velocity
         sim_params.physx.max_depenetration_velocity = self.scenario.sim_params.max_depenetration_velocity
         sim_params.physx.default_buffer_size_multiplier = self.scenario.sim_params.default_buffer_size_multiplier
-        # sim_params.physx.contact_collection = gymapi.ContactCollection.CC_ALL_SUBSTEPS
-        # sim_params.physx.max_gpu_contact_pairs = 2**23
+
         compute_device_id = 0
         graphics_device_id = 0
         if self.headless:
@@ -555,7 +554,6 @@ class IsaacgymHandler(BaseSimHandler):
             # self.rand_rigid_body_fric(self.scenario.random.friction, i, robot_rigid_shape_props_asset)
             # robot_body_props = self.gym.get_actor_rigid_body_properties(env, robot_handle)
             # self.rand_rigid_body_mass(self.scenario.random.mass, i, robot_body_props)
-            # self.gym.set_actor_rigid_body_properties(env, robot_handle, robot_body_props)
 
         # GET initial state, copy for reset later
         self._initial_state = np.copy(self.gym.get_sim_rigid_body_states(self.sim, gymapi.STATE_ALL))
@@ -646,10 +644,6 @@ class IsaacgymHandler(BaseSimHandler):
         extras = self.get_extra()  # extra observations
         return TensorState(objects=object_states, robots=robot_states, cameras=camera_states, extras=extras)
 
-    # @property
-    # def episode_length_buf(self) -> list[int]:
-    #     return self._episode_length_buf
-
     ############################################################
     ## Gymnasium main methods
     ############################################################
@@ -734,8 +728,6 @@ class IsaacgymHandler(BaseSimHandler):
             self.gym.set_dof_position_target_tensor(self.sim, gymtorch.unwrap_tensor(action_input))
 
     def refresh_render(self) -> None:
-        # Step the physics
-        # self.gym.simulate(self.sim)
         self.gym.fetch_results(self.sim, True)
         self._render()
 
@@ -940,8 +932,6 @@ class IsaacgymHandler(BaseSimHandler):
                     rotation_list[i][j], dtype=torch.float32, device=self.device
                 )
                 new_root_states[actor_idx, 7:13] = torch.zeros(6, dtype=torch.float32, device=self.device)
-                # ONLY WORKS FOR NO FIXED BASE LINK
-                # new_root_states[actor_idx, 7:13] = torch_rand_float(-0.5, 0.5, (1, 6), device=self.device.type)
             actor_indices.extend(range(env_offset, env_offset + len(self.objects) + 1))
 
         # Convert the actor indices to a tensor

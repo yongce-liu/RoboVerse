@@ -201,13 +201,12 @@ class MujocoHandler(BaseSimHandler):
             mjcf_model = mjcf.RootElement()
             self.hfield_name, self.hfield_measure = self._add_ground(mjcf_model=mjcf_model, if_random=False)
 
-        if self.scenario.sim_params.dt is not None:
-            mjcf_model.option.timestep = self.scenario.sim_params.dt
-
         self._add_cameras_to_model(mjcf_model)
         self._add_objects_to_model(mjcf_model)
         self._add_robots_to_model(mjcf_model)
 
+        if self.scenario.sim_params.dt is not None:
+            mjcf_model.option.timestep = self.scenario.sim_params.dt
         return mjcf_model
 
     def _add_default_ground(self, mjcf_model: mjcf.RootElement) -> None:

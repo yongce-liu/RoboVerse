@@ -114,6 +114,9 @@ if __name__ == "__main__":
         ),
     ]
 
+    # set the dt of simulator
+    scenario.sim_params.dt = 0.016667
+
     log.info(f"Using simulator: {args.sim}")
     handler = get_handler(scenario)
     init_states = [
