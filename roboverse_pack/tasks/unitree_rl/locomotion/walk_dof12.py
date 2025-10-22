@@ -1,12 +1,11 @@
 import torch
 
-from metasim.task.registry import register_task
 from metasim.types import TensorState
 from metasim.utils.math import quat_rotate_inverse
 from roboverse_pack.tasks.unitree_rl.envs.env_humanoid import HumanoidEnv
 
 
-@register_task("roboverse_pack.tasks.unitree_rl.WalkDof12Env")
+# @register_task("roboverse_pack.tasks.unitree_rl.WalkDof12Env")
 class WalkDof12Env(HumanoidEnv):
     """Humanoid walking task for the 12-DoF G1 robot."""
 
@@ -15,7 +14,7 @@ class WalkDof12Env(HumanoidEnv):
         return super()._init_buffers()
 
     def _get_noise_scale_vec(self):
-        noise_vec = torch.zeros(size=(140,), dtype=torch.float, device=self.device)
+        noise_vec = torch.zeros(size=(47,), dtype=torch.float, device=self.device)
         self.add_noise = self.cfg.noise.add_noise
         noise_scales = self.cfg.noise.scales
         noise_level = self.cfg.noise.noise_level
@@ -40,7 +39,7 @@ class WalkDof12Env(HumanoidEnv):
         base_ang_vel = quat_rotate_inverse(base_quat, robot_state.root_state[:, 10:13])
         projected_gravity = quat_rotate_inverse(base_quat, self.gravity_vec)
 
-        phase = self.get_leg_phase()
+        phase = self.get_phase()
         sin_phase = torch.sin(2 * torch.pi * phase).unsqueeze(1)
         cos_phase = torch.cos(2 * torch.pi * phase).unsqueeze(1)
 

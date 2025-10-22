@@ -39,7 +39,7 @@ class BaseEnvCfg:
             dof_pos_limits: float = 1.0 # scale dof pos limits from urdf
 
         control_type = 'P' # P: position, V: velocity, T: torques
-        action_scale = 0.5
+        action_scale = 0.25
         # decimation: Number of control action updates @ sim DT per policy DT
         decimation = 4
         scales = Scales()
@@ -109,6 +109,7 @@ class BaseEnvCfg:
             dof_pos = 1.0
             dof_vel = 0.05
             height_measurements = 5.0
+            quat = 1.0
 
         clip_observations = 100.
         clip_actions = 100.
@@ -148,7 +149,45 @@ class BaseEnvCfg:
             "g1_dof12": {"pos": [0.0, 0.0, 0.8]},
             "g1_dof23": {"pos": [0.0, 0.0, 0.8]},
             "g1_dof29_dex3": {"pos": [0.0, 0.0, 0.8]},
+            "g1_dof29": {
+                    "pos": [0.0, 0.0, 0.8],
+                    "rot": [1.0, 0.0, 0.0, 0.0],
+                    "dof_pos": {
+                        # Hips & legs
+                        "left_hip_pitch_joint": -0.1,
+                        "left_hip_roll_joint": 0.0,
+                        "left_hip_yaw_joint": 0.0,
+                        "left_knee_joint": 0.3,
+                        "left_ankle_pitch_joint": -0.2,
+                        "left_ankle_roll_joint": 0.0,
+                        "right_hip_pitch_joint": -0.1,
+                        "right_hip_roll_joint": 0.0,
+                        "right_hip_yaw_joint": 0.0,
+                        "right_knee_joint": 0.3,
+                        "right_ankle_pitch_joint": -0.2,
+                        "right_ankle_roll_joint": 0.0,
+                        # Waist
+                        "waist_yaw_joint": 0.0,
+                        "waist_roll_joint": 0.0,
+                        "waist_pitch_joint": 0.0,
+                        # Shoulders & arms
+                        "left_shoulder_pitch_joint": 0.0,
+                        "left_shoulder_roll_joint": 0.0,
+                        "left_shoulder_yaw_joint": 0.0,
+                        "left_elbow_joint": 0.0,
+                        "left_wrist_roll_joint": 0.0,
+                        "left_wrist_pitch_joint": 0.0,
+                        "left_wrist_yaw_joint": 0.0,
+                        "right_shoulder_pitch_joint": 0.0,
+                        "right_shoulder_roll_joint": 0.0,
+                        "right_shoulder_yaw_joint": 0.0,
+                        "right_elbow_joint": 0.0,
+                        "right_wrist_roll_joint": 0.0,
+                        "right_wrist_pitch_joint": 0.0,
+                        "right_wrist_yaw_joint": 0.0,
+                    },
                 }
+            }
     initial_states = InitialStates()
 
 '''

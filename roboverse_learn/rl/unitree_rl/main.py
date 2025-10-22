@@ -76,7 +76,7 @@ def prepare(args):
 def play(args):
     master_runner = prepare(args)
     if args.resume:
-        policys = master_runner.load(resume_dir=args.resume, checkpoint=-1)
+        policys = master_runner.load(resume_dir=args.resume, checkpoint=args.checkpoint)
     else:
         raise ValueError("Please provide the resume dir for eval policy.")
 

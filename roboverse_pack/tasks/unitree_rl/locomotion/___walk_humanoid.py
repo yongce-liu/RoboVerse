@@ -30,9 +30,49 @@ class WalkHumanoidEnv(HumanoidEnv):
 
         return super()._init_joint_cfg()
 
+    def _compute_ref_state(self):
+        """Compute reference target position for walking task."""
+        phase = self.get_phase()
+        sin_pos = torch.sin(2 * torch.pi * phase)
+        sin_pos_l = sin_pos.clone()
+        sin_pos_r = sin_pos.clone()
+        self.ref_dof_pos_stability = torch.zeros(
+            self.num_envs, self.robot.num_joints, device=self.device, requires_grad=False
+        )
+
+        # Scale gait amplitude by command magnitude so zero command => no gait
+        lin_speed = torch.norm(self.commands[:, :2], dim=1)
+        yaw_speed = torch.abs(self.commands[:, 2]) if self.commands.shape[1] > 2 else 0.0
+        speed_factor = torch.clamp(lin_speed + 0.5 * yaw_speed, 0.0, 1.0).unsqueeze(1)
+
+        # scale_1 = self.cfg.reward_cfg.target_joint_pos_scale
+        scale_1 = 0.17
+        scale_2 = 2 * scale_1
+        sin_pos_l[sin_pos_l > 0] = 0
+        self.ref_dof_pos_stability[:, self.left_hip_pitch_joint_idx] = sin_pos_l * scale_1
+        self.ref_dof_pos_stability[:, self.left_knee_joint_idx] = sin_pos_l * scale_2
+        self.ref_dof_pos_stability[:, self.left_ankle_joint_idx] = sin_pos_l * scale_1
+        sin_pos_r[sin_pos_r < 0] = 0
+        self.ref_dof_pos_stability[:, self.right_hip_pitch_joint_idx] = sin_pos_r * scale_1
+        self.ref_dof_pos_stability[:, self.right_knee_joint_idx] = sin_pos_r * scale_2
+        self.ref_dof_pos_stability[:, self.right_ankle_joint_idx] = sin_pos_r * scale_1
+
+        # Double support phase
+        self.ref_dof_pos_stability[torch.abs(sin_pos) < self.cfg.rewards.extras.all_feet_contact_time / 2.0] = 0
+        self.ref_dof_pos_stability = 2 * self.ref_dof_pos_stability
+        self.ref_dof_pos_stability *= speed_factor
+
     def _init_buffers(self):
         self.noise_scale_vec = self._get_noise_scale_vec()
+        # self._compute_ref_state()
+        self.ref_dof_pos_stability = torch.zeros(
+            self.num_envs, self.robot.num_joints, device=self.device, requires_grad=False
+        )
         return super()._init_buffers()
+
+    def _post_physics_step_callback(self, env_states):
+        self._compute_ref_state()
+        return super()._post_physics_step_callback(env_states)
 
     def _get_noise_scale_vec(self) -> torch.Tensor:
         noise_vec = torch.zeros(size=(101,), dtype=torch.float, device=self.device)
@@ -118,8 +158,7 @@ class WalkHumanoidEnv(HumanoidEnv):
                 q,  # |A|
                 dq,  # |A|
                 self.actions,  # |A|
-                env_states.robots[self.name].joint_pos[:, self.upper_body_joint_indices]
-                - self.default_dof_pos[self.upper_body_joint_indices],  # |upper_body_indices|
+                env_states.robots[self.name].joint_pos - self.ref_dof_pos_stability,  # |A|
                 # self.rand_push_force[:, :3],  # 3
                 # self.rand_push_torque,  # 3
                 # self.env_frictions,  # 1

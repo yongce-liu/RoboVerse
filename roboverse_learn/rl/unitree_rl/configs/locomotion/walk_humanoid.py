@@ -10,64 +10,92 @@ class WalkHumanoidEnvCfg(BaseEnvCfg):
     """
     Environment configuration for humanoid walking task.
     """
-    obs_len_history = 5
-    priv_obs_len_history = 5
-    control = BaseEnvCfg.Control(action_scale = 0.25)
+    obs_len_history = 0
+    priv_obs_len_history = 2
+    episode_length_s = 24.0
+
+    control = BaseEnvCfg.Control(action_scale = 0.25) # torque_limit_scale=0.85
     noise = BaseEnvCfg.Noise(add_noise=True)  # disable noise by default
-    normalization = BaseEnvCfg.Normalization(
-        obs_scales=BaseEnvCfg.Normalization.ObsScales(
-            lin_vel = 1.0,
-            ang_vel = 0.20,
-            dof_pos = 1.0,
-            dof_vel = 0.05,
-            # height_measurements = 5.0
-        )
+
+    @configclass
+    class RewardsScales:
+        # task tracking (mapped to your existing tracking funcs)
+        tracking_lin_vel = 1.0      # from track_lin_vel_xy_yaw_frame_exp
+        tracking_ang_vel = 0.5      # from track_ang_vel_z_exp
+        alive = 0.15                # is_alive
+
+        # base dynamics / effort
+        lin_vel_z = -2.0            # lin_vel_z_l2
+        ang_vel_xy_tmp = -0.05          # ang_vel_xy_l2
+        dof_vel = -0.001            # joint_vel_l2
+        dof_acc = -2.5e-7           # joint_acc_l2
+        action_rate = -0.05         # action_rate_l2
+        dof_pos_limits = -5.0       # joint_pos_limits
+        energy = -2e-5              # energy
+
+        # stability
+        # hip_upright_axis = 5.0,
+        waist_joint_stability = 2.0  # waist_joint_stability
+
+        # robot posture
+        orientation_l2 = -5.0       # flat_orientation_l2 -> orientation_l2 (your func name)
+        base_height = -10.0      # base_height_l2 -> base_height_sq (your L2 version)
+
+        # feet / gait
+        feet_gait = 0.5             # feet_gait
+        foot_slip = -0.2            # feet_slide -> foot_slip (your equivalent)
+        foot_clearance_exp = 1.0    # foot_clearance_reward -> foot_clearance_exp (your port)
+
+        # other contacts
+        collision = -1.0            # undesired_contacts -> collision (your penalised contacts)
+
+    @configclass
+    # class RewardExtras(BaseEnvCfg.Rewards.Extras):
+    #     base_height_target=0.76
+    #     tracking_sigma=0.25
+    #     max_contact_force=700
+    #     feet_cycle_time=0.64
+    #     target_feet_height=0.06
+    #     all_feet_contact_time=0.05
+    #     soft_dof_pos_limit=0.9
+    class RewardExtras(BaseEnvCfg.Rewards.Extras):
+        base_height_target=0.76
+        tracking_sigma=0.25
+        max_contact_force=700
+        feet_cycle_time=0.7
+        target_feet_height=0.06
+        all_feet_contact_time=0.05
+        soft_dof_pos_limit=0.9
+
+    rewards = BaseEnvCfg.Rewards(
+        scales = RewardsScales(),
+        extras = RewardExtras()
     )
-    class rewards:
-        send_timeouts = True
-        only_positive_rewards = True # if true negative total rewards are clipped at zero (avoids early termination problems)
-        functions = "roboverse_learn.rl.unitree_rl.configs.cfg_reward_funcs"
-        class scales:
-            termination = -0.0
-            tracking_lin_vel = 1.0
-            tracking_ang_vel = 0.5
-            lin_vel_z = -2.0
-            ang_vel_xy = -0.05
-            orientation = -0.
-            torques = -0.00001
-            dof_vel = -0.
-            dof_acc = -2.5e-7
-            base_height = -0.
-            feet_air_time =  1.0
-            collision = -1.
-            feet_stumble = -0.0
-            action_rate = -0.01
-            stand_still = -0.
 
 @configclass
 class WalkHumanoidRslRlTrainCfg(RslRlOnPolicyRunnerCfg):
-    num_steps_per_env = 24
-    max_iterations = 50000
+    num_steps_per_env = 60
+    max_iterations = 15001
     save_interval = 100
-    experiment_name = ""  # same as task name
+    experiment_name = "walk_humanoid"  # same as task name
     empirical_normalization = False
     policy = RslRlPpoActorCriticCfg(
         init_noise_std=1.0,
         actor_hidden_dims=[512, 256, 128],
-        critic_hidden_dims=[512, 256, 128],
+        critic_hidden_dims=[768, 256, 128],
         activation="elu",
     )
     algorithm = RslRlPpoAlgorithmCfg(
         value_loss_coef=1.0,
         use_clipped_value_loss=True,
         clip_param=0.2,
-        entropy_coef=0.01,
-        num_learning_epochs=5,
+        entropy_coef=0.001,
+        num_learning_epochs=2,
         num_mini_batches=4,
-        learning_rate=1.0e-3,
+        learning_rate=1e-5,
         schedule="adaptive",
-        gamma=0.99,
-        lam=0.95,
+        gamma=0.994,
+        lam=0.9,
         desired_kl=0.01,
         max_grad_norm=1.0,
     )

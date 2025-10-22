@@ -1,2 +1,2 @@
-from .new_utils import *
+from .utils import *
 from .terrain_generator import TerrainGenerator

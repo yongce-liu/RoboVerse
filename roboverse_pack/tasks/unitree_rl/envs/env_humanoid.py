@@ -32,7 +32,7 @@ class HumanoidEnv(LeggedRobotEnv):
         self.waist_joint_indices = get_indices_from_substring(robot.waist_joints, sorted_joint_names).to(self.device)
         return super()._init_joint_cfg()
 
-    def get_leg_phase(self):
+    def get_phase(self):
         """Return normalized gait phase in [0, 1)."""
         feet_cycle_time = self.cfg.rewards.extras.feet_cycle_time
         phase = (self.episode_steps * self.dt) % feet_cycle_time / feet_cycle_time
