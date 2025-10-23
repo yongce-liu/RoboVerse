@@ -1,15 +1,20 @@
 from __future__ import annotations
-from typing import Union
+from typing import Type
 
-import os
-import sys
-import shutil
+import copy
 import datetime
+import os
 import pickle as pkl
+import shutil
+import sys
 
+import torch
+
+from metasim.scenario.scenario import ScenarioCfg
+from roboverse_learn.rl.unitree_rl.configs import SensorsCfg
 from roboverse_learn.rl.unitree_rl.configs.cfg_base import BaseEnvCfg
-from roboverse_pack.tasks.unitree_rl.envs import MasterSimulator, EnvTypes
 from roboverse_learn.rl.unitree_rl.helper import get_class, get_log_dir, get_load_path
+from roboverse_pack.tasks.unitree_rl.envs import EnvTypes
 
 
 class BaseRunnerWrapper:
@@ -33,39 +38,72 @@ class BaseRunnerWrapper:
 
 
 class MasterRunner:
-    def __init__(self,
-                 simulator: MasterSimulator,
-                 task_name: str,
-                 log_path: str = None,
-                 lib_name: str = "rsl_rl"):
-        self.task_name = task_name
+    def __init__(
+        self,
+        task_cls: Type[EnvTypes],
+        scenario: ScenarioCfg,
+        log_path: str | None = None,
+        lib_name: str = "rsl_rl",
+        device: str | torch.device | None = None,
+    ):
+        self.task_cls = task_cls
+        self.task_name = getattr(task_cls, "task_name", task_cls.__name__)
         self.runners = {}
-        env_cls = get_class(task_name, suffix="Env", library="roboverse_pack.tasks.unitree_rl")
-        env_cfg_cls: BaseEnvCfg = get_class(task_name, suffix="EnvCfg", library="roboverse_learn.rl.unitree_rl.configs")
-        train_cfg_cls = get_class(task_name+"_"+lib_name, suffix="TrainCfg", library="roboverse_learn.rl.unitree_rl.configs")
+        self.envs = {}
+        self.scenario = scenario
+
+        env_cfg_cls: Type[BaseEnvCfg] = getattr(task_cls, "env_cfg_cls", BaseEnvCfg)
+        train_cfg_cls = getattr(task_cls, "train_cfg_cls", None)
+        sensors_cls = getattr(task_cls, "sensors_cls", SensorsCfg)
         runner_cls = get_class(lib_name, suffix="Wrapper", library="roboverse_learn.rl.unitree_rl.runners")
-        # construct the separate environment for each embodiment
-        # FOR BACKUP
-        env_cls_path = sys.modules[env_cls.__module__].__file__
+
+        module = sys.modules[task_cls.__module__]
+        env_cls_path = getattr(module, "__file__", None)
+
         now = log_path if log_path else datetime.datetime.now().strftime("%Y_%m%d_%H%M%S")
-        for _robot in simulator.robots:
-            log_dir = get_log_dir(task_name=task_name, robot_name=_robot.name, now=now)
+
+        robot_cfgs = scenario.robots if isinstance(scenario.robots, list) else [scenario.robots]
+        for robot in robot_cfgs:
+            scenario_copy = copy.deepcopy(scenario)
+            scenario_copy.robots = [robot]
+            scenario_copy.__post_init__()
+
+            resolved_device = device
+            if resolved_device is None:
+                resolved_device = (
+                    "cpu" if scenario_copy.simulator == "mujoco" else ("cuda" if torch.cuda.is_available() else "cpu")
+                )
+
             env_cfg = env_cfg_cls()
-            env: EnvTypes = env_cls(simulator=simulator, robot=_robot, config=env_cfg)
-            train_cfg = train_cfg_cls()
+            sensors = sensors_cls() if callable(sensors_cls) else sensors_cls
+            env: EnvTypes = task_cls(
+                scenario=scenario_copy,
+                device=resolved_device,
+                env_cfg=env_cfg,
+                sensors=sensors,
+            )
+
+            train_cfg = train_cfg_cls() if callable(train_cfg_cls) else train_cfg_cls
+
+            log_dir = get_log_dir(task_name=self.task_name, robot_name=env.robot.name, now=now)
             runner: BaseRunnerWrapper = runner_cls(env=env, train_cfg=train_cfg, log_dir=log_dir)
-            self.runners[_robot.name] = runner
+            self.runners[env.robot.name] = runner
+            self.envs[env.robot.name] = env
+
             if not log_path:
                 params_path = f"{log_dir}/params"
                 if not os.path.exists(params_path):
                     os.makedirs(params_path, exist_ok=True)
-                shutil.copy2(env_cls_path, params_path)
+                if env_cls_path:
+                    shutil.copy2(env_cls_path, params_path)
                 pkl.dump(env_cfg, open(f"{params_path}/env_cfg.pkl", "wb"))
                 pkl.dump(train_cfg, open(f"{params_path}/train_cfg.pkl", "wb"))
 
     def learn(self, max_iterations=10000):
-        tmp_runner = self.runners[list(self.runners.keys())[0]]
-        tmp_runner.learn(max_iterations=max_iterations)
+        if not self.runners:
+            raise RuntimeError("No runners instantiated for training.")
+        first_runner = next(iter(self.runners.values()))
+        first_runner.learn(max_iterations=max_iterations)
 
     def load(self, resume_dir: str, checkpoint: int = None):
         self.policys = {}

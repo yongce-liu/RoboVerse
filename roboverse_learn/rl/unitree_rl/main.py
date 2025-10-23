@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import copy
+
 import rootutils
+
 rootutils.setup_root(__file__, pythonpath=True)
 
 try:
@@ -11,64 +14,47 @@ except ImportError:
 import torch
 
 from metasim.scenario.scenario import ScenarioCfg
-from metasim.scenario.lights import DomeLightCfg, DistantLightCfg, DiskLightCfg
-from metasim.scenario.simulator_params import SimParamCfg
+from metasim.task.registry import get_task_class
 
-from roboverse_learn.rl.unitree_rl.configs import SensorsCfg
-from roboverse_pack.tasks.unitree_rl.envs import MasterSimulator, EnvTypes
-from roboverse_learn.rl.unitree_rl.runners import MasterRunner, EnvWrapperTypes
-from roboverse_learn.rl.unitree_rl.helper import get_args, make_robots, set_seed, make_objects
+from roboverse_pack.tasks.unitree_rl.envs import EnvTypes
+from roboverse_learn.rl.unitree_rl.helper import get_args, make_objects, make_robots, set_seed
+from roboverse_learn.rl.unitree_rl.runners import EnvWrapperTypes, MasterRunner
 
 
 def prepare(args):
-    # only support single robot for now
-    robots: list = [make_robots(args.robots)[0]]  # get the first robot
-    objects: list = make_objects(args.objects) if args.objects is not None else []
+    task_cls = get_task_class(args.task)
+    scenario_template = getattr(task_cls, "scenario", ScenarioCfg())
+    scenario = copy.deepcopy(scenario_template)
 
-    # should move the parameters in a common used config files
-    env_spacing = 2.5
-    # decimation = 4
-    device = "cpu" if args.sim == "mujoco" else "cuda" if torch.cuda.is_available() else "cpu"
-    sim_params = SimParamCfg(dt=0.005,
-                            substeps=1,
-                            num_threads=10,
-                            solver_type=1,
-                            num_position_iterations=4,
-                            num_velocity_iterations=0,
-                            contact_offset=0.01,
-                            rest_offset=0.0,
-                            bounce_threshold_velocity=0.5,
-                            max_depenetration_velocity=1.0,
-                            default_buffer_size_multiplier=5,
-                            replace_cylinder_with_capsule=True,
-                            friction_correlation_distance=0.025,
-                            friction_offset_threshold=0.04)
-    # should move the parameters in a common used config files
+    overrides = {
+        "num_envs": args.num_envs,
+        "simulator": args.sim,
+        "headless": args.headless,
+    }
 
-    scenario = ScenarioCfg(
-        robots=robots,
-        objects=objects,
-        cameras=[camera for robot in robots if hasattr(robot, 'cameras')
-         for camera in robot.cameras],
-        num_envs=args.num_envs,
-        simulator=args.sim,
-        # renderer=args.sim,
-        headless=args.headless,
-        env_spacing=env_spacing,
-        sim_params=sim_params,
-        # decimation=decimation,
-        lights=[
-                # Sky dome light - provides soft ambient lighting from all directions
-                DomeLightCfg(
-                    intensity=800.0,  # Moderate ambient lighting
-                    color=(0.85, 0.9, 1.0),  # Slightly blue sky color
-                )
+    if args.robots:
+        overrides["robots"] = make_robots(args.robots)
+        overrides["cameras"] = [
+            camera
+            for robot in overrides["robots"]
+            if hasattr(robot, "cameras")
+            for camera in getattr(robot, "cameras", [])
         ]
-    )
 
-    sensors = SensorsCfg()
-    master_simulator = MasterSimulator(scenario=scenario, sensors=sensors, device=device)
-    master_runner = MasterRunner(simulator=master_simulator, log_path=args.resume ,task_name=args.task, lib_name='rsl_rl')
+    if args.objects:
+        overrides["objects"] = make_objects(args.objects)
+
+    scenario.update(**overrides)
+
+    device = "cpu" if args.sim == "mujoco" else ("cuda" if torch.cuda.is_available() else "cpu")
+
+    master_runner = MasterRunner(
+        task_cls=task_cls,
+        scenario=scenario,
+        log_path=args.resume,
+        lib_name="rsl_rl",
+        device=device,
+    )
 
     return master_runner
 
