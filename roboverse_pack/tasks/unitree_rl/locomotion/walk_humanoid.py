@@ -154,6 +154,7 @@ class WalkHumanoidEnv(HumanoidEnv):
     "g1.walk_humanoid",
     "walking_humanoid",
     "walkinghumanoid",
+    "walk_humanoid",
 )
 class WalkHumanoidTask(WalkHumanoidEnv):
     """Registered humanoid locomotion task."""

@@ -36,7 +36,6 @@ class BaseRunnerWrapper:
         raise NotImplementedError
 
 
-
 class MasterRunner:
     def __init__(
         self,
