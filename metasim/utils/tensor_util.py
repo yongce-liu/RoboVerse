@@ -27,6 +27,6 @@ def tensor_to_cpu(data: dict | list) -> dict | list:
 
 
 @torch.jit.script
-def torch_rand_float(lower: float, upper: float, shape: tuple[int, int], device: str) -> torch.Tensor:
+def torch_rand_float(lower: float, upper: float, shape: tuple[int, int], device: torch.device) -> torch.Tensor:
     """Generate a tensor of random floats in the range [lower, upper]."""
     return (upper - lower) * torch.rand(*shape, device=device) + lower

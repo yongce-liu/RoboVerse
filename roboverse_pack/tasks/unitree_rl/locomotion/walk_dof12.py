@@ -12,7 +12,6 @@ from metasim.types import TensorState
 from metasim.utils.math import quat_rotate_inverse
 from roboverse_learn.rl.unitree_rl.configs import SensorsCfg
 from roboverse_learn.rl.unitree_rl.configs.locomotion.walk_dof12 import WalkDof12EnvCfg, WalkDof12RslRlTrainCfg
-from roboverse_pack.tasks.unitree_rl.envs.env_base import MasterSimulator
 from roboverse_pack.tasks.unitree_rl.envs.env_humanoid import HumanoidEnv
 
 
@@ -43,7 +42,7 @@ class WalkDof12Env(HumanoidEnv):
 
         return noise_vec
 
-    def _observation(self, env_states: TensorState):
+    def _compute_task_observations(self, env_states: TensorState):
         robot_state = env_states.robots[self.name]
         base_quat = robot_state.root_state[:, 3:7]
         base_lin_vel = quat_rotate_inverse(base_quat, robot_state.root_state[:, 7:10])
@@ -159,10 +158,4 @@ class WalkDof12Task(WalkDof12Env):
         if device is None:
             device = "cpu" if scenario_copy.simulator == "mujoco" else ("cuda" if torch.cuda.is_available() else "cpu")
 
-        master_simulator = MasterSimulator(scenario=scenario_copy, sensors=sensors, device=device)
-        robot_cfg = scenario_copy.robots[0]
-
-        super().__init__(simulator=master_simulator, robot=robot_cfg, config=env_cfg)
-
-        self.scenario = scenario_copy
-        self.device = master_simulator.device
+        super().__init__(scenario=scenario_copy, config=env_cfg, sensors=sensors, device=device)

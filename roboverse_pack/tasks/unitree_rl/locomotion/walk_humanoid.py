@@ -17,7 +17,6 @@ from roboverse_learn.rl.unitree_rl.configs.locomotion.walk_humanoid import (
     WalkHumanoidRslRlTrainCfg,
 )
 from roboverse_learn.rl.unitree_rl.helper import find_unique_candidate, get_euler_xyz
-from roboverse_pack.tasks.unitree_rl.envs.env_base import MasterSimulator
 from roboverse_pack.tasks.unitree_rl.envs.env_humanoid import HumanoidEnv
 
 
@@ -84,8 +83,8 @@ class WalkHumanoidEnv(HumanoidEnv):
         stance_mask[torch.abs(sin_pos) < self.cfg.rewards.extras.all_feet_contact_time / 2.0] = True
         return stance_mask.to(torch.bool)
 
-    def _observation(self, env_states: TensorState):
-        robot_state = env_states.robots[self.name]
+    def _compute_task_observations(self, env_states: TensorState):
+        robot_state = env_states.robots[self.robot.name]
         base_quat = robot_state.root_state[:, 3:7]
         base_lin_vel = quat_rotate_inverse(base_quat, robot_state.root_state[:, 7:10])
         base_ang_vel = quat_rotate_inverse(base_quat, robot_state.root_state[:, 10:13])
@@ -97,10 +96,12 @@ class WalkHumanoidEnv(HumanoidEnv):
         cos_phase = torch.cos(2 * torch.pi * phase).unsqueeze(1)
 
         stance_mask = self._get_gait_phase()
-        contact_mask = env_states.extras["contact_forces"][self.name][:, self.feet_indices, 2] > 1.0
+        contact_mask = env_states.extras["contact_forces"][self.robot.name][:, self.feet_indices, 2] > 1.0
 
-        q = (env_states.robots[self.name].joint_pos - self.default_dof_pos) * self.cfg.normalization.obs_scales.dof_pos
-        dq = env_states.robots[self.name].joint_vel * self.cfg.normalization.obs_scales.dof_vel
+        q = (
+            env_states.robots[self.robot.name].joint_pos - self.default_dof_pos
+        ) * self.cfg.normalization.obs_scales.dof_pos
+        dq = env_states.robots[self.robot.name].joint_vel * self.cfg.normalization.obs_scales.dof_vel
 
         obs_buf = torch.cat(
             (
@@ -131,7 +132,7 @@ class WalkHumanoidEnv(HumanoidEnv):
                 q,  # |A|
                 dq,  # |A|
                 self.actions,  # |A|
-                env_states.robots[self.name].joint_pos[:, self.upper_body_joint_indices]
+                env_states.robots[self.robot.name].joint_pos[:, self.upper_body_joint_indices]
                 - self.default_dof_pos[self.upper_body_joint_indices],  # |upper_body_indices|
                 # self.rand_push_force[:, :3],  # 3
                 # self.rand_push_torque,  # 3
@@ -215,10 +216,4 @@ class WalkHumanoidTask(WalkHumanoidEnv):
         if device is None:
             device = "cpu" if scenario_copy.simulator == "mujoco" else ("cuda" if torch.cuda.is_available() else "cpu")
 
-        master_simulator = MasterSimulator(scenario=scenario_copy, sensors=sensors, device=device)
-        robot_cfg = scenario_copy.robots[0]
-
-        super().__init__(simulator=master_simulator, robot=robot_cfg, config=env_cfg)
-
-        self.scenario = scenario_copy
-        self.device = master_simulator.device
+        super().__init__(scenario=scenario_copy, config=env_cfg, sensors=sensors, device=device)

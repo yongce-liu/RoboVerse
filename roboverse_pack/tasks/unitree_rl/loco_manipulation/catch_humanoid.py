@@ -31,7 +31,7 @@ class CatchHumanoidEnv(HumanoidEnv):
 
         return noise_vec
 
-    def _observation(self, env_states: TensorState):
+    def _compute_task_observations(self, env_states: TensorState):
         robot_state = env_states.robots[self.name]
         base_quat = robot_state.root_state[:, 3:7]
         base_lin_vel = quat_rotate_inverse(base_quat, robot_state.root_state[:, 7:10])

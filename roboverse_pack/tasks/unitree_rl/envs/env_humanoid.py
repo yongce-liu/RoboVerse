@@ -35,5 +35,5 @@ class HumanoidEnv(LeggedRobotEnv):
     def get_phase(self):
         """Return normalized gait phase in [0, 1)."""
         feet_cycle_time = self.cfg.rewards.extras.feet_cycle_time
-        phase = (self.episode_steps * self.dt) % feet_cycle_time / feet_cycle_time
+        phase = (self._episode_steps * self.dt) % feet_cycle_time / feet_cycle_time
         return phase

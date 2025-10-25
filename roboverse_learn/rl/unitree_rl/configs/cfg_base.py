@@ -38,9 +38,8 @@ class BaseEnvCfg:
             torque_limits: float = 1.0 # scale torque limits from urdf
             dof_pos_limits: float = 1.0 # scale dof pos limits from urdf
 
-        control_type = 'P' # P: position, V: velocity, T: torques
         action_scale = 0.25
-        # decimation: Number of control action updates @ sim DT per policy DT
+        action_offset = True
         decimation = 4
         scales = Scales()
     control = Control()

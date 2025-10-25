@@ -65,11 +65,11 @@ class RslRlEnvWrapper:
 
     @property
     def episode_length_buf(self):
-        return self.env.episode_steps
+        return self.env._episode_steps
 
     @episode_length_buf.setter
     def episode_length_buf(self, value):
-        self.env.episode_steps = value
+        self.env._episode_steps = value
 
     @property
     def extras(self):
@@ -114,11 +114,11 @@ class RslRlEnvWrapper:
 
     @property
     def episode_length_buf(self):
-        return self.env.episode_steps
+        return self.env._episode_steps
 
     @episode_length_buf.setter
     def episode_length_buf(self, value):
-        self.env.episode_steps = value
+        self.env._episode_steps = value
 
     @property
     def device(self):
