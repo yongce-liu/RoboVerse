@@ -100,7 +100,5 @@ id_rsa*
 # for sapien
 *.convex.stl
 
-.history
-
 # for test cache
 .pytest_cache/
