@@ -1,26 +1,20 @@
-# Unitree RL Library for Roboverse
+# Unitree RL
 
 Train and deploy locomotion policies for Unitree robots across three stages:
 - Training in IsaacGym
 - Sim2Sim evaluation in MuJoCo
 - Real-world deployment (networked controller)
 
-Well Supported robots: `g1_dof29_dex3` (full-body with dexterous hands), `g1_dof29` (full-body without hands)  and `g1_dof12` (12-DoF legs).
+Well Supported robots: `g1_dof29` (full-body with dexterous hands) and `g1_dof12` (full-body without hands).
 
-Directory: `roboverse_learn/rl/unitree_rl`
 
 ## Environment setup
 
-Install the RL library dependency (rsl_rl v1.0.2) from either source:
+Install the RL library dependency (rsl_rl v3.1.1) from source:
 ```
 git clone https://github.com/leggedrobotics/rsl_rl
 cd rsl_rl
-git checkout v1.0.2
-pip install -e .
-```
-or Roboverse local path:
-```
-cd roboverse_learn/rl/rsl_rl
+git checkout v3.1.1
 pip install -e .
 ```
 
@@ -29,22 +23,21 @@ pip install -e .
 
 General form:
 ```
-python roboverse_learn/rl/unitree_rl/train.py \
+python roboverse_learn/rl/unitree_rl/main.py \
   --task <your_task> \
   --sim isaacgym \
   --num_envs 8192 \
-  --robot <your_robot> \
-  --run_name <your_run_name>
+  --robot <your_robot>
 ```
 
 Examples:
-- G1Dex3 humanoid walking (IsaacGym):
+- G1 humanoid walking (IsaacSim):
 ```
-python roboverse_learn/rl/unitree_rl/train.py --task humanoid_walking --sim isaacgym --num_envs 8192 --robot g1_dof29_dex3 --run_name g1dex3_walk
+python roboverse_learn/rl/unitree_rl/main.py --task walk_g1_dof29 --sim isaacsim --num_envs 8192 --robot g1_dof29
 ```
 - G1Dof12 walking (IsaacGym):
 ```
-python roboverse_learn/rl/unitree_rl/train.py --task dof12_walking --sim isaacgym --num_envs 8192 --robot g1_dof12 --run_name g1dof12_walk
+python roboverse_learn/rl/unitree_rl/main.py --task walk_g1_dof12 --sim isaacgym --num_envs 8192 --robot g1_dof12 --run_name g1dof12_walk
 ```
 
 Outputs and checkpoints are saved to:
@@ -55,38 +48,29 @@ Each checkpoint is named `model_<iter>.pt`.
 
 ## Evaluation / Play
 
-You can evaluate trained policies in both MuJoCo (sim2sim) and IsaacGym. `play.py` also exports the jit version policy to the directory `outputs/unitree_rl/<robot>_<task>/<datetime>/exported/model_exported_jit.pt`, which can be further used for real-world deployment.
+You can evaluate trained policies in both MuJoCo, Isaacsim (sim2sim) and IsaacGym. In evaluation, `main.py` also exports the jit version policy to the directory `outputs/unitree_rl/<robot>_<task>/<datetime>/exported/model_exported_jit.pt`, which can be further used for real-world deployment.
 
 IsaacGym evaluation:
 ```
-python roboverse_learn/rl/unitree_rl/play.py \
-  --task humanoid_walking \
+python roboverse_learn/rl/unitree_rl/main.py \
+  --task walk_g1_dof29 \
   --sim isaacgym \
   --num_envs 1 \
-  --robot g1_dof29_dex3 \
+  --robot g1_dof29 \
   --load_run <datetime_from_outputs> \
-  --checkpoint <iter>
+  --checkpoint <iter> \
+  --eval
 ```
 
 MuJoCo evaluation (e.g., DOF12 with public policy):
 ```
-python roboverse_learn/rl/unitree_rl/play.py \
+python roboverse_learn/rl/unitree_rl/main.py \
   --checkpoint <iter> \
   --task dof12_walking \
   --sim mujoco \
   --robot g1_dof12 \
-  --load_run <datetime_from_outputs>
-```
-
-Public policy quick-check (Unitree):
-1) Download a pretrained policy from Unitree: https://github.com/unitreerobotics/unitree_rl_gym/tree/main/deploy/pre_train/g1
-2) Place at: `outputs/unitree_rl/g1_dof12_dof12_walking/pretrain/model_0.pt`
-3) Run the following command:
-```
-python roboverse_learn/rl/unitree_rl/play.py \
-    --robot "g1_dof12" --load_run pretrain \
-    --checkpoint 0  --task dof12_walking \
-    --jit_load true --reindex_actions true --sim mujoco
+  --load_run <datetime_from_outputs> \
+  --eval
 ```
 
 

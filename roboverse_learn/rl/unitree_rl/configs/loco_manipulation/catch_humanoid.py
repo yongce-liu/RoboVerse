@@ -4,7 +4,7 @@ from roboverse_learn.rl.unitree_rl.configs.cfg_base import BaseEnvCfg
 from roboverse_learn.rl.unitree_rl.third_party.isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, RslRlPpoAlgorithmCfg
 
 @configclass
-class CatchHumanoidEnvCfg(BaseEnvCfg):
+class CatchHumanoidTaskCfg(BaseEnvCfg):
     """
     Environment configuration for humanoid Catching task.
     """

@@ -3,13 +3,13 @@ from typing import Union
 import torch
 from tensordict import TensorDict
 
-from roboverse_pack.tasks.unitree_rl.envs import AgentEnv
+from roboverse_pack.tasks.unitree_rl.base import AgentTask
 from .master import BaseRunnerWrapper
 
 
 '''
 class RslRlEnvWrapper:
-    def __init__(self, env: AgentEnv):
+    def __init__(self, env: AgentTask):
         self.env = env
 
     def step(self, actions: torch.Tensor) -> tuple[torch.Tensor, Union[torch.Tensor, None], torch.Tensor, torch.Tensor, dict]:
@@ -81,7 +81,7 @@ class RslRlEnvWrapper:
 '''
 
 class RslRlEnvWrapper:
-    def __init__(self, env: AgentEnv, train_cfg: dict | object=None):
+    def __init__(self, env: AgentTask, train_cfg: dict | object=None):
         self.env = env
         self.train_cfg = train_cfg
 
@@ -135,7 +135,7 @@ class RslRlEnvWrapper:
 
 
 class RslRlWrapper(BaseRunnerWrapper):
-    def __init__(self, env: AgentEnv, train_cfg: dict, log_dir:str):
+    def __init__(self, env: AgentTask, train_cfg: dict, log_dir:str):
         super().__init__(env, train_cfg, log_dir)
         from rsl_rl.runners import OnPolicyRunner, DistillationRunner
 

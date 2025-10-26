@@ -2,10 +2,10 @@ import torch
 
 from metasim.types import TensorState
 from metasim.utils.math import quat_rotate_inverse
-from roboverse_pack.tasks.unitree_rl.envs.env_humanoid import HumanoidEnv
+from roboverse_pack.tasks.unitree_rl.base.base_humanoid import HumanoidTask
 
 
-class CatchHumanoidEnv(HumanoidEnv):
+class CatchHumanoidTask(HumanoidTask):
     """Humanoid locomotion-manipulation task for catching an object."""
 
     def _init_buffers(self):

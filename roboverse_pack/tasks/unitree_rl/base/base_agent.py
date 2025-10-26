@@ -13,7 +13,7 @@ from metasim.types import Action, Reward, TensorState
 from roboverse_learn.rl.unitree_rl.configs import SensorsCfg
 
 
-class AgentEnv(RLTaskEnv):
+class AgentTask(RLTaskEnv):
     """Base RLTaskEnv wrapper shared across Unitree locomotion embodiments."""
 
     def __init__(

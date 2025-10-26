@@ -17,11 +17,74 @@ from roboverse_learn.rl.unitree_rl.configs.locomotion.walk_g1_dof29 import (
     WalkG1Dof29EnvRslRlTrainCfg,
 )
 from roboverse_learn.rl.unitree_rl.helper import find_unique_candidate, get_euler_xyz
-from roboverse_pack.tasks.unitree_rl.envs.env_humanoid import HumanoidEnv
+from roboverse_pack.tasks.unitree_rl.base.base_humanoid import HumanoidTask
 
 
-class WalkG1Dof29Env(HumanoidEnv):
-    """Simple humanoid walking task wrapper."""
+@register_task(
+    "unitree_rl.walk_g1_dof29",
+    "g1.walk_g1_dof29",
+    "walk_g1_dof29",
+)
+class WalkG1Dof29Task(HumanoidTask):
+    """Registered humanoid locomotion task."""
+
+    env_cfg_cls = WalkG1Dof29EnvCfg
+    train_cfg_cls = WalkG1Dof29EnvRslRlTrainCfg
+    sensors_cls = SensorsCfg
+    task_name = "walk_g1_dof29"
+
+    scenario = ScenarioCfg(
+        robots=["g1_dof29"],
+        objects=[],
+        cameras=[],
+        num_envs=128,
+        simulator="isaacgym",
+        headless=True,
+        env_spacing=2.5,
+        sim_params=SimParamCfg(
+            dt=0.005,
+            substeps=1,
+            num_threads=10,
+            solver_type=1,
+            num_position_iterations=4,
+            num_velocity_iterations=0,
+            contact_offset=0.01,
+            rest_offset=0.0,
+            bounce_threshold_velocity=0.5,
+            max_depenetration_velocity=1.0,
+            default_buffer_size_multiplier=5,
+            replace_cylinder_with_capsule=True,
+            friction_correlation_distance=0.025,
+            friction_offset_threshold=0.04,
+        ),
+        lights=[
+            DomeLightCfg(
+                intensity=800.0,
+                color=(0.85, 0.9, 1.0),
+            )
+        ],
+    )
+
+    def __init__(
+        self,
+        scenario: ScenarioCfg | None = None,
+        device: str | torch.device | None = None,
+        env_cfg: WalkG1Dof29EnvCfg | None = None,
+        sensors: SensorsCfg | dict | None = None,
+    ) -> None:
+        scenario_copy = copy.deepcopy(scenario or type(self).scenario)
+        scenario_copy.__post_init__()
+
+        if sensors is None:
+            sensors = type(self).sensors_cls() if callable(type(self).sensors_cls) else type(self).sensors_cls
+
+        if env_cfg is None:
+            env_cfg = type(self).env_cfg_cls()
+
+        if device is None:
+            device = "cpu" if scenario_copy.simulator == "mujoco" else ("cuda" if torch.cuda.is_available() else "cpu")
+
+        super().__init__(scenario=scenario_copy, config=env_cfg, sensors=sensors, device=device)
 
     def _init_joint_cfg(self):
         find_func = partial(find_unique_candidate, data_base=self.sorted_joint_names)
@@ -147,70 +210,3 @@ class WalkG1Dof29Env(HumanoidEnv):
         )
 
         return obs_buf, priv_obs_buf
-
-
-@register_task(
-    "unitree_rl.walk_g1_dof29",
-    "g1.walk_g1_dof29",
-    "walk_g1_dof29",
-)
-class WalkG1Dof29EnvTask(WalkG1Dof29Env):
-    """Registered humanoid locomotion task."""
-
-    env_cfg_cls = WalkG1Dof29EnvCfg
-    train_cfg_cls = WalkG1Dof29EnvRslRlTrainCfg
-    sensors_cls = SensorsCfg
-    task_name = "humanoid_walking"
-
-    scenario = ScenarioCfg(
-        robots=["g1_dof29"],
-        objects=[],
-        cameras=[],
-        num_envs=128,
-        simulator="isaacgym",
-        headless=True,
-        env_spacing=2.5,
-        sim_params=SimParamCfg(
-            dt=0.005,
-            substeps=1,
-            num_threads=10,
-            solver_type=1,
-            num_position_iterations=4,
-            num_velocity_iterations=0,
-            contact_offset=0.01,
-            rest_offset=0.0,
-            bounce_threshold_velocity=0.5,
-            max_depenetration_velocity=1.0,
-            default_buffer_size_multiplier=5,
-            replace_cylinder_with_capsule=True,
-            friction_correlation_distance=0.025,
-            friction_offset_threshold=0.04,
-        ),
-        lights=[
-            DomeLightCfg(
-                intensity=800.0,
-                color=(0.85, 0.9, 1.0),
-            )
-        ],
-    )
-
-    def __init__(
-        self,
-        scenario: ScenarioCfg | None = None,
-        device: str | torch.device | None = None,
-        env_cfg: WalkG1Dof29EnvCfg | None = None,
-        sensors: SensorsCfg | dict | None = None,
-    ) -> None:
-        scenario_copy = copy.deepcopy(scenario or type(self).scenario)
-        scenario_copy.__post_init__()
-
-        if sensors is None:
-            sensors = type(self).sensors_cls() if callable(type(self).sensors_cls) else type(self).sensors_cls
-
-        if env_cfg is None:
-            env_cfg = type(self).env_cfg_cls()
-
-        if device is None:
-            device = "cpu" if scenario_copy.simulator == "mujoco" else ("cuda" if torch.cuda.is_available() else "cpu")
-
-        super().__init__(scenario=scenario_copy, config=env_cfg, sensors=sensors, device=device)

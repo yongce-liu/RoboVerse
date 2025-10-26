@@ -14,7 +14,7 @@ from metasim.scenario.scenario import ScenarioCfg
 from roboverse_learn.rl.unitree_rl.configs import SensorsCfg
 from roboverse_learn.rl.unitree_rl.configs.cfg_base import BaseEnvCfg
 from roboverse_learn.rl.unitree_rl.helper import get_class, get_log_dir, get_load_path
-from roboverse_pack.tasks.unitree_rl.envs import EnvTypes
+from roboverse_pack.tasks.unitree_rl.base import EnvTypes
 
 
 class BaseRunnerWrapper:
@@ -84,7 +84,7 @@ class MasterRunner:
 
             train_cfg = train_cfg_cls() if callable(train_cfg_cls) else train_cfg_cls
 
-            log_dir = get_log_dir(task_name=self.task_name, robot_name=env.robot.name, now=now)
+            log_dir = get_log_dir(task_name=self.task_name, now=now)
             runner: BaseRunnerWrapper = runner_cls(env=env, train_cfg=train_cfg, log_dir=log_dir)
             self.runners[env.robot.name] = runner
             self.envs[env.robot.name] = env
@@ -107,7 +107,7 @@ class MasterRunner:
     def load(self, resume_dir: str, checkpoint: int = None):
         self.policys = {}
         for _robot_name, _runner in self.runners.items():
-            log_dir = get_log_dir(task_name=self.task_name, robot_name=_robot_name, now=resume_dir)
+            log_dir = get_log_dir(task_name=self.task_name, now=resume_dir)
             _runner.load(get_load_path(load_root=log_dir, checkpoint=checkpoint))
             self.policys[_robot_name] = _runner.get_policy()
         return self.policys

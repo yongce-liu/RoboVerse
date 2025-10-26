@@ -28,5 +28,5 @@ def _auto_import_submodules() -> None:
 
 _auto_import_submodules()
 
-from .locomotion.walk_g1_dof12 import WalkG1Dof12Env  # noqa: F401
-from .locomotion.walk_g1_dof29 import WalkG1Dof29Env  # noqa: F401
+from .locomotion.walk_g1_dof12 import WalkG1Dof12Task  # noqa: F401
+from .locomotion.walk_g1_dof29 import WalkG1Dof29Task  # noqa: F401

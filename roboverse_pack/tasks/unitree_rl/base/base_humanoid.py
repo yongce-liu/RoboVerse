@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from roboverse_learn.rl.unitree_rl.helper import get_indices_from_substring
 
-from .env_legged_robot import LeggedRobotEnv
+from .base_legged_robot import LeggedRobotTask
 
 
-class HumanoidEnv(LeggedRobotEnv):
-    """Humanoid specializations on top of LeggedRobotEnv."""
+class HumanoidTask(LeggedRobotTask):
+    """Humanoid specializations on top of LeggedRobotTask."""
 
     def _init_rigid_body_indices(self):
         robot = self.robot

@@ -14,7 +14,7 @@ import numpy as np
 from metasim.utils.math import copysign
 from metasim.utils.setup_util import get_robot
 from metasim.utils.string_util import is_camel_case, is_snake_case, to_camel_case
-
+from metasim.scenario.scenario import ScenarioCfg
 
 # region: Math Utils
 @torch.jit.script
@@ -102,11 +102,11 @@ def set_seed(seed = -1):
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
 
-def get_log_dir(task_name:str, robot_name:str, now=None) -> str:
+def get_log_dir(task_name:str, now=None) -> str:
     """Get the log directory."""
     if now is None:
         now = datetime.datetime.now().strftime("%Y_%m%d_%H%M%S")
-    log_dir = f"./outputs/unitree_rl/{task_name}/{now}/{robot_name}"
+    log_dir = f"./outputs/unitree_rl/{task_name}/{now}"
     if not os.path.exists(log_dir):
         os.makedirs(log_dir, exist_ok=True)
     log.info("Log directory: {}", log_dir)
@@ -195,3 +195,44 @@ def reindex_func(data: torch.Tensor, new_idx: torch.Tensor, start_idx: int | tor
     for start in start_idx:
         data[:, start : start + reindex_length] = data[:, start : start + reindex_length][:, new_idx]
     return data
+
+class PolicyExporterLSTM(torch.nn.Module):
+    def __init__(self, actor_critic):
+        super().__init__()
+        self.actor = copy.deepcopy(actor_critic.actor)
+        self.is_recurrent = actor_critic.is_recurrent
+        self.memory = copy.deepcopy(actor_critic.memory_a.rnn)
+        self.memory.cpu()
+        self.register_buffer("hidden_state", torch.zeros(self.memory.num_layers, 1, self.memory.hidden_size))
+        self.register_buffer("cell_state", torch.zeros(self.memory.num_layers, 1, self.memory.hidden_size))
+
+    def forward(self, x):
+        out, (h, c) = self.memory(x.unsqueeze(0), (self.hidden_state, self.cell_state))
+        self.hidden_state[:] = h
+        self.cell_state[:] = c
+        return self.actor(out.squeeze(0))
+
+    @torch.jit.export
+    def reset_memory(self):
+        self.hidden_state[:] = 0.0
+        self.cell_state[:] = 0.0
+
+    def export(self, path):
+        if not path.endswith(".pt"):
+            path = os.path.join(path, "policy.pt")
+        self.to("cpu")
+        traced_script_module = torch.jit.script(self)
+        traced_script_module.save(path)
+
+def export_policy_as_jit(actor, path, filename=None):
+    """Export the policy as a JIT model."""
+    model = copy.deepcopy(actor).to("cpu")
+    traced_script_module = torch.jit.script(model)
+    traced_script_module.save(path)
+
+def get_export_jit_path(args: argparse.Namespace, scenario: ScenarioCfg) -> str:
+    """Get the path to export the JIT model."""
+    load_root = get_load_root_dir(args, scenario)
+    exported_root_dir = f"{load_root}/exported"
+    os.makedirs(exported_root_dir, exist_ok=True)
+    return f"{load_root}/exported/model_exported_jit.pt"

@@ -3,7 +3,7 @@ import torch
 from metasim.types import TensorState
 from metasim.utils.math import quat_apply, quat_rotate_inverse, wrap_to_pi
 
-from roboverse_pack.tasks.unitree_rl.envs import EnvTypes
+from roboverse_pack.tasks.unitree_rl.base import EnvTypes
 
 
 # ----------------------------- small utils for reward functions -----------------------------

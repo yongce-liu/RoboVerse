@@ -17,10 +17,10 @@ from roboverse_learn.rl.unitree_rl.configs.cfg_base import BaseEnvCfg
 from roboverse_learn.rl.unitree_rl.helper import get_euler_xyz, get_indices_from_substring
 from roboverse_pack.robots import G1Dof12Cfg, Go2Cfg
 
-from .env_base import AgentEnv
+from .base_agent import AgentTask
 
 
-class LeggedRobotEnv(AgentEnv):
+class LeggedRobotTask(AgentTask):
     """A base task env for legged robots."""
 
     def __init__(

@@ -16,10 +16,12 @@ import torch
 from metasim.scenario.scenario import ScenarioCfg
 from metasim.task.registry import get_task_class
 
-from roboverse_pack.tasks.unitree_rl.envs import EnvTypes
-from roboverse_learn.rl.unitree_rl.helper import get_args, make_objects, make_robots, set_seed
+from roboverse_pack.tasks.unitree_rl.base import EnvTypes
+from roboverse_learn.rl.unitree_rl.helper import (get_args, make_objects,
+                                                  make_robots, set_seed,
+                                                  PolicyExporterLSTM, export_policy_as_jit,
+                                                  get_export_jit_path)
 from roboverse_learn.rl.unitree_rl.runners import EnvWrapperTypes, MasterRunner
-
 
 def prepare(args):
     task_cls = get_task_class(args.task)
@@ -81,6 +83,16 @@ def play(args):
     cfg_0.domain_rand.push_robots = False
     cfg_0.noise.add_noise = False
 
+    # export jit policy
+    export_jit_path = get_export_jit_path(args, master_runner.scenario)
+    actor_critic = ppo_runner.alg.actor_critic
+    if hasattr(actor_critic, "memory_a"):
+        exporter = PolicyExporterLSTM(actor_critic)
+        exporter.export(export_jit_path)
+    else:
+        export_policy_as_jit(actor_critic.actor, export_jit_path)
+    print("Exported policy as jit script to: ", export_jit_path)
+
     # unenable noise and randomization for eval
 
     env_0.reset()
@@ -105,14 +117,6 @@ def train(args):
 
 if __name__ == "__main__":
     args = get_args()
-    # args.task = "walking_dof12"
-    # args.sim = "mujoco"
-    # args.num_envs = 1
-    # args.robot = "g1_dof12"
-    # args.headless = True
-    # args.seed = 0
-    # args.resume = "2025_0920_075050"
-    # args.eval = True
     set_seed(args.seed)
     if args.eval:
         play(args)
