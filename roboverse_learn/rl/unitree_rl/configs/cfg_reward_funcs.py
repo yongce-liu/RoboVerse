@@ -315,8 +315,8 @@ def reward_joint_pos(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
     Calculates the reward based on the difference between the current joint positions and the target joint positions.
     """
     robot_state = env_states.robots[env.name]
-    joint_pos = robot_state.joint_pos
-    pos_target = env.actions + env.default_dof_pos
+    joint_pos = robot_state.joint_pos.clone()
+    pos_target = robot_state.extra["ref_dof_pos"].clone()
     diff = joint_pos - pos_target
     r = torch.exp(-2 * torch.norm(diff, dim=1)) - 0.2 * torch.norm(diff, dim=1).clamp(0, 0.5)
     return r
@@ -514,28 +514,28 @@ def reward_waist_joint_stability(env: EnvTypes, env_states: TensorState) -> torc
     joint_pos = robot_state.joint_pos
     joint_vel = robot_state.joint_vel
 
-    return torch.exp(-20 * (joint_pos[:, env.upper_body_joint_indices]-env.default_dof_pos[env.upper_body_joint_indices]).abs()).mean(dim=1)
-    # waist_indices = env.waist_joint_indices[]
+    # return torch.exp(-20 * (joint_pos[:, env.upper_body_joint_indices]-env.default_dof_pos[env.upper_body_joint_indices]).abs()).mean(dim=1)
+    waist_indices = env.waist_joint_indices
 
-    # # Get waist joint positions and velocities
-    # waist_pos = joint_pos[:, waist_indices]
-    # waist_vel = joint_vel[:, waist_indices]
+    # Get waist joint positions and velocities
+    waist_pos = joint_pos[:, waist_indices]
+    waist_vel = joint_vel[:, waist_indices]
 
-    # # Default waist positions (should be close to 0 for stability)
-    # waist_default = env.default_dof_pos[waist_indices]
+    # Default waist positions (should be close to 0 for stability)
+    waist_default = env.default_dof_pos[waist_indices]
 
-    # # Penalize deviation from default positions
-    # pos_error = torch.norm(waist_pos - waist_default, dim=1)
-    # pos_penalty = torch.exp(-pos_error * 20.0)
+    # Penalize deviation from default positions
+    pos_error = torch.norm(waist_pos - waist_default, dim=1)
+    pos_penalty = torch.exp(-pos_error * 20.0)
 
-    # # Penalize high waist joint velocities
-    # vel_error = torch.norm(waist_vel, dim=1)
-    # vel_penalty = torch.exp(-vel_error * 15.0)
+    # Penalize high waist joint velocities
+    vel_error = torch.norm(waist_vel, dim=1)
+    vel_penalty = torch.exp(-vel_error * 15.0)
 
-    # # Combine position and velocity penalties
-    # waist_stability_reward = 0.6 * pos_penalty + 0.4 * vel_penalty
+    # Combine position and velocity penalties
+    waist_stability_reward = 0.6 * pos_penalty + 0.4 * vel_penalty
 
-    # return waist_stability_reward
+    return waist_stability_reward
 
 def reward_hip_upright_axis(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
     """

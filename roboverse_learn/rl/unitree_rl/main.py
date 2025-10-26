@@ -17,8 +17,8 @@ from metasim.scenario.scenario import ScenarioCfg
 from metasim.task.registry import get_task_class
 
 from roboverse_pack.tasks.unitree_rl.base import EnvTypes
-from roboverse_learn.rl.unitree_rl.helper import (get_args, make_objects,
-                                                  make_robots, set_seed,
+from roboverse_learn.rl.unitree_rl.helper import (get_args, make_objects, get_log_dir,
+                                                  make_robots, set_seed, get_load_path,
                                                   PolicyExporterLSTM, export_policy_as_jit,
                                                   get_export_jit_path)
 from roboverse_learn.rl.unitree_rl.runners import EnvWrapperTypes, MasterRunner
@@ -63,14 +63,18 @@ def prepare(args):
 
 def play(args):
     master_runner = prepare(args)
+    name_0 = list(master_runner.runners.keys())[0]
     if args.resume:
-        policys = master_runner.load(resume_dir=args.resume, checkpoint=args.checkpoint)
+        if args.jit_load:
+            log_dir = get_log_dir(task_name=master_runner.task_name, now=args.resume)
+            policy_0 = torch.jit.load(get_load_path(load_root=log_dir, checkpoint=args.checkpoint))
+        else:
+            policys = master_runner.load(resume_dir=args.resume, checkpoint=args.checkpoint)
+            policy_0 = policys[name_0]
     else:
         raise ValueError("Please provide the resume dir for eval policy.")
 
-    name_0 = list(master_runner.runners.keys())[0]
     runner_0 = master_runner.runners[name_0]
-    policy_0 = policys[name_0]
     env_0: EnvTypes = runner_0.env
     envwrapper_0: EnvWrapperTypes = runner_0.env_wrapper
     cfg_0 = env_0.cfg
@@ -84,8 +88,8 @@ def play(args):
     cfg_0.noise.add_noise = False
 
     # export jit policy
-    export_jit_path = get_export_jit_path(args, master_runner.scenario)
-    actor_critic = ppo_runner.alg.actor_critic
+    export_jit_path = get_export_jit_path(get_log_dir(task_name=master_runner.task_name, now=args.resume), master_runner.scenario)
+    actor_critic = runner_0.runner.alg.policy
     if hasattr(actor_critic, "memory_a"):
         exporter = PolicyExporterLSTM(actor_critic)
         exporter.export(export_jit_path)

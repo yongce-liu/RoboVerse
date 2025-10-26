@@ -78,7 +78,7 @@ class LeggedRobotTask(AgentTask):
         self.cfg = config
         # value assignments from configs
         self.decimation = self.cfg.control.decimation
-        self.dt = self.sim_dt * self.decimation
+        self.dt = self.sim_dt
         self.action_scale = self.cfg.control.action_scale
         self.action_offset = self.cfg.control.action_offset
         self.max_episode_steps = math.ceil(self.cfg.episode_length_s / self.dt)
@@ -466,7 +466,7 @@ class LeggedRobotTask(AgentTask):
     def _post_physics_step(self, env_states: TensorState):
         self.common_step_counter += 1
         self._post_physics_step_callback(env_states)
-
+        self._parse_state_for_rewards(env_states)
         # gym-style return values
         self.time_out_buf[:] = self._time_out(env_states)
         terminated_flags = self._terminated(env_states)
@@ -650,3 +650,6 @@ class LeggedRobotTask(AgentTask):
             robot_tensor.joint_vel[env_ids] = source.joint_vel[env_ids]
         if source.body_state is not None and robot_tensor.body_state is not None:
             robot_tensor.body_state[env_ids] = source.body_state[env_ids]
+
+    def _parse_state_for_rewards(self, env_states):
+        pass

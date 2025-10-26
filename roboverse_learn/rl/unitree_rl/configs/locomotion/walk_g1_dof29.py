@@ -32,7 +32,7 @@ class WalkG1Dof29EnvCfg(BaseEnvCfg):
         action_rate = -0.05         # action_rate_l2
         dof_pos_limits = -5.0       # joint_pos_limits
         energy = -2e-5              # energy
-
+        # joint_pos = 5.0             # target_joint_pos
         # stability
         # hip_upright_axis = 5.0,
         waist_joint_stability = 2.0  # waist_joint_stability
@@ -50,22 +50,15 @@ class WalkG1Dof29EnvCfg(BaseEnvCfg):
         collision = -1.0            # undesired_contacts -> collision (your penalised contacts)
 
     @configclass
-    # class RewardExtras(BaseEnvCfg.Rewards.Extras):
-    #     base_height_target=0.76
-    #     tracking_sigma=0.25
-    #     max_contact_force=700
-    #     feet_cycle_time=0.64
-    #     target_feet_height=0.06
-    #     all_feet_contact_time=0.05
-    #     soft_dof_pos_limit=0.9
     class RewardExtras(BaseEnvCfg.Rewards.Extras):
         base_height_target=0.76
+        target_joint_pos_scale = 0.34
         tracking_sigma=0.25
         max_contact_force=700
         feet_cycle_time=0.7
         target_feet_height=0.06
         all_feet_contact_time=0.05
-        soft_dof_pos_limit=0.9
+        soft_dof_pos_limit=0.98
 
     rewards = BaseEnvCfg.Rewards(
         scales = RewardsScales(),

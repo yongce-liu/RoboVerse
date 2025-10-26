@@ -78,13 +78,12 @@ def get_args(test=False):
         {"name": "--checkpoint", "type": int, "default": -1, "help": "Saved model checkpoint number. If -1: will load the last checkpoint. Overrides config file if provided."},
         {"name": "--seed", "type": int, "default": -1, "help": "The random seed for the run. If -1, will be randomly generated."},
         {"name": "--eval", "action": "store_true", "default": False, "help": "Whether to run in eval mode"},
-
+        {"name": "--jit_load", "action": "store_true", "default": False, "help": "Whether to load the JIT model"},
 
         # {"name": "--run_name", "type": str, "required": True if not test else False, "help": "Name of the run. Overrides config file if provided."},
         # {"name": "--load_run", "type": str, "default": None, "help": "Path to the config file. If provided, will override command line arguments."},
         # {"name": "--use_wandb", "action": "store_true", "default": True, "help": "Use wandb for logging"},
         # {"name": "--wandb", "type": str, "default": "g1_walking", "help": "Wandb project name"},
-        # {"name": "--jit_load", "type": bool, "default": False, "help": "Whether to load the JIT model"},
         # {"name": "--log", "type": str, "default": None, "help": "log directory. If None, will be set automatically."},
     ]
     args = parse_arguments(custom_parameters=custom_parameters)
@@ -127,28 +126,20 @@ def get_class(name: str, suffix: str, library="roboverse_learn.rl.unitree_rl"):
     wrapper_cls = getattr(wrapper_module, f"{task_name_camel}{suffix}")
     return wrapper_cls
 
-def get_load_path(load_root: str, checkpoint: int = None) -> str:
+def get_load_path(load_root: str, checkpoint: int | str = None) -> str:
     """Get the path to load the model from."""
-    if checkpoint == -1:
-        models = [file for file in os.listdir(load_root) if "model" in file and file.endswith(".pt")]
-        models.sort(key=lambda m: f"{m!s:0>15}")
-        model = models[-1]
-        load_path = f"{load_root}/{model}"
+    if isinstance(checkpoint, int):
+        if checkpoint == -1:
+            models = [file for file in os.listdir(load_root) if "model" in file and file.endswith(".pt")]
+            models.sort(key=lambda m: f"{m!s:0>15}")
+            model = models[-1]
+            load_path = f"{load_root}/{model}"
+        else:
+            load_path = f"{load_root}/model_{checkpoint}.pt"
     else:
-        load_path = f"{load_root}/model_{checkpoint}.pt"
+        load_path = f"{load_root}/{checkpoint}.pt"
     log.info(f"Loading checkpoint {checkpoint} from {load_root}")
     return load_path
-
-def get_load_root_dir(args: argparse.Namespace, scenario) -> str:
-    """Get the root directory to load the model from."""
-
-    robot_name = args.robot
-    task_name = scenario.task.task_name
-    task_name = f"{robot_name}_{task_name}"
-    if args.load_run is None:
-        raise ValueError("Please provide a run name to load the model from using --load_run")
-    load_root = f"./outputs/unitree_rl/{task_name}/{args.load_run}"
-    return load_root
 
 def make_robots(robots_str: str) -> list[any]:
     robot_names = robots_str.split()
@@ -230,9 +221,8 @@ def export_policy_as_jit(actor, path, filename=None):
     traced_script_module = torch.jit.script(model)
     traced_script_module.save(path)
 
-def get_export_jit_path(args: argparse.Namespace, scenario: ScenarioCfg) -> str:
+def get_export_jit_path(load_root: str, scenario: ScenarioCfg) -> str:
     """Get the path to export the JIT model."""
-    load_root = get_load_root_dir(args, scenario)
     exported_root_dir = f"{load_root}/exported"
     os.makedirs(exported_root_dir, exist_ok=True)
     return f"{load_root}/exported/model_exported_jit.pt"

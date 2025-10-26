@@ -73,7 +73,7 @@ class WalkG1Dof12EnvCfg(BaseEnvCfg):
         torques = -0.00001
     @configclass
     class RewardExtras(BaseEnvCfg.Rewards.Extras):
-        soft_dof_pos_limit = 0.9
+        soft_dof_pos_limit = 0.98
         base_height_target = 0.78
         feet_cycle_time = 0.8
 
