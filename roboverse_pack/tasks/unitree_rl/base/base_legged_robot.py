@@ -484,12 +484,11 @@ class LeggedRobotTask(AgentTask):
         self._raw_observation_cache = self.obs_buf.clone()
 
         # reset envs
+        if self.cfg.domain_rand.push_robots:  # push before reset to avoid incorrect resetting of root states
+            self._push_robots()
         reset_env_idx = self.reset_buf.nonzero(as_tuple=False).flatten().tolist()
         if len(reset_env_idx) > 0:
             self.reset(reset_env_idx)
-            env_states = self.get_states()
-            if self.cfg.domain_rand.push_robots:
-                self._push_robots(env_states)
 
         # copy to the history buffer
         for key, history in self.history_buffer.items():
@@ -520,8 +519,9 @@ class LeggedRobotTask(AgentTask):
             heading = torch.atan2(forward[:, 1], forward[:, 0])
             self.commands[:, 2] = torch.clip(0.5 * wrap_to_pi(self.commands[:, 3] - heading), -1.0, 1.0)
 
-    def _push_robots(self, env_states: TensorState):
+    def _push_robots(self):
         """Randomly set robot's root velocity to simulate a push."""
+        env_states = self.handler.get_states()
         env_ids = torch.arange(self.num_envs, device=self.device)
         push_env_ids = env_ids[
             torch.logical_and(
