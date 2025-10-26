@@ -4,7 +4,7 @@ from roboverse_learn.rl.unitree_rl.third_party.isaaclab_rl.rsl_rl import RslRlOn
 
 
 @configclass
-class WalkDof12RslRlTrainCfg(RslRlOnPolicyRunnerCfg):
+class WalkG1Dof12RslRlTrainCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 24
     max_iterations = 50000
     save_interval = 100
@@ -36,7 +36,7 @@ class WalkDof12RslRlTrainCfg(RslRlOnPolicyRunnerCfg):
 
 
 @configclass
-class WalkDof12EnvCfg(BaseEnvCfg):
+class WalkG1Dof12EnvCfg(BaseEnvCfg):
     obs_len_history = 0
     priv_obs_len_history = 0
 

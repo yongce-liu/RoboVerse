@@ -11,12 +11,12 @@ from metasim.task.registry import register_task
 from metasim.types import TensorState
 from metasim.utils.math import quat_rotate_inverse
 from roboverse_learn.rl.unitree_rl.configs import SensorsCfg
-from roboverse_learn.rl.unitree_rl.configs.locomotion.walk_dof12 import WalkDof12EnvCfg, WalkDof12RslRlTrainCfg
+from roboverse_learn.rl.unitree_rl.configs.locomotion.walk_g1_dof12 import WalkG1Dof12EnvCfg, WalkG1Dof12RslRlTrainCfg
 from roboverse_pack.tasks.unitree_rl.envs.env_humanoid import HumanoidEnv
 
 
-# @register_task("roboverse_pack.tasks.unitree_rl.WalkDof12Env")
-class WalkDof12Env(HumanoidEnv):
+# @register_task("roboverse_pack.tasks.unitree_rl.WalkG1Dof12Env")
+class WalkG1Dof12Env(HumanoidEnv):
     """Humanoid walking task for the 12-DoF G1 robot."""
 
     def _init_buffers(self):
@@ -93,17 +93,15 @@ class WalkDof12Env(HumanoidEnv):
 
 
 @register_task(
-    "unitree_rl.walk_dof12",
-    "dof12_walking",
-    "g1.walk_dof12",
-    "walking_dof12",
-    "walkingdof12",
+    "unitree_rl.walk_g1_dof12",
+    "g1.walk_g1_dof12",
+    "walk_g1_dof12",
 )
-class WalkDof12Task(WalkDof12Env):
+class WalkG1Dof12Task(WalkG1Dof12Env):
     """Registered task wrapper with scenario defaults and cfg hooks."""
 
-    env_cfg_cls = WalkDof12EnvCfg
-    train_cfg_cls = WalkDof12RslRlTrainCfg
+    env_cfg_cls = WalkG1Dof12EnvCfg
+    train_cfg_cls = WalkG1Dof12RslRlTrainCfg
     sensors_cls = SensorsCfg
     task_name = "dof12_walking"
 
@@ -143,7 +141,7 @@ class WalkDof12Task(WalkDof12Env):
         self,
         scenario: ScenarioCfg | None = None,
         device: str | torch.device | None = None,
-        env_cfg: WalkDof12EnvCfg | None = None,
+        env_cfg: WalkG1Dof12EnvCfg | None = None,
         sensors: SensorsCfg | dict | None = None,
     ) -> None:
         scenario_copy = copy.deepcopy(scenario or type(self).scenario)

@@ -30,7 +30,6 @@ class LeggedRobotEnv(AgentEnv):
         sensors: SensorsCfg | dict | None = None,
         device: str | torch.device | None = None,
     ) -> None:
-        self._setup_complete = False
         self.initial_state_default: RobotState | None = None
         self.initial_state: RobotState | None = None
         self._cached_priv_obs: torch.Tensor | None = None
@@ -44,9 +43,6 @@ class LeggedRobotEnv(AgentEnv):
     # ------------------------------------------------------------------ #
     def _ensure_setup(self) -> None:
         """Lazy-initialize robot-specific buffers once handler exists."""
-        if self._setup_complete:
-            return
-
         self.name = self.robot.name
         self.num_actions = len(self.robot.actuators)
         self.sim_dt = self.scenario.sim_params.dt
@@ -60,8 +56,6 @@ class LeggedRobotEnv(AgentEnv):
 
         self._init_buffers()
         self._init_initial_state()
-
-        self._setup_complete = True
 
     def _compute_task_observations(self, env_states: TensorState) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Return (policy_obs, privileged_obs). Implemented by subclasses."""
@@ -212,14 +206,7 @@ class LeggedRobotEnv(AgentEnv):
         }
 
     def _init_buffers(self):
-        # self.joint_pos = torch.zeros(size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device, requires_grad=False)
-        # self.joint_vel = torch.zeros(size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device, requires_grad=False)
-        # self.base_pos = torch.zeros(size=(self.num_envs, 3), dtype=torch.float, device=self.device, requires_grad=False)
-        # self.base_quat = torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device).unsqueeze(0).repeat(self.num_envs, 1)
-        # self.base_euler_xyz = get_euler_xyz(self.base_quat)
-        # self.base_lin_vel = torch.zeros(size=(self.num_envs, 3), dtype=torch.float, device=self.device, requires_grad=False)
-        # self.base_ang_vel = torch.zeros(size=(self.num_envs, 3), dtype=torch.float, device=self.device, requires_grad=False)
-
+        self.common_step_counter = 0
         self.actions = torch.zeros(
             size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device, requires_grad=False
         )
@@ -237,8 +224,6 @@ class LeggedRobotEnv(AgentEnv):
         ))
         # self.projected_gravity = quat_rotate_inverse(self.base_quat, self.gravity_vec)
         # self.contact_forces = torch.zeros(size=(self.num_envs, len(self.sorted_body_names), 3), dtype=torch.float, device=self.device)
-
-        # self.common_step_counter = 0
 
         self.commands = torch.zeros(
             size=(self.num_envs, self.cfg.commands.num_commands),
@@ -443,8 +428,6 @@ class LeggedRobotEnv(AgentEnv):
         actions: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, dict]:
         """Apply actions, simulate for `decimation` steps, and compute RLTask-style outputs."""
-        self._ensure_setup()
-
         if not isinstance(actions, torch.Tensor):
             actions = torch.as_tensor(actions, device=self.device, dtype=torch.float32)
         if actions.ndim == 1:
@@ -481,20 +464,7 @@ class LeggedRobotEnv(AgentEnv):
         return self.obs_buf, self.rew_buf.clone(), terminated, time_out, info
 
     def _post_physics_step(self, env_states: TensorState):
-        self._episode_steps += 1
-
-        # robot_state = env_states.robots[self.name]
-        # update tensors from env_states
-        # self.joint_pos[:] = robot_state.joint_pos
-        # self.joint_vel[:] = robot_state.joint_vel
-        # self.base_pos[:] = robot_state.root_state[:, 0:3]
-        # self.base_quat[:] = robot_state.root_state[:, 3:7]
-        # self.base_euler_xyz = get_euler_xyz(self.base_quat)
-        # self.base_lin_vel[:] = quat_rotate_inverse(self.base_quat, robot_state.root_state[:, 7:10])
-        # self.base_ang_vel[:] = quat_rotate_inverse(self.base_quat, robot_state.root_state[:, 10:13])
-        # self.projected_gravity[:] = quat_rotate_inverse(self.base_quat, self.gravity_vec)
-        # self.contact_forces[:] = robot_state.extra['contact_forces']
-
+        self.common_step_counter += 1
         self._post_physics_step_callback(env_states)
 
         # gym-style return values
@@ -553,7 +523,12 @@ class LeggedRobotEnv(AgentEnv):
     def _push_robots(self, env_states: TensorState):
         """Randomly set robot's root velocity to simulate a push."""
         env_ids = torch.arange(self.num_envs, device=self.device)
-        push_env_ids = env_ids[self._episode_steps[env_ids] % self.cfg.domain_rand.push_interval == 0]
+        push_env_ids = env_ids[
+            torch.logical_and(
+                self._episode_steps[env_ids] % self.cfg.domain_rand.push_interval == 0,
+                self._episode_steps[env_ids] != 0,
+            )
+        ]
         if len(push_env_ids) == 0:
             return
 
@@ -561,14 +536,7 @@ class LeggedRobotEnv(AgentEnv):
         env_states.robots[self.robot.name].root_state[push_env_ids, 7:9] = torch_rand_float(
             -max_vel, max_vel, (len(push_env_ids), 2), device=self.device
         )
-        # env_states.robots[self.robot.name].root_state[:, :2] += torch_rand_float(
-        #     -max_vel, max_vel, (self.num_envs, 2), device=self.device
-        # )*self.dt
 
-        # max_angular = self.cfg.random.push.max_push_ang_vel
-        # env_states.robots[self.robot.name].root_state[:, 10:13] = torch_rand_float(
-        #     -max_angular, max_angular, (self.num_envs, 3), device=self.device
-        # )
         self.set_states(env_states, push_env_ids.tolist())
 
     def _reward(self, env_states):

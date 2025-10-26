@@ -91,6 +91,7 @@ class IsaacgymHandler(BaseSimHandler):
         self._d_gains: torch.Tensor | None = None
         self._torque_limits: torch.Tensor | None = None
         self._effort: torch.Tensor | None = None  # output of pd controller, used for effort control
+        self._dof_force: torch.Tensor | None = None  # measured DOF forces from simulator
         self._pos_ctrl_dof_dix = []  # joint index in dof state, built-in position control mode
         self._manual_pd_on: bool = False  # turn on maunual pd controller if effort joint exist
 
@@ -105,6 +106,8 @@ class IsaacgymHandler(BaseSimHandler):
         self._root_states = gymtorch.wrap_tensor(self.gym.acquire_actor_root_state_tensor(self.sim))
         self._dof_states = gymtorch.wrap_tensor(self.gym.acquire_dof_state_tensor(self.sim))
         self._rigid_body_states = gymtorch.wrap_tensor(self.gym.acquire_rigid_body_state_tensor(self.sim))
+        # measured per-DOF forces/torques from simulator
+        self._dof_force = gymtorch.wrap_tensor(self.gym.acquire_dof_force_tensor(self.sim))
         self._robot_dof_state = self._dof_states.view(self._num_envs, -1, 2)[:, self._obj_num_dof :]
         self._contact_forces = gymtorch.wrap_tensor(self.gym.acquire_net_contact_force_tensor(self.sim))
 
@@ -116,6 +119,8 @@ class IsaacgymHandler(BaseSimHandler):
         self.gym.refresh_jacobian_tensors(self.sim)
         self.gym.refresh_mass_matrix_tensors(self.sim)
         self.gym.refresh_net_contact_force_tensor(self.sim)
+        # refresh measured dof forces if available
+        self.gym.refresh_dof_force_tensor(self.sim)
 
         # if self.optional_queries is None:
         #     self.optional_queries = {}
@@ -619,9 +624,8 @@ class IsaacgymHandler(BaseSimHandler):
                 joint_vel=self._dof_states.view(self.num_envs, -1, 2)[:, joint_ids_reindex, 1],
                 joint_pos_target=None,  # TODO
                 joint_vel_target=None,  # TODO
-                joint_effort_target=self._effort[:, joint_ids_reindex]
-                if (self._manual_pd_on and self._effort is not None)
-                else None,
+                # prefer measured forces from simulator over internal PD effort
+                joint_effort_target=self._dof_force.view(self.num_envs, -1)[:, joint_ids_reindex],
             )
             # FIXME a temporary solution for accessing net contact forces of robots, it will be moved to
             extra = {
@@ -747,6 +751,7 @@ class IsaacgymHandler(BaseSimHandler):
         self.gym.refresh_jacobian_tensors(self.sim)
         self.gym.refresh_mass_matrix_tensors(self.sim)
         self.gym.refresh_net_contact_force_tensor(self.sim)
+        self.gym.refresh_dof_force_tensor(self.sim)
         # Refresh cameras and viewer
         self._render()
 
@@ -984,15 +989,13 @@ class IsaacgymHandler(BaseSimHandler):
         return
 
     def close(self) -> None:
-        try:
+        if self.gym is not None and self.sim is not None:
             self.gym.destroy_sim(self.sim)
+        if self.gym is not None and self.viewer is not None:
             self.gym.destroy_viewer(self.viewer)
-            self.gym = None
-            self.sim = None
-            self.viewer = None
-        except Exception as e:
-            log.error(f"Error closing IsaacGym environment: {e}")
-            pass
+        self.gym = None
+        self.sim = None
+        self.viewer = None
 
     ############################################################
     ## Utils

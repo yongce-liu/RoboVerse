@@ -111,7 +111,11 @@ def reward_torques(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
     """
     Penalize high torques.
     """
-    return torch.sum(torch.square(env.torques), dim=1)
+    efforts = env_states.robots[env.name].joint_effort_target
+    if efforts is None:
+        return torch.zeros(env.num_envs, device=env.device)
+    else:
+        return torch.sum(torch.square(efforts), dim=1)
 
 def reward_dof_vel(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
     """

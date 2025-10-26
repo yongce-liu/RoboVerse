@@ -6,7 +6,7 @@ from roboverse_learn.rl.unitree_rl.configs.cfg_base import BaseEnvCfg
 from roboverse_learn.rl.unitree_rl.third_party.isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, RslRlPpoAlgorithmCfg
 
 @configclass
-class WalkHumanoidEnvCfg(BaseEnvCfg):
+class WalkG1Dof29EnvCfg(BaseEnvCfg):
     """
     Environment configuration for humanoid walking task.
     """
@@ -73,11 +73,11 @@ class WalkHumanoidEnvCfg(BaseEnvCfg):
     )
 
 @configclass
-class WalkHumanoidRslRlTrainCfg(RslRlOnPolicyRunnerCfg):
+class WalkG1Dof29EnvRslRlTrainCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 60
     max_iterations = 15001
     save_interval = 100
-    experiment_name = "walk_humanoid"  # same as task name
+    experiment_name = "walk_g1_dof29"  # same as task name
     empirical_normalization = False
     policy = RslRlPpoActorCriticCfg(
         init_noise_std=1.0,

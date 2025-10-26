@@ -67,8 +67,8 @@ def parse_arguments(description="humanoid rl task arguments", custom_parameters=
 def get_args(test=False):
     """Get the command line arguments."""
     custom_parameters = [
-        {"name": "--task", "type": str, "default": "WalkingHumanoid", "help": "Task name for training/testing."},
-        {"name": "--robots", "type": str, "default": "g1_dof12", "help": "The used robots."},
+        {"name": "--task", "type": str, "default": "walk_g1_dof29", "help": "Task name for training/testing."},
+        {"name": "--robots", "type": str, "default": "g1_dof29", "help": "The used robots."},
         {"name": "--objects", "type": str, "default": None, "help": "The used objects."},
         {"name": "--num_envs", "type": int, "default": 128, "help": "number of parallel environments."},
         {"name": "--iter", "type": int, "default": 15000, "help": "Max number of training iterations."},
@@ -76,7 +76,6 @@ def get_args(test=False):
         {"name": "--headless", "action": "store_true", "default": True, "help": "Force display off at all times"},
         {"name": "--resume", "type": str, "default": None, "help": "Resume training from a checkpoint"},
         {"name": "--checkpoint", "type": int, "default": -1, "help": "Saved model checkpoint number. If -1: will load the last checkpoint. Overrides config file if provided."},
-        {"name": "--reindex", "type": bool, "default": False, "help": "Whether to reindex actions/observations between the default order sequence and a sorted (ascending) order"},
         {"name": "--seed", "type": int, "default": -1, "help": "The random seed for the run. If -1, will be randomly generated."},
         {"name": "--eval", "action": "store_true", "default": False, "help": "Whether to run in eval mode"},
 

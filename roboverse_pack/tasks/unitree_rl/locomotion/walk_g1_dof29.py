@@ -12,15 +12,15 @@ from metasim.task.registry import register_task
 from metasim.types import TensorState
 from metasim.utils.math import quat_rotate_inverse
 from roboverse_learn.rl.unitree_rl.configs import SensorsCfg
-from roboverse_learn.rl.unitree_rl.configs.locomotion.walk_humanoid import (
-    WalkHumanoidEnvCfg,
-    WalkHumanoidRslRlTrainCfg,
+from roboverse_learn.rl.unitree_rl.configs.locomotion.walk_g1_dof29 import (
+    WalkG1Dof29EnvCfg,
+    WalkG1Dof29EnvRslRlTrainCfg,
 )
 from roboverse_learn.rl.unitree_rl.helper import find_unique_candidate, get_euler_xyz
 from roboverse_pack.tasks.unitree_rl.envs.env_humanoid import HumanoidEnv
 
 
-class WalkHumanoidEnv(HumanoidEnv):
+class WalkG1Dof29Env(HumanoidEnv):
     """Simple humanoid walking task wrapper."""
 
     def _init_joint_cfg(self):
@@ -150,18 +150,15 @@ class WalkHumanoidEnv(HumanoidEnv):
 
 
 @register_task(
-    "unitree_rl.walk_humanoid",
-    "humanoid_walking",
-    "g1.walk_humanoid",
-    "walking_humanoid",
-    "walkinghumanoid",
-    "walk_humanoid",
+    "unitree_rl.walk_g1_dof29",
+    "g1.walk_g1_dof29",
+    "walk_g1_dof29",
 )
-class WalkHumanoidTask(WalkHumanoidEnv):
+class WalkG1Dof29EnvTask(WalkG1Dof29Env):
     """Registered humanoid locomotion task."""
 
-    env_cfg_cls = WalkHumanoidEnvCfg
-    train_cfg_cls = WalkHumanoidRslRlTrainCfg
+    env_cfg_cls = WalkG1Dof29EnvCfg
+    train_cfg_cls = WalkG1Dof29EnvRslRlTrainCfg
     sensors_cls = SensorsCfg
     task_name = "humanoid_walking"
 
@@ -201,7 +198,7 @@ class WalkHumanoidTask(WalkHumanoidEnv):
         self,
         scenario: ScenarioCfg | None = None,
         device: str | torch.device | None = None,
-        env_cfg: WalkHumanoidEnvCfg | None = None,
+        env_cfg: WalkG1Dof29EnvCfg | None = None,
         sensors: SensorsCfg | dict | None = None,
     ) -> None:
         scenario_copy = copy.deepcopy(scenario or type(self).scenario)
