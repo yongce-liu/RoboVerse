@@ -93,7 +93,7 @@ class BaseEnvCfg:
             max_contact_force = 100. # forces above this value are penalized
 
         send_timeouts = True
-        only_positive_rewards = True # if true negative total rewards are clipped at zero (avoids early termination problems)
+        only_positive_rewards = False # if true negative total rewards are clipped at zero (avoids early termination problems)
         functions: list[Callable] | str = "roboverse_learn.rl.unitree_rl.configs.cfg_reward_funcs"
         scales = Scales()
         extras = Extras()

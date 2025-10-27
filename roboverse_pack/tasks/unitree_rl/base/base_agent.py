@@ -75,7 +75,6 @@ class AgentTask(RLTaskEnv):
 
     def _physics_step(self, actions: Action) -> TensorState:
         """Issue low-level actions and simulate one physics step."""
-        self._episode_steps += 1
         self.handler.set_dof_targets(actions)
         self.handler.simulate()
         return self.handler.get_states()

@@ -78,10 +78,10 @@ class LeggedRobotTask(AgentTask):
         self.cfg = config
         # value assignments from configs
         self.decimation = self.cfg.control.decimation
-        self.dt = self.sim_dt
+        self.step_dt = self.sim_dt * self.decimation
         self.action_scale = self.cfg.control.action_scale
         self.action_offset = self.cfg.control.action_offset
-        self.max_episode_steps = math.ceil(self.cfg.episode_length_s / self.dt)
+        self.max_episode_steps = math.ceil(self.cfg.episode_length_s / self.step_dt)
         self.command_ranges = self.cfg.commands.ranges
         self.num_commands = self.cfg.commands.num_commands
         self.reward_scales = dict(sorted(class_to_dict(self.cfg.rewards.scales).items(), key=lambda x: x[0]))
@@ -188,7 +188,7 @@ class LeggedRobotTask(AgentTask):
             if scale == 0:
                 self.reward_scales.pop(key)
             else:
-                self.reward_scales[key] *= self.dt
+                self.reward_scales[key] *= self.step_dt
         # prepare list of functions
         self.reward_functions = []
         self.reward_names = []
@@ -428,6 +428,7 @@ class LeggedRobotTask(AgentTask):
         actions: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, dict]:
         """Apply actions, simulate for `decimation` steps, and compute RLTask-style outputs."""
+        self._episode_steps += 1
         if not isinstance(actions, torch.Tensor):
             actions = torch.as_tensor(actions, device=self.device, dtype=torch.float32)
         if actions.ndim == 1:
@@ -504,7 +505,7 @@ class LeggedRobotTask(AgentTask):
         heading, compute measured terrain heights and randomly push robots.
         """
         env_ids = (
-            (self._episode_steps % int(self.cfg.commands.resampling_time / self.dt) == 0)
+            (self._episode_steps % int(self.cfg.commands.resampling_time / self.step_dt) == 0)
             .nonzero(as_tuple=False)
             .flatten()
         )

@@ -129,7 +129,7 @@ def reward_dof_acc(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
     Penalize high DOF accelerations.
     """
     robot_state = env_states.robots[env.name]
-    return torch.sum(torch.square((env.history_buffer["joint_vel"][-1] - robot_state.joint_vel) / env.dt), dim=1)
+    return torch.sum(torch.square((env.history_buffer["joint_vel"][-1] - robot_state.joint_vel) / env.step_dt), dim=1)
 
 def reward_action_rate(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
     """
