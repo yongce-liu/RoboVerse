@@ -32,7 +32,7 @@ class WalkG1Dof29EnvCfg(BaseEnvCfg):
         action_rate = -0.05         # action_rate_l2
         dof_pos_limits = -5.0       # joint_pos_limits
         energy = -2e-5              # energy
-        joint_pos = 5.0             # target_joint_pos
+        # joint_pos = 5.0             # target_joint_pos
         # stability
         # hip_upright_axis = 5.0,
         waist_joint_stability = 2.0  # waist_joint_stability
