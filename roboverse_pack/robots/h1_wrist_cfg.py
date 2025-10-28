@@ -21,25 +21,25 @@ class H1WristCfg(RobotCfg):
     collapse_fixed_joints: bool = False  # must set false to keep wrist link exist
 
     actuators: dict[str, BaseActuatorCfg] = {
-        "left_hip_yaw": BaseActuatorCfg(stiffness=200, damping=5, torque_limit=200.0),
-        "left_hip_roll": BaseActuatorCfg(stiffness=200, damping=5, torque_limit=200.0),
-        "left_hip_pitch": BaseActuatorCfg(stiffness=200, damping=5, torque_limit=200.0),
-        "left_knee": BaseActuatorCfg(stiffness=300, damping=6, torque_limit=300.0),
-        "left_ankle": BaseActuatorCfg(stiffness=40, damping=2, torque_limit=40.0),
-        "right_hip_yaw": BaseActuatorCfg(stiffness=200, damping=5, torque_limit=200.0),
-        "right_hip_roll": BaseActuatorCfg(stiffness=200, damping=5, torque_limit=200.0),
-        "right_hip_pitch": BaseActuatorCfg(stiffness=200, damping=5, torque_limit=200.0),
-        "right_knee": BaseActuatorCfg(stiffness=300, damping=6, torque_limit=300.0),
-        "right_ankle": BaseActuatorCfg(stiffness=40, damping=2, torque_limit=40.0),
-        "torso": BaseActuatorCfg(stiffness=300, damping=6, torque_limit=200.0),
-        "left_shoulder_pitch": BaseActuatorCfg(stiffness=100, damping=2, torque_limit=40.0),
-        "left_shoulder_roll": BaseActuatorCfg(stiffness=100, damping=2, torque_limit=40.0),
-        "left_shoulder_yaw": BaseActuatorCfg(stiffness=100, damping=2, torque_limit=18.0),
-        "left_elbow": BaseActuatorCfg(stiffness=100, damping=2, torque_limit=18.0),
-        "right_shoulder_pitch": BaseActuatorCfg(stiffness=100, damping=2, torque_limit=40.0),
-        "right_shoulder_roll": BaseActuatorCfg(stiffness=100, damping=2, torque_limit=40.0),
-        "right_shoulder_yaw": BaseActuatorCfg(stiffness=100, damping=2, torque_limit=18.0),
-        "right_elbow": BaseActuatorCfg(stiffness=100, damping=2, torque_limit=18.0),
+        "left_hip_yaw": BaseActuatorCfg(stiffness=200, damping=5),
+        "left_hip_roll": BaseActuatorCfg(stiffness=200, damping=5),
+        "left_hip_pitch": BaseActuatorCfg(stiffness=200, damping=5),
+        "left_knee": BaseActuatorCfg(stiffness=300, damping=6),
+        "left_ankle": BaseActuatorCfg(stiffness=40, damping=2),
+        "right_hip_yaw": BaseActuatorCfg(stiffness=200, damping=5),
+        "right_hip_roll": BaseActuatorCfg(stiffness=200, damping=5),
+        "right_hip_pitch": BaseActuatorCfg(stiffness=200, damping=5),
+        "right_knee": BaseActuatorCfg(stiffness=300, damping=6),
+        "right_ankle": BaseActuatorCfg(stiffness=40, damping=2),
+        "torso": BaseActuatorCfg(stiffness=300, damping=6),
+        "left_shoulder_pitch": BaseActuatorCfg(stiffness=100, damping=2),
+        "left_shoulder_roll": BaseActuatorCfg(stiffness=100, damping=2),
+        "left_shoulder_yaw": BaseActuatorCfg(stiffness=100, damping=2),
+        "left_elbow": BaseActuatorCfg(stiffness=100, damping=2),
+        "right_shoulder_pitch": BaseActuatorCfg(stiffness=100, damping=2),
+        "right_shoulder_roll": BaseActuatorCfg(stiffness=100, damping=2),
+        "right_shoulder_yaw": BaseActuatorCfg(stiffness=100, damping=2),
+        "right_elbow": BaseActuatorCfg(stiffness=100, damping=2),
     }
 
     torque_limits: dict[str, float] = {
@@ -162,10 +162,3 @@ class H1WristCfg(RobotCfg):
     left_yaw_roll_joints = ["left_hip_yaw", "left_hip_roll"]
     right_yaw_roll_joints = ["right_hip_yaw", "right_hip_roll"]
     upper_body_joints = ["shoulder", "elbow", "torso"]
-
-    # From default joint damping in XML
-    dof_damping: float = 0.001
-    # From default joint friction in XML
-    dof_friction: float = 0.2
-    # From default joint armature in XML
-    dof_armature: float = 0.1

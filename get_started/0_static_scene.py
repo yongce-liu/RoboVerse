@@ -114,9 +114,6 @@ if __name__ == "__main__":
         ),
     ]
 
-    # set the dt of simulator
-    scenario.sim_params.dt = 0.016667
-
     log.info(f"Using simulator: {args.sim}")
     handler = get_handler(scenario)
     init_states = [
@@ -161,7 +158,7 @@ if __name__ == "__main__":
     ]
     handler.set_states(init_states)
     if args.sim in ["isaacgym", "sapien2", "sapien3"]:
-        handler.simulate()  # need step once to update the kinematics in sapien
+        handler.simulate()  # need step once to update the kinematics in sapien and isaacgym
     obs_tensor = handler.get_states(mode="tensor")  # get states as a tensor
 
     os.makedirs("get_started/output", exist_ok=True)

@@ -8,6 +8,7 @@ from typing import Callable
 import torch
 
 from metasim.scenario.scenario import ScenarioCfg
+from metasim.utils.control_util import get_action
 from metasim.utils.dict import class_to_dict
 from metasim.utils.math import quat_apply, wrap_to_pi
 from metasim.utils.state import RobotState, TensorState
@@ -333,37 +334,6 @@ class LeggedRobotTask(AgentTask):
         self._write_robot_state(self.initial_state_default, self._initial_states_default, all_ids)
         self._write_robot_state(self.initial_state, self._initial_states, all_ids)
 
-    def _compute_effort(self, actions: torch.Tensor, env_states: TensorState) -> torch.Tensor:
-        """Compute effort from actions using PD control."""
-        # Scale the actions (generally output from policy)
-        action_scaled = self.action_scale * actions
-
-        # Get current joint positions and velocities
-        sorted_dof_pos = env_states.robots[self.robot.name].joint_pos
-        sorted_dof_vel = env_states.robots[self.robot.name].joint_vel
-
-        # Compute PD control effort
-        target_pos = (
-            self.cfg.default_joint_pd_target if hasattr(self.cfg, "default_joint_pd_target") else self.default_dof_pos
-        )
-        if isinstance(target_pos, dict):
-            target_pos = torch.tensor(
-                [target_pos[name] for name in self.sorted_joint_names], dtype=torch.float32, device=self.device
-            )
-        elif not isinstance(target_pos, torch.Tensor):
-            target_pos = torch.tensor(target_pos, dtype=torch.float32, device=self.device)
-        target_pos = target_pos.to(self.device)
-        if target_pos.dim() == 1:
-            target_pos = target_pos.unsqueeze(0).repeat(self.num_envs, 1)
-        if self.action_offset:
-            effort = self.p_gains * (action_scaled + target_pos - sorted_dof_pos) - self.d_gains * sorted_dof_vel
-        else:
-            effort = self.p_gains * (action_scaled - sorted_dof_pos) - self.d_gains * sorted_dof_vel
-
-        # Apply torque limits
-        effort = torch.clip(effort, -self.torque_limits, self.torque_limits)
-        return effort.to(torch.float32)
-
     def reset(self, env_ids: list[int] | None = None, states: TensorState | None = None):
         """Reset selected envs (defaults to all)."""
         if env_ids is None:
@@ -439,10 +409,7 @@ class LeggedRobotTask(AgentTask):
 
         env_states = self.get_states()
         for _ in range(self.decimation):
-            if self.manual_pd_on:
-                send_action = self._compute_effort(actions, env_states)
-            else:
-                send_action = actions * self.action_scale
+            send_action = get_action(self, actions)
             env_states = self._physics_step(send_action)
 
         self._post_physics_step(env_states)

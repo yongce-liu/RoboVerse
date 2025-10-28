@@ -1,7 +1,7 @@
 from typing import Callable
 from metasim.utils import configclass
 from roboverse_learn.rl.unitree_rl.configs.cfg_base import BaseEnvCfg
-from roboverse_learn.rl.unitree_rl.third_party.isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, RslRlPpoAlgorithmCfg
+from roboverse_learn.rl.unitree_rl.configs.algorithm.rsl_rl.rl_cfg import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, RslRlPpoAlgorithmCfg
 
 @configclass
 class CatchHumanoidTaskCfg(BaseEnvCfg):

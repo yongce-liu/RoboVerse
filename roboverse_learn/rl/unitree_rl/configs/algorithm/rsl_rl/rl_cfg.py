@@ -10,8 +10,6 @@ from typing import Literal
 
 from metasim.utils import configclass
 
-from .rnd_cfg import RslRlRndCfg
-from .symmetry_cfg import RslRlSymmetryCfg
 
 #########################
 # Policy configurations #
@@ -119,10 +117,10 @@ class RslRlPpoAlgorithmCfg:
     Otherwise, the advantage is normalized over the entire collected trajectories.
     """
 
-    rnd_cfg: RslRlRndCfg | None = None
+    rnd_cfg: None = None
     """The RND configuration. Default is None, in which case RND is not used."""
 
-    symmetry_cfg: RslRlSymmetryCfg | None = None
+    symmetry_cfg: None = None
     """The symmetry configuration. Default is None, in which case symmetry is not used."""
 
 
