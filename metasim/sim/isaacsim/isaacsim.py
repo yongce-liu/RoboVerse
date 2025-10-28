@@ -735,7 +735,7 @@ class IsaacsimHandler(BaseSimHandler):
         # Use configured name if available, otherwise fall back to index-based naming
         light_name = (
             f"/World/{light_cfg.name}"
-            if hasattr(light_cfg, "name") and light_cfg.name
+            if hasattr(light_cfg, "name") and light_cfg.name and light_cfg.name != "light"
             else f"/World/DistantLight_{light_index}"
         )
 
@@ -769,7 +769,7 @@ class IsaacsimHandler(BaseSimHandler):
         # Use configured name if available, otherwise fall back to index-based naming
         light_name = (
             f"/World/{light_cfg.name}"
-            if hasattr(light_cfg, "name") and light_cfg.name
+            if hasattr(light_cfg, "name") and light_cfg.name and light_cfg.name != "light"
             else f"/World/CylinderLight_{light_index}"
         )
 
@@ -798,7 +798,7 @@ class IsaacsimHandler(BaseSimHandler):
         # Use configured name if available, otherwise fall back to index-based naming
         light_name = (
             f"/World/{light_cfg.name}"
-            if hasattr(light_cfg, "name") and light_cfg.name
+            if hasattr(light_cfg, "name") and light_cfg.name and light_cfg.name != "light"
             else f"/World/DomeLight_{light_index}"
         )
 
@@ -829,7 +829,7 @@ class IsaacsimHandler(BaseSimHandler):
         # Use configured name if available, otherwise fall back to index-based naming
         light_name = (
             f"/World/{light_cfg.name}"
-            if hasattr(light_cfg, "name") and light_cfg.name
+            if hasattr(light_cfg, "name") and light_cfg.name and light_cfg.name != "light"
             else f"/World/SphereLight_{light_index}"
         )
 
@@ -861,7 +861,7 @@ class IsaacsimHandler(BaseSimHandler):
         # Use configured name if available, otherwise fall back to index-based naming
         light_name = (
             f"/World/{light_cfg.name}"
-            if hasattr(light_cfg, "name") and light_cfg.name
+            if hasattr(light_cfg, "name") and light_cfg.name and light_cfg.name != "light"
             else f"/World/DiskLight_{light_index}"
         )
 
