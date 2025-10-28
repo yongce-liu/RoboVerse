@@ -738,14 +738,16 @@ class MujocoHandler(BaseSimHandler):
         if self.viewer is not None:
             self.viewer.sync()
 
-    def _simulate(self):
+    def _simulate(self, decimation=None):
         # Apply gravity compensation for all robots
         for robot_idx, robot in enumerate(self.robots):
             if self._gravity_compensations[robot_idx]:
                 self._disable_robotgravity()
 
         # Apply torque control if manual PD is enabled
-        self.physics.step()
+        if decimation is None:
+            decimation = self.decimation
+        self.physics.step(decimation)
 
         if not self.headless:
             self.viewer.sync()

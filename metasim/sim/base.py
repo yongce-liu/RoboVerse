@@ -135,10 +135,10 @@ class BaseSimHandler(ABC):
         """
         raise NotImplementedError
 
-    def simulate(self):
+    def simulate(self, decimation=None):
         """Simulate the environment."""
         self._state_cache_expire = True
-        self._simulate()
+        self._simulate(decimation)
 
     ############################################################
     ## Misc

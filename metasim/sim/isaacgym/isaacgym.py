@@ -742,9 +742,12 @@ class IsaacgymHandler(BaseSimHandler):
             self.gym.fetch_results(self.sim, True)
         self.gym.refresh_dof_state_tensor(self.sim)
 
-    def _simulate(self) -> None:
+    def _simulate(self, decimation=None) -> None:
         # Step the physics
-        self._simulate_one_physics_step()
+        if decimation is None:
+            decimation = self.decimation
+        for _ in range(decimation):
+            self._simulate_one_physics_step()
         self.gym.refresh_rigid_body_state_tensor(self.sim)
         self.gym.refresh_actor_root_state_tensor(self.sim)
         self.gym.refresh_jacobian_tensors(self.sim)
