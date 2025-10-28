@@ -200,6 +200,7 @@ scenario.objects = [
     ),
 ]
 
+
 log.info(f"Using simulator: {args.sim}")
 handler = get_handler(scenario)
 
