@@ -57,21 +57,21 @@ class G1Dof12Cfg(RobotCfg):
         "right_ankle_roll_joint": (-0.2618, 0.2618),
     }
 
-    torque_limits: dict[str, float] = {
-        # Hips & legs
-        "left_hip_pitch_joint": 88,
-        "left_hip_roll_joint": 139,
-        "left_hip_yaw_joint": 88,
-        "left_knee_joint": 139,
-        "left_ankle_pitch_joint": 25,
-        "left_ankle_roll_joint": 25,
-        "right_hip_pitch_joint": 88,
-        "right_hip_roll_joint": 139,
-        "right_hip_yaw_joint": 88,
-        "right_knee_joint": 139,
-        "right_ankle_pitch_joint": 25,
-        "right_ankle_roll_joint": 25,
-    }
+    # torque_limits: dict[str, float] = {
+    #     # Hips & legs
+    #     "left_hip_pitch_joint": 88,
+    #     "left_hip_roll_joint": 139,
+    #     "left_hip_yaw_joint": 88,
+    #     "left_knee_joint": 139,
+    #     "left_ankle_pitch_joint": 25,
+    #     "left_ankle_roll_joint": 25,
+    #     "right_hip_pitch_joint": 88,
+    #     "right_hip_roll_joint": 139,
+    #     "right_hip_yaw_joint": 88,
+    #     "right_knee_joint": 139,
+    #     "right_ankle_pitch_joint": 25,
+    #     "right_ankle_roll_joint": 25,
+    # }
 
     default_joint_positions: dict[str, float] = {
         # Hips & legs
@@ -107,6 +107,7 @@ class G1Dof12Cfg(RobotCfg):
 
     # rigid body name substrings, to find indices of different rigid bodies.
     feet_links: list[str] = ["ankle_roll"]
+    ankle_links: list[str] = ["ankle"]
     knee_links: list[str] = ["knee"]
     torso_links: list[str] = ["torso_link"]
     elbow_links: list[str] = ["elbow"]
@@ -115,11 +116,13 @@ class G1Dof12Cfg(RobotCfg):
     penalized_contacts_links: list[str] = ["hip", "knee", "shoulder", "elbow", "wrist"]
 
     # joint substrings, to find indices of joints.
-    left_yaw_roll_joints: list[str] = ["left_hip_yaw_joint", "left_hip_roll_joint"]
-    right_yaw_roll_joints: list[str] = ["right_hip_yaw_joint", "right_hip_roll_joint"]
-    upper_body_joints = ["wrist", "hand", "torso", "waist", "shoulder", "elbow"]
+    left_hip_yaw_roll_joints: list[str] = ["left_hip_yaw_joint", "left_hip_roll_joint"]
+    right_hip_yaw_roll_joints: list[str] = ["right_hip_yaw_joint", "right_hip_roll_joint"]
+    # upper_body_joints = ["wrist", "hand", "torso", "waist", "shoulder", "elbow"]
     waist_joints = ["waist"]
+    arm_joints: list[str] = ["shoulder", "elbow", "wrist", "hand"]
 
+    # soft_joint_pos_limit_factor = 0.9
     # From default joint armature in XML
     armature: float = 0.01
 
@@ -167,22 +170,22 @@ class G1Dof23Cfg(G1Dof12Cfg):
         "right_wrist_roll_joint": (-1.972222, 1.972222),
     }
 
-    torque_limits = {
-        **G1Dof12Cfg().torque_limits,
-        # Waist
-        "waist_yaw_joint": 88,
-        # Shoulders & arms
-        "left_shoulder_pitch_joint": 25,
-        "left_shoulder_roll_joint": 25,
-        "left_shoulder_yaw_joint": 25,
-        "left_elbow_joint": 25,
-        "left_wrist_roll_joint": 25,
-        "right_shoulder_pitch_joint": 25,
-        "right_shoulder_roll_joint": 25,
-        "right_shoulder_yaw_joint": 25,
-        "right_elbow_joint": 25,
-        "right_wrist_roll_joint": 25,
-    }
+    # torque_limits = {
+    #     **G1Dof12Cfg().torque_limits,
+    #     # Waist
+    #     "waist_yaw_joint": 88,
+    #     # Shoulders & arms
+    #     "left_shoulder_pitch_joint": 25,
+    #     "left_shoulder_roll_joint": 25,
+    #     "left_shoulder_yaw_joint": 25,
+    #     "left_elbow_joint": 25,
+    #     "left_wrist_roll_joint": 25,
+    #     "right_shoulder_pitch_joint": 25,
+    #     "right_shoulder_roll_joint": 25,
+    #     "right_shoulder_yaw_joint": 25,
+    #     "right_elbow_joint": 25,
+    #     "right_wrist_roll_joint": 25,
+    # }
 
     default_joint_positions = {
         **G1Dof12Cfg().default_joint_positions,
@@ -245,13 +248,13 @@ class G1Dof27Cfg(G1Dof23Cfg):
         "right_wrist_yaw_joint": (-1.61443, 1.61443),
     }
 
-    torque_limits = {
-        **G1Dof23Cfg().torque_limits,
-        "left_wrist_pitch_joint": 5,
-        "left_wrist_yaw_joint": 5,
-        "right_wrist_pitch_joint": 5,
-        "right_wrist_yaw_joint": 5,
-    }
+    # torque_limits = {
+    #     **G1Dof23Cfg().torque_limits,
+    #     "left_wrist_pitch_joint": 5,
+    #     "left_wrist_yaw_joint": 5,
+    #     "right_wrist_pitch_joint": 5,
+    #     "right_wrist_yaw_joint": 5,
+    # }
 
     default_joint_positions = {
         **G1Dof23Cfg().default_joint_positions,
@@ -292,11 +295,11 @@ class G1Dof29Cfg(G1Dof27Cfg):
         "waist_pitch_joint": (-0.52, 0.52),
     }
 
-    torque_limits = {
-        **G1Dof27Cfg().torque_limits,
-        "waist_roll_joint": 25,
-        "waist_pitch_joint": 25,
-    }
+    # torque_limits = {
+    #     **G1Dof27Cfg().torque_limits,
+    #     "waist_roll_joint": 25,
+    #     "waist_pitch_joint": 25,
+    # }
 
     default_joint_positions = {
         **G1Dof27Cfg().default_joint_positions,
@@ -378,24 +381,24 @@ class G1Dof29Dex3Cfg(G1Dof29Cfg):
         "right_hand_index_1_joint": (0.0, 1.74532925),
     }
 
-    torque_limits = {
-        **G1Dof29Cfg().torque_limits,
-        # Hands
-        "left_hand_thumb_0_joint": 2.45,
-        "left_hand_thumb_1_joint": 1.4,
-        "left_hand_thumb_2_joint": 1.4,
-        "left_hand_middle_0_joint": 1.4,
-        "left_hand_middle_1_joint": 1.4,
-        "left_hand_index_0_joint": 1.4,
-        "left_hand_index_1_joint": 1.4,
-        "right_hand_thumb_0_joint": 2.45,
-        "right_hand_thumb_1_joint": 1.4,
-        "right_hand_thumb_2_joint": 1.4,
-        "right_hand_middle_0_joint": 1.4,
-        "right_hand_middle_1_joint": 1.4,
-        "right_hand_index_0_joint": 1.4,
-        "right_hand_index_1_joint": 1.4,
-    }
+    # torque_limits = {
+    #     **G1Dof29Cfg().torque_limits,
+    #     # Hands
+    #     "left_hand_thumb_0_joint": 2.45,
+    #     "left_hand_thumb_1_joint": 1.4,
+    #     "left_hand_thumb_2_joint": 1.4,
+    #     "left_hand_middle_0_joint": 1.4,
+    #     "left_hand_middle_1_joint": 1.4,
+    #     "left_hand_index_0_joint": 1.4,
+    #     "left_hand_index_1_joint": 1.4,
+    #     "right_hand_thumb_0_joint": 2.45,
+    #     "right_hand_thumb_1_joint": 1.4,
+    #     "right_hand_thumb_2_joint": 1.4,
+    #     "right_hand_middle_0_joint": 1.4,
+    #     "right_hand_middle_1_joint": 1.4,
+    #     "right_hand_index_0_joint": 1.4,
+    #     "right_hand_index_1_joint": 1.4,
+    # }
 
     default_joint_positions = {
         **G1Dof29Cfg().default_joint_positions,

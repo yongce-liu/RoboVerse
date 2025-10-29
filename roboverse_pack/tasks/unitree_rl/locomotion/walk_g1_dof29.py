@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import copy
-from functools import partial
 
 import torch
 
@@ -11,12 +10,10 @@ from metasim.scenario.simulator_params import SimParamCfg
 from metasim.task.registry import register_task
 from metasim.types import TensorState
 from metasim.utils.math import quat_rotate_inverse
-from roboverse_learn.rl.unitree_rl.configs import SensorsCfg
 from roboverse_learn.rl.unitree_rl.configs.locomotion.walk_g1_dof29 import (
     WalkG1Dof29EnvCfg,
     WalkG1Dof29EnvRslRlTrainCfg,
 )
-from roboverse_learn.rl.unitree_rl.helper import find_unique_candidate, get_euler_xyz
 from roboverse_pack.tasks.unitree_rl.base.base_humanoid import HumanoidTask
 
 
@@ -30,7 +27,6 @@ class WalkG1Dof29Task(HumanoidTask):
 
     env_cfg_cls = WalkG1Dof29EnvCfg
     train_cfg_cls = WalkG1Dof29EnvRslRlTrainCfg
-    sensors_cls = SensorsCfg
     task_name = "walk_g1_dof29"
 
     scenario = ScenarioCfg(
@@ -70,13 +66,9 @@ class WalkG1Dof29Task(HumanoidTask):
         scenario: ScenarioCfg | None = None,
         device: str | torch.device | None = None,
         env_cfg: WalkG1Dof29EnvCfg | None = None,
-        sensors: SensorsCfg | dict | None = None,
     ) -> None:
         scenario_copy = copy.deepcopy(scenario or type(self).scenario)
         scenario_copy.__post_init__()
-
-        if sensors is None:
-            sensors = type(self).sensors_cls() if callable(type(self).sensors_cls) else type(self).sensors_cls
 
         if env_cfg is None:
             env_cfg = type(self).env_cfg_cls()
@@ -84,129 +76,88 @@ class WalkG1Dof29Task(HumanoidTask):
         if device is None:
             device = "cpu" if scenario_copy.simulator == "mujoco" else ("cuda" if torch.cuda.is_available() else "cpu")
 
-        super().__init__(scenario=scenario_copy, config=env_cfg, sensors=sensors, device=device)
-
-    def _init_joint_cfg(self):
-        find_func = partial(find_unique_candidate, data_base=self.sorted_joint_names)
-
-        def name_extend_func(x):
-            return [x, f"{x}_joint"]
-
-        self.left_hip_pitch_joint_idx = find_func(candidates=name_extend_func("left_hip_pitch"))
-        self.left_knee_joint_idx = find_func(candidates=name_extend_func("left_knee"))
-        self.right_hip_pitch_joint_idx = find_func(candidates=name_extend_func("right_hip_pitch"))
-        self.right_knee_joint_idx = find_func(candidates=name_extend_func("right_knee"))
-        self.left_ankle_joint_idx = find_func(
-            candidates=name_extend_func("left_ankle") + name_extend_func("left_ankle_pitch")
-        )
-        self.right_ankle_joint_idx = find_func(
-            candidates=name_extend_func("right_ankle") + name_extend_func("right_ankle_pitch")
-        )
-
-        return super()._init_joint_cfg()
+        super().__init__(scenario=scenario_copy, config=env_cfg, device=device)
 
     def _init_buffers(self):
-        self.noise_scale_vec = self._get_noise_scale_vec()
+        # commands + base_ang_vel + projected_gravity + dof pos/vel/prev actions
+        self.num_obs_single = 3 + 3 + 3 + self.num_actions * 3
+        # commands + base_lin_vel + base_ang_vel + projected_gravity + dof pos/vel/prev actions
+        self.num_priv_obs_single = 3 + 3 + 3 + 3 + self.num_actions * 3
+        # Rewrite SOME Hyfer-Parameters
+        self.obs_clip_limit = 100.0
+        self.obs_scale = torch.ones(size=(self.num_obs_single,), dtype=torch.float, device=self.device)
+        self.priv_obs_scale = torch.ones(size=(self.num_priv_obs_single,), dtype=torch.float, device=self.device)
+        self.obs_noise = torch.zeros(size=(self.num_obs_single,), dtype=torch.float, device=self.device)
+
+        ##################### for observation scale #####################
+        self.obs_scale[3:6] = 0.2  # angular velocity
+        self.obs_scale[9 + self.num_actions : 9 + 2 * self.num_actions] = 0.05  # joint velocity
+
+        ##################### for priviliged observation scale #####################
+        self.priv_obs_scale[6:9] = 0.2  # angular velocity
+        self.priv_obs_scale[12 + self.num_actions : 12 + 2 * self.num_actions] = 0.05  # joint velocity
+
+        ################### for noise vector ####################
+        # [0:3] -> commands
+        self.obs_noise[3:6] = 0.2  # [3:6] -> base_ang_vel
+        self.obs_noise[6:9] = 0.05  # projected_gravity
+        self.obs_noise[9 : 9 + self.num_actions] = 0.01
+        self.obs_noise[9 + self.num_actions : 9 + 2 * self.num_actions] = 1.5  # joint velocities
         return super()._init_buffers()
-
-    def _get_noise_scale_vec(self) -> torch.Tensor:
-        noise_vec = torch.zeros(size=(101,), dtype=torch.float, device=self.device)
-        self.add_noise = self.cfg.noise.add_noise
-        noise_scales = self.cfg.noise.scales
-        noise_level = self.cfg.noise.noise_level
-        # Observation layout (single frame):
-        # 0:3 commands, 3:6 base_ang_vel, 6:9 base_euler_xyz, 9:12 projected_gravity,
-        # 12:12+A q, 12+A:12+2A dq, 12+2A:12+3A actions, +1 sin, +1 cos
-        noise_vec[0:3] = 0.0  # commands (no noise)
-        noise_vec[3:6] = noise_scales.ang_vel * noise_level * self.cfg.normalization.obs_scales.ang_vel
-        noise_vec[6:9] = 0.0  # base_euler_xyz (keep clean)
-        noise_vec[9:12] = noise_scales.gravity * noise_level
-        start = 12
-        A = self.num_actions
-        noise_vec[start : start + A] = noise_scales.dof_pos * noise_level * self.cfg.normalization.obs_scales.dof_pos
-        noise_vec[start + A : start + 2 * A] = (
-            noise_scales.dof_vel * noise_level * self.cfg.normalization.obs_scales.dof_vel
-        )
-        noise_vec[start + 2 * A : start + 3 * A] = 0.0  # previous actions (actor already outputs noisy actions)
-        noise_vec[start + 3 * A : start + 3 * A + 2] = 0.0  # sin/cos phase
-
-        return noise_vec
-
-    def _get_gait_phase(self):
-        """Add phase into states."""
-        phase = self.get_phase()
-        sin_pos = torch.sin(2 * torch.pi * phase)
-        # Add double support phase
-        stance_mask = torch.zeros((self.num_envs, len(self.feet_indices)), dtype=torch.bool, device=self.device)
-        # left foot stance
-        stance_mask[:, 0] = sin_pos >= 0
-        # right foot stance
-        stance_mask[:, 1] = sin_pos < 0
-        # Double support phase
-        stance_mask[torch.abs(sin_pos) < self.cfg.rewards.extras.all_feet_contact_time / 2.0] = True
-        return stance_mask.to(torch.bool)
 
     def _compute_task_observations(self, env_states: TensorState):
         robot_state = env_states.robots[self.robot.name]
         base_quat = robot_state.root_state[:, 3:7]
         base_lin_vel = quat_rotate_inverse(base_quat, robot_state.root_state[:, 7:10])
         base_ang_vel = quat_rotate_inverse(base_quat, robot_state.root_state[:, 10:13])
-        base_euler_xyz = get_euler_xyz(base_quat)
         projected_gravity = quat_rotate_inverse(base_quat, self.gravity_vec)
 
-        phase = self.get_phase()
-        sin_phase = torch.sin(2 * torch.pi * phase).unsqueeze(1)
-        cos_phase = torch.cos(2 * torch.pi * phase).unsqueeze(1)
+        q = env_states.robots[self.name].joint_pos - self.default_dof_pos
+        dq = env_states.robots[self.name].joint_vel
 
-        stance_mask = self._get_gait_phase()
-        contact_mask = env_states.extras["contact_forces"][self.robot.name][:, self.feet_indices, 2] > 1.0
-
-        q = (
-            env_states.robots[self.robot.name].joint_pos - self.default_dof_pos
-        ) * self.cfg.normalization.obs_scales.dof_pos
-        dq = env_states.robots[self.robot.name].joint_vel * self.cfg.normalization.obs_scales.dof_vel
+        # gait = self._gait_phase()
 
         obs_buf = torch.cat(
             (
-                self.commands[:, :3] * self.commands_scale,  # 3
-                base_ang_vel * self.cfg.normalization.obs_scales.ang_vel,  # 3
-                base_euler_xyz * self.cfg.normalization.obs_scales.quat,  # 3
-                projected_gravity,  # 3
-                q,  # |A|
-                dq,  # |A|
-                self.actions,
-                sin_phase,
-                cos_phase,
-            ),
-            dim=-1,
-        )
-
-        # add noise if needed
-        if self.add_noise:
-            obs_buf += (2 * torch.rand_like(obs_buf) - 1) * self.noise_scale_vec
-
-        priv_obs_buf = torch.cat(
-            (
-                self.commands[:, :3] * self.commands_scale,  # 3
-                base_lin_vel * self.cfg.normalization.obs_scales.lin_vel,  # 3
-                base_ang_vel * self.cfg.normalization.obs_scales.ang_vel,  # 3
-                base_euler_xyz * self.cfg.normalization.obs_scales.quat,  # 3
+                self.commands[:, :3],  # 3
+                base_ang_vel,  # 3
                 projected_gravity,  # 3
                 q,  # |A|
                 dq,  # |A|
                 self.actions,  # |A|
-                env_states.robots[self.robot.name].joint_pos[:, self.upper_body_joint_indices]
-                - self.default_dof_pos[self.upper_body_joint_indices],  # |upper_body_indices|
-                # self.rand_push_force[:, :3],  # 3
-                # self.rand_push_torque,  # 3
-                # self.env_frictions,  # 1
-                # self.body_mass / 30.0,  # 1
-                stance_mask,  # 2
-                contact_mask,  # 2
-                sin_phase,  # 1
-                cos_phase,  # 1
+                # gait
             ),
             dim=-1,
         )
 
+        priv_obs_buf = torch.cat(
+            (
+                self.commands[:, :3],  # 3
+                base_lin_vel,  # 3
+                base_ang_vel,  # 3
+                projected_gravity,  # 3
+                q,  # |A|
+                dq,  # |A|
+                self.actions,  # |A|
+                # gait
+            ),
+            dim=-1,
+        )
+
+        if self.cfg.domain_rand.add_noise2obs:
+            obs_buf += (2 * torch.rand_like(obs_buf) - 1) * self.obs_noise
+
+        # clip observations -> scale observations
+        obs_buf = obs_buf.clip(-self.obs_clip_limit, self.obs_clip_limit) * self.obs_scale
+        priv_obs_buf = priv_obs_buf.clip(-self.obs_clip_limit, self.obs_clip_limit) * self.priv_obs_scale
+
         return obs_buf, priv_obs_buf
+
+    def _terminated(self, env_states: TensorState) -> torch.Tensor:
+        robot_state = env_states.robots[self.name]
+        base_quat = robot_state.root_state[:, 3:7]
+        projected_gravity = quat_rotate_inverse(base_quat, self.gravity_vec)
+        bad_orientation = torch.acos(-projected_gravity[:, 2]).abs() > 0.8
+        below_base_height = robot_state.root_state[:, 2] < 0.2
+        reset_buf = torch.logical_or(bad_orientation, below_base_height)
+        return reset_buf

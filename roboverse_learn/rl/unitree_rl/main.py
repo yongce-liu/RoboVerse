@@ -79,13 +79,13 @@ def play(args):
     envwrapper_0: EnvWrapperTypes = runner_0.env_wrapper
     cfg_0 = env_0.cfg
 
-    cfg_0.commands.curriculum = False
+    cfg_0.curriculum.enabled = False
     cfg_0.commands.resampling_time = 1e6  # effectively disable command changes
     cfg_0.domain_rand.randomize_friction = False
     cfg_0.domain_rand.randomize_base_mass = False
     cfg_0.domain_rand.randomize_initial_state = False
     cfg_0.domain_rand.push_robots = False
-    cfg_0.noise.add_noise = False
+    cfg_0.domain_rand.add_noise2obs = False
 
     # export jit policy
     export_jit_path = get_export_jit_path(get_log_dir(task_name=master_runner.task_name, now=args.resume), master_runner.scenario)

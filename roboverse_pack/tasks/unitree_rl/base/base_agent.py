@@ -10,7 +10,8 @@ import torch
 from metasim.scenario.scenario import ScenarioCfg
 from metasim.task.rl_task import RLTaskEnv
 from metasim.types import Action, Reward, TensorState
-from roboverse_learn.rl.unitree_rl.configs import SensorsCfg
+from roboverse_learn.rl.unitree_rl.configs.cfg_base import BaseEnvCfg
+from roboverse_learn.rl.unitree_rl.configs.cfg_queries import QueriesCfg
 
 
 class AgentTask(RLTaskEnv):
@@ -19,28 +20,25 @@ class AgentTask(RLTaskEnv):
     def __init__(
         self,
         scenario: ScenarioCfg,
-        config: Any,
-        sensors: SensorsCfg | dict | None = None,
+        config: Any | BaseEnvCfg,
         device: str | torch.device | None = None,
     ) -> None:
         self.cfg = config
-        self._sensor_cfg = sensors
+        self._queries_cfg = getattr(self.cfg, "queries", QueriesCfg())
         self.extras: dict[str, Any] = {}
 
         # buffers will be allocated lazily once handler is available
         self.obs_buf_queue: deque[torch.Tensor] | None = None
         self.priv_obs_buf_queue: deque[torch.Tensor] | None = None
         self.actions: torch.Tensor | None = None
-        self.torques: torch.Tensor | None = None
+        # self.torques: torch.Tensor | None = None
         self.rew_buf: torch.Tensor | None = None
         self.reset_buf: torch.Tensor | None = None
         self.time_out_buf: torch.Tensor | None = None
 
-        self._initial_state_specs_cache: list[dict] | None = None
-
         super().__init__(scenario=scenario, device=device)
-
-        self._initial_states_default = deepcopy(self._initial_states)
+        # self._initial_state_specs_cache: list[dict] | None = None
+        self.initial_env_states = deepcopy(self._initial_states)
         self.name = self.robot.name if hasattr(self, "robot") else getattr(self, "name", None)
 
     # ------------------------------------------------------------------ #
@@ -56,11 +54,11 @@ class AgentTask(RLTaskEnv):
 
     def _extra_spec(self) -> dict:
         """Expose optional sensor queries to the simulator handler."""
-        if self._sensor_cfg is None:
+        if self._queries_cfg is None:
             return {}
-        if isinstance(self._sensor_cfg, dict):
-            return self._sensor_cfg
-        return asdict(self._sensor_cfg)
+        if isinstance(self._queries_cfg, dict):
+            return self._queries_cfg
+        return asdict(self._queries_cfg)
 
     # ------------------------------------------------------------------ #
     # Helpers
@@ -87,6 +85,14 @@ class AgentTask(RLTaskEnv):
 
     def _time_out(self, env_states: TensorState | None) -> torch.BoolTensor:
         raise NotImplementedError
+
+    def _observation(self, env_states):
+        # return super()._observation(env_states) --- IGNORE ---
+        pass
+
+    def _privileged_observation(self, env_states):
+        # return super()._privileged_observation(env_states) --- IGNORE ---
+        pass
 
     # ------------------------------------------------------------------ #
     # Observation utilities

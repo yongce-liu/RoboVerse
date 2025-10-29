@@ -1,7 +1,91 @@
+import math
 from metasim.utils import configclass
 from roboverse_learn.rl.unitree_rl.configs.cfg_base import BaseEnvCfg
 from roboverse_learn.rl.unitree_rl.configs.algorithm.rsl_rl.rl_cfg import RslRlOnPolicyRunnerCfg, RslRlPpoAlgorithmCfg, RslRlPpoActorCriticRecurrentCfg
 
+
+@configclass
+class WalkG1Dof12EnvCfg(BaseEnvCfg):
+    episode_length_s = 24.0
+    obs_len_history = 1
+    priv_obs_len_history = 1
+
+    control = BaseEnvCfg.Control(action_scale = 0.25,
+                                 dof_pos_limits_factor=0.98)
+
+    @configclass
+    class RewardsScales:
+        track_lin_vel_xy = (1.0, {"std": math.sqrt(0.25)})
+        track_ang_vel_z = (0.5, {"std": math.sqrt(0.25)})
+        lin_vel_z = -2.0
+        ang_vel_xy = -0.05
+        flat_orientation = -1.0
+        base_height = (-10.0, {"target_height": 0.78})
+        joint_acc = -2.5e-7
+        joint_vel = -0.001
+        action_rate = -0.05
+        joint_pos_limits = -5.0
+        is_alive = 0.15
+        joint_deviation_legs = -1.0
+        feet_slide = -0.2
+        # feet_swing_height = -20.0
+        feet_clearance = (1.0, {"std": 0.05,
+                                "tanh_mult": 2.0,
+                                "target_height": 0.1,})
+        # contact = 0.18
+        feet_gait = (0.18, {"period": 0.8,
+                        "offset": [0.0, 0.5],
+                        "threshold": 0.55})
+        energy = -0.00001
+        ########################
+
+    rewards = BaseEnvCfg.Rewards(
+        scales = RewardsScales(),
+        only_positive_rewards=True
+    )
+
+    domain_rand = BaseEnvCfg.DomainRand(
+        randomize_friction = True,
+        friction_range = [0.1, 1.25],
+        randomize_base_mass = True,
+        added_mass_range = [-1., 3.],
+        push_robots = True,
+        push_interval = int(5/0.02),
+        max_push_vel_xy = 0.5,
+        randomize_initial_state = True
+    )
+
+
+    @configclass
+    class Normalization:
+        @configclass
+        class ObsScales:
+            lin_vel = 2.0
+            ang_vel = 0.25
+            dof_pos = 1.0
+            dof_vel = 0.05
+            height_measurements = 5.0
+            quat = 1.0
+
+        clip_observations = 100.
+        clip_actions = 100.
+        obs_scales = ObsScales()
+    normalization = Normalization()
+
+    @configclass
+    class Noise:
+        class Scales:
+            dof_pos = 0.01
+            dof_vel = 1.5
+            lin_vel = 0.1
+            ang_vel = 0.2
+            gravity = 0.05
+            # height_measurements = 0.1
+
+        add_noise = True
+        noise_level = 1.0 # scales other values
+        scales = Scales()
+    noise = Noise()
 
 @configclass
 class WalkG1Dof12RslRlTrainCfg(RslRlOnPolicyRunnerCfg):
@@ -32,52 +116,4 @@ class WalkG1Dof12RslRlTrainCfg(RslRlOnPolicyRunnerCfg):
         lam = 0.95,
         desired_kl = 0.01,
         max_grad_norm = 1.
-    )
-
-
-@configclass
-class WalkG1Dof12EnvCfg(BaseEnvCfg):
-    obs_len_history = 0
-    priv_obs_len_history = 0
-
-    domain_rand = BaseEnvCfg.DomainRand(
-        randomize_friction = True,
-        friction_range = [0.1, 1.25],
-        randomize_base_mass = True,
-        added_mass_range = [-1., 3.],
-        push_robots = True,
-        push_interval = int(5/0.02),
-        max_push_vel_xy = 1.5,
-        randomize_initial_state = False
-    )
-
-    control = BaseEnvCfg.Control(action_scale = 0.25)
-
-    @configclass
-    class RewardsScales(BaseEnvCfg.Rewards.Scales):
-        tracking_lin_vel = 1.0
-        tracking_ang_vel = 0.5
-        lin_vel_z = -2.0
-        ang_vel_xy = -0.05
-        orientation = -1.0
-        base_height = -10.0
-        dof_acc = -2.5e-7
-        dof_vel = -1e-3
-        action_rate = -0.01
-        dof_pos_limits = -5.0
-        alive = 0.15
-        hip_pos = -1.0
-        contact_no_vel = -0.2
-        feet_swing_height = -20.0
-        contact = 0.18
-        torques = -0.00001
-    @configclass
-    class RewardExtras(BaseEnvCfg.Rewards.Extras):
-        soft_dof_pos_limit = 0.98
-        base_height_target = 0.78
-        feet_cycle_time = 0.8
-
-    rewards = BaseEnvCfg.Rewards(
-        scales = RewardsScales(),
-        extras = RewardExtras()
     )
