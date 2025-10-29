@@ -226,3 +226,8 @@ def get_export_jit_path(load_root: str, scenario: ScenarioCfg) -> str:
     exported_root_dir = f"{load_root}/exported"
     os.makedirs(exported_root_dir, exist_ok=True)
     return f"{load_root}/exported/model_exported_jit.pt"
+
+@torch.jit.script
+def torch_rand_float_tensor(lower: torch.Tensor, upper: torch.Tensor, shape: tuple[int, int], device: torch.device) -> torch.Tensor:
+    """Generate a tensor of random floats in the range [lower, upper]."""
+    return (upper - lower) * torch.rand(*shape, device=device) + lower

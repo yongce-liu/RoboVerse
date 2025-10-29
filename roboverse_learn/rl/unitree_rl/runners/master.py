@@ -13,7 +13,7 @@ import torch
 from metasim.scenario.scenario import ScenarioCfg
 from roboverse_learn.rl.unitree_rl.configs.cfg_base import BaseEnvCfg
 from roboverse_learn.rl.unitree_rl.helper import get_class, get_log_dir, get_load_path
-from roboverse_pack.tasks.unitree_rl.base import EnvTypes
+from roboverse_pack.tasks.unitree_rl.base.types import EnvTypes
 
 
 class BaseRunnerWrapper:

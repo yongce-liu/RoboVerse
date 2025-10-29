@@ -23,8 +23,8 @@ class AgentTask(RLTaskEnv):
         device: str | torch.device | None = None,
     ) -> None:
         self.cfg = config
-        self._callbacks_cfg = asdict(getattr(self.cfg, "callbacks", CallbacksCfg()))
-        self._queries: dict = self._callbacks_cfg.get("step", {})
+        _callbacks_cfg = asdict(getattr(self.cfg, "callbacks", CallbacksCfg()))
+        self._query: dict = _callbacks_cfg.pop("query", {})
         super().__init__(scenario=scenario, device=device)
 
         # buffers will be allocated lazily once handler is available
@@ -34,24 +34,32 @@ class AgentTask(RLTaskEnv):
         # self.torques: torch.Tensor | None = None
         self.rew_buf: torch.Tensor | None = None
         self.reset_buf: torch.Tensor | None = None
-        self.time_out_buf: torch.Tensor | None = None
+        # self.time_out_buf: torch.Tensor | None = None
         self.extras: dict[str, Any] = {}
 
         # self._initial_state_specs_cache: list[dict] | None = None
         self.initial_env_states = deepcopy(self._initial_states)
         self.name = self.robot.name if hasattr(self, "robot") else getattr(self, "name", None)
         # Callbacks
-        self._reset_callbacks: dict = {}
-        self._bind_callbacks(callbacks=self._callbacks_cfg)
+        self._bind_callbacks(callbacks=_callbacks_cfg)
 
-    def _bind_callbacks(self, callbacks: CallbacksCfg | dict | None = None):
-        # callbacks: setup, reset
-        for _key, _val in callbacks["setup"].items():
-            _val.bind_handler(self.handler)
-            _val()
-        self._reset_callbacks: dict = callbacks["reset"]
-        for _key, _val in self._reset_callbacks.items():
-            _val.bind_handler(self.handler)
+    def _bind_callbacks(self, callbacks: dict | None = None):
+        for _callback_key, _callbacks in callbacks.items():
+            for _key, _val in _callbacks.items():
+                if not isinstance(_val, tuple):
+                    _callbacks[_key] = (_val, {})
+                if hasattr(_callbacks[_key][0], "bind_handler"):
+                    _callbacks[_key][0].bind_handler(self.handler)
+
+        _setup_callbacks = callbacks.pop("setup", {})
+        for _key, _val in _setup_callbacks.items():
+            _val[0](**_val[1])  ## call itself
+        self._reset_callbacks = callbacks.pop("reset", {})
+        self._step_callbacks = callbacks.pop("step", {})
+        self._terminate_callbacks = callbacks.pop("terminate", {})
+        self.episode_terminations = {}
+        for _key in self._terminate_callbacks.keys():
+            self.episode_terminations[_key] = torch.zeros(size=(self.num_envs,), dtype=torch.float, device=self.device)
 
     # ------------------------------------------------------------------ #
     # RLTaskEnv hooks
@@ -66,7 +74,7 @@ class AgentTask(RLTaskEnv):
 
     def _extra_spec(self) -> dict:
         """Expose optional sensor queries to the simulator handler."""
-        return self._queries
+        return self._query
 
     # ------------------------------------------------------------------ #
     # Helpers

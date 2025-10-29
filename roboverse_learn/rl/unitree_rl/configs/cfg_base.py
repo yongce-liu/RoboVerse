@@ -10,9 +10,10 @@ from roboverse_learn.rl.unitree_rl.configs.cfg_queries import ContactForces
 @configclass
 class CallbacksCfg:
     setup: dict = {}
-    reset: dict = {}
-    step: dict = {}
-    termination: dict = {}
+    reset: dict = {} # func_name: (func(env, env_ids,**kwargs), kwargs)
+    step: dict = {} # func_name: (func(env, env_states, **kwargs), kwargs)
+    terminate: dict = {} # func_name: (func(env, env_states, **kwargs), kwargs)
+    query: dict = {}
 
 
 @configclass
@@ -60,11 +61,14 @@ class BaseEnvCfg:
             ang_vel_yaw = [-1, 1]    # min max [rad/s]
             heading = [-3.14, 3.14]
 
-        num_commands = 4 # default: lin_vel_x, lin_vel_y, ang_vel_yaw, heading (in heading mode ang_vel_yaw is recomputed from heading error)
+        num_commands = 3 # default: lin_vel_x, lin_vel_y, ang_vel_yaw, heading (in heading mode ang_vel_yaw is recomputed from heading error)
         resampling_time = 10. # time before command are changed[s]
         heading_command = True # if true: compute ang vel command from heading error
+        rel_standing_envs: float = 0
         ranges = Ranges()
         limit_ranges = Ranges()
+        resample: Callable = MISSING
+        value: any = None
     commands = Commands()
 
     @configclass
@@ -81,7 +85,7 @@ class BaseEnvCfg:
             pass
 
         only_positive_rewards = False # if true negative total rewards are clipped at zero (avoids early termination problems)
-        functions: list[Callable] | str = "roboverse_learn.rl.unitree_rl.configs.cfg_reward_funcs"
+        functions: list[Callable] | str = "roboverse_learn.rl.unitree_rl.configs.callback_funcs.reward_funcs"
         scales = Scales()
 
     rewards = Rewards()
@@ -111,4 +115,4 @@ class BaseEnvCfg:
     default_joint_positions: dict[str, dict[str, float]] = MISSING
 
     callbacks: CallbacksCfg | dict | None = CallbacksCfg(
-        step={"contact_forces": ContactForces(history_length=3)})
+        query={"contact_forces": ContactForces(history_length=3)})

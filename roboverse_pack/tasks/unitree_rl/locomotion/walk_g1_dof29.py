@@ -119,7 +119,7 @@ class WalkG1Dof29Task(HumanoidTask):
 
         obs_buf = torch.cat(
             (
-                self.commands[:, :3],  # 3
+                self.commands_manager.value,  # 3
                 base_ang_vel,  # 3
                 projected_gravity,  # 3
                 q,  # |A|
@@ -132,7 +132,7 @@ class WalkG1Dof29Task(HumanoidTask):
 
         priv_obs_buf = torch.cat(
             (
-                self.commands[:, :3],  # 3
+                self.commands_manager.value,  # 3
                 base_lin_vel,  # 3
                 base_ang_vel,  # 3
                 projected_gravity,  # 3
@@ -152,12 +152,3 @@ class WalkG1Dof29Task(HumanoidTask):
         priv_obs_buf = priv_obs_buf.clip(-self.obs_clip_limit, self.obs_clip_limit) * self.priv_obs_scale
 
         return obs_buf, priv_obs_buf
-
-    def _terminated(self, env_states: TensorState) -> torch.Tensor:
-        robot_state = env_states.robots[self.name]
-        base_quat = robot_state.root_state[:, 3:7]
-        projected_gravity = quat_rotate_inverse(base_quat, self.gravity_vec)
-        bad_orientation = torch.acos(-projected_gravity[:, 2]).abs() > 0.8
-        below_base_height = robot_state.root_state[:, 2] < 0.2
-        reset_buf = torch.logical_or(bad_orientation, below_base_height)
-        return reset_buf

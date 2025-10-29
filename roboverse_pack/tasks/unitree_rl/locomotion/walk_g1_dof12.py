@@ -118,7 +118,7 @@ class WalkG1Dof12Task(HumanoidTask):
 
         obs_buf = torch.cat(
             (
-                self.commands[:, :3],  # 3
+                self.commands_manager.value,  # 3
                 base_ang_vel,  # 3
                 projected_gravity,  # 3
                 q,  # num_actions
@@ -132,7 +132,7 @@ class WalkG1Dof12Task(HumanoidTask):
 
         priv_obs_buf = torch.cat(
             (
-                self.commands[:, :3],
+                self.commands_manager.value,
                 base_lin_vel,
                 base_ang_vel,
                 projected_gravity,
@@ -153,3 +153,10 @@ class WalkG1Dof12Task(HumanoidTask):
         priv_obs_buf = priv_obs_buf.clip(-self.obs_clip_limit, self.obs_clip_limit) * self.priv_obs_scale
 
         return obs_buf, priv_obs_buf
+
+    # def _terminated(self, env_states):
+    #     contact_forces = env_states.extras["contact_forces"][self.name]
+    #     reset_buf = torch.any(torch.norm(contact_forces[:, self.termination_contact_indices, :], dim=-1) > 1.0, dim=1)
+    #     rpy = get_euler_xyz(env_states.robots[self.name].root_state[:, 3:7])
+    #     reset_buf |= torch.logical_or(torch.abs(rpy[:, 1]) > 1.0, torch.abs(rpy[:, 0]) > 0.8)
+    #     return reset_buf

@@ -16,7 +16,7 @@ import torch
 from metasim.scenario.scenario import ScenarioCfg
 from metasim.task.registry import get_task_class
 
-from roboverse_pack.tasks.unitree_rl.base import EnvTypes
+from roboverse_pack.tasks.unitree_rl.base.types import EnvTypes
 from roboverse_learn.rl.unitree_rl.helper import (get_args, make_objects, get_log_dir,
                                                   make_robots, set_seed, get_load_path,
                                                   PolicyExporterLSTM, export_policy_as_jit,

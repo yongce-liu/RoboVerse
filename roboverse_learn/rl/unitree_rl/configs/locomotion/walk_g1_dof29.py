@@ -1,5 +1,6 @@
 from typing import Callable
 import math
+import torch
 
 from metasim.utils import configclass
 
@@ -9,6 +10,9 @@ from roboverse_learn.rl.unitree_rl.helper.curriculum_utils import lin_vel_cmd_le
 from roboverse_learn.rl.unitree_rl.configs.cfg_queries import ContactForces
 from roboverse_learn.rl.unitree_rl.configs.cfg_randomizers import MaterialRandomizer, MassRandomizer
 
+from roboverse_learn.rl.unitree_rl.configs.callback_funcs import termination_funcs as term_funcs
+from roboverse_learn.rl.unitree_rl.configs.callback_funcs import reset_funcs
+from roboverse_learn.rl.unitree_rl.configs.callback_funcs import step_funcs
 
 @configclass
 class WalkG1Dof29EnvCfg(BaseEnvCfg):
@@ -61,18 +65,19 @@ class WalkG1Dof29EnvCfg(BaseEnvCfg):
     )
 
     commands = BaseEnvCfg.Commands(
-        heading_command = False,
-        ranges = BaseEnvCfg.Commands.Ranges(
-            lin_vel_x=(-0.1, 0.1),
-            lin_vel_y=(-0.1, 0.1),
-            ang_vel_yaw=(-0.1, 0.1)
-        ),
-        limit_ranges = BaseEnvCfg.Commands.Ranges(
-            lin_vel_x=(-0.5, 1.0),
-            lin_vel_y=(-0.3, 0.3),
-            ang_vel_yaw=(-0.2, 0.2)
-        )
-    )
+                resample=step_funcs.resample_commands,
+                heading_command = False,
+                rel_standing_envs=0.02,
+                ranges = BaseEnvCfg.Commands.Ranges(
+                    lin_vel_x=(-0.1, 0.1),
+                    lin_vel_y=(-0.1, 0.1),
+                    ang_vel_yaw=(-0.1, 0.1)
+                ),
+                limit_ranges = BaseEnvCfg.Commands.Ranges(
+                    lin_vel_x=(-0.5, 1.0),
+                    lin_vel_y=(-0.3, 0.3),
+                    ang_vel_yaw=(-0.2, 0.2)
+                ))
 
     curriculum = BaseEnvCfg.Curriculum(
         enabled = True,
@@ -108,7 +113,26 @@ class WalkG1Dof29EnvCfg(BaseEnvCfg):
                 mass_distribution_params=(-1.0, 3.0),
                 operation="add"),
         },
-        step={"contact_forces": ContactForces(history_length=3)})
+        reset={
+            "random_root_state": (reset_funcs.random_root_state,
+                                  {"pose_range": torch.tensor([[-0.5, -0.5, 0., 0, 0, -3.14], [0.5, 0.5, 0.0, 0, 0, 3.14]]),
+                                   "velocity_range": torch.zeros(size=(2, 6))}),
+            "reset_joints_by_scale": (reset_funcs.reset_joints_by_scale,
+                                      {"position_range": (1.0, 1.0),
+                                       "velocity_range": (-1.0, 1.0)}),
+        },
+        step={
+            "push_robot": (step_funcs.push_by_setting_velocity,
+                           {"interval_range_s": (5.0, 5.0),
+                            "velocity_range": torch.tensor([[-0.5, -0.5, 0.0], [0.5, 0.5, 0.0]])}
+                           )
+        },
+        terminate={
+            "time_out": term_funcs.time_out,
+            "base_height": (term_funcs.root_height_below_minimum, {"minimum_height": 0.2}),
+            "bad_orientation": (term_funcs.bad_orientation, {"limit_angle": 0.8}),
+        },
+        query={"contact_forces": ContactForces(history_length=3)})
 
 @configclass
 class WalkG1Dof29EnvRslRlTrainCfg(RslRlOnPolicyRunnerCfg):

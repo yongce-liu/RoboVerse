@@ -1,8 +1,9 @@
 from typing import Sequence
 import torch
+from roboverse_pack.tasks.unitree_rl.base.types import EnvTypes
 
 def lin_vel_cmd_levels(
-    env,
+    env: EnvTypes,
     env_ids: Sequence[int],
     reward_term_name: str = "track_lin_vel_xy",
 ) -> torch.Tensor:
@@ -27,6 +28,4 @@ def lin_vel_cmd_levels(
                 limit_ranges.lin_vel_y[1],
             ).tolist()
 
-        return torch.tensor(ranges.lin_vel_x[1], device=env.device)
-    else:
-        return None
+    return torch.tensor(env.cfg.commands.ranges.lin_vel_x[1], device=env.device)

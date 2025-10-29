@@ -1,9 +1,8 @@
 """Environment base classes and type aliases for Unitree RL tasks."""
 
-from typing import Union
-
 from .base_agent import AgentTask
 from .base_humanoid import HumanoidTask
 from .base_legged_robot import LeggedRobotTask
+from .types import EnvTypes
 
-EnvTypes = Union[AgentTask, LeggedRobotTask, HumanoidTask]
+__all__ = ["AgentTask", "EnvTypes", "HumanoidTask", "LeggedRobotTask"]

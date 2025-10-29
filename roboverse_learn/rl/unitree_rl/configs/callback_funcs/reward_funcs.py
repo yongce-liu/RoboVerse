@@ -4,7 +4,7 @@ from metasim.types import TensorState
 from metasim.utils.math import quat_rotate_inverse
 
 from roboverse_learn.rl.unitree_rl.configs.cfg_queries import ContactForces
-from roboverse_pack.tasks.unitree_rl.base import EnvTypes
+from roboverse_pack.tasks.unitree_rl.base.types import EnvTypes
 
 def track_lin_vel_xy(env: EnvTypes, env_states: TensorState, std: float) -> torch.Tensor:
     """Reward tracking of linear velocity commands (xy axes) in the gravity aligned robot frame using exponential kernel."""
@@ -12,7 +12,7 @@ def track_lin_vel_xy(env: EnvTypes, env_states: TensorState, std: float) -> torc
     robot_state = env_states.robots[env.name]
     base_quat = robot_state.root_state[:, 3:7]
     base_lin_vel = quat_rotate_inverse(base_quat, robot_state.root_state[:, 7:10])
-    lin_vel_diff = env.commands[:, :2] - base_lin_vel[:, :2]
+    lin_vel_diff = env.commands_manager.value[:, :2] - base_lin_vel[:, :2]
     lin_vel_error = torch.sum(
         torch.square(lin_vel_diff), dim=1
     )
@@ -25,7 +25,7 @@ def track_ang_vel_z(env: EnvTypes, env_states: TensorState, std: float) -> torch
     robot_state = env_states.robots[env.name]
     base_quat = robot_state.root_state[:, 3:7]
     base_ang_vel = quat_rotate_inverse(base_quat, robot_state.root_state[:, 10:13])
-    ang_vel_diff = env.commands[:, 2] - base_ang_vel[:, 2]
+    ang_vel_diff = env.commands_manager.value[:, 2] - base_ang_vel[:, 2]
     ang_vel_error = torch.square(ang_vel_diff)
     return torch.exp(-ang_vel_error / std ** 2)
 
@@ -161,7 +161,7 @@ def feet_gait(env: EnvTypes, env_states: TensorState, period: float, offset: lis
         reward += ~(is_stance ^ is_contact[:, i])
 
     if command_name == "base_velocity":
-        cmd_norm = torch.norm(env.commands[:, :2], dim=1)
+        cmd_norm = torch.norm(env.commands_manager.value[:, :2], dim=1)
         reward *= (cmd_norm > 0.1).float()
     return reward
 
