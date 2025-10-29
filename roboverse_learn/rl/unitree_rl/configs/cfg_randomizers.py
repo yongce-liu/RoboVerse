@@ -1,10 +1,10 @@
 from __future__ import annotations
 from typing import Literal
-
+from copy import deepcopy
 import torch
 
 from metasim.sim.base import BaseSimHandler, BaseQueryType
-from metasim.utils.math import sample_uniform
+from metasim.utils.math import sample_uniform, sample_log_uniform, sample_gaussian
 
 try:
     import isaacgym  # noqa: F401
@@ -115,109 +115,179 @@ class MaterialRandomizer(BaseQueryType):
             obj_inst.root_physx_view.set_material_properties(materials, env_ids)
 
 
-# class MassRandomizer(BaseQueryType):
-#     def __init__(self,
-#                 obj_name: str,
-#                 body_names: list[str] | str | None = None,
-#                 mass_distribution_params: list | tuple = (-1.0, 3.0),
-#                 operation: Literal["add", "scale", "abs"] = "add",
-#                 distribution: Literal["uniform", "log_uniform", "gaussian"] = "uniform",
-#                 recompute_inertia: bool = True,
-#                 ):
-#         super().__init__()
-#         self.obj_name = obj_name
-#         self.set_body_names = [body_names] if isinstance(body_names, str) else body_names
-#         self.mass_distribution_params = mass_distribution_params
-#         self.operation = operation
-#         self.distribution = distribution
-#         self.recompute_inertia = recompute_inertia
+class MassRandomizer(BaseQueryType):
+    def __init__(self,
+                obj_name: str,
+                body_names: list[str] | str | None = None,
+                mass_distribution_params: list | tuple = (-1.0, 3.0),
+                operation: Literal["add", "scale", "abs"] = "add",
+                distribution: Literal["uniform", "log_uniform", "gaussian"] = "uniform",
+                recompute_inertia: bool = True,
+                ):
+        super().__init__()
+        self.obj_name = obj_name
+        self.set_body_names = [body_names] if isinstance(body_names, str) else body_names
+        self.mass_distribution_params = mass_distribution_params
+        self.operation = operation
+        self.distribution = distribution
+        self.recompute_inertia = recompute_inertia
 
-#     def bind_handler(self, handler:BaseSimHandler, *args, **kwargs):
-#         super().bind_handler(handler, *args, **kwargs)
-#         self.simulator_name = handler.scenario.simulator
-#         self.initialize()
+    def bind_handler(self, handler:BaseSimHandler, *args, **kwargs):
+        super().bind_handler(handler, *args, **kwargs)
+        self.simulator_name = handler.scenario.simulator
+        self.initialize()
 
-#     def initialize(self):
-#         # extract the used quantities (to enable type-hinting)
-#         self.asset_cfg: SceneEntityCfg = cfg.params["asset_cfg"]
-#         self.asset: RigidObject | Articulation = env.scene[self.asset_cfg.name]
-#         # check for valid operation
-#         if self.operation == "scale":
-#             if "mass_distribution_params" in cfg.params:
-#                 _validate_scale_range(
-#                     self.mass_distribution_params, "mass_distribution_params", allow_zero=False
-#                 )
-#         elif self.operation not in ("abs", "add"):
-#             raise ValueError(
-#                 "Randomization term 'randomize_rigid_body_mass' does not support operation:"
-#                 f" '{self.operation}'."
-#             )
+    def initialize(self):
+        # check for valid operation
+        if self.operation == "scale":
+            _validate_scale_range(self.mass_distribution_params, "mass_distribution_params", allow_zero=False)
+        elif self.operation not in ("abs", "add"):
+            raise ValueError(
+                "Randomization term 'randomize_rigid_body_mass' does not support operation:"
+                f" '{self.operation}'."
+            )
 
-#     def __call__(self, env_ids: torch.Tensor | None):
-#         # resolve environment ids
-#         if env_ids is None:
-#             env_ids = torch.arange(self.handler.num_envs, device="cpu")
-#         else:
-#             env_ids = torch.tensor(env_ids).cpu()
+        self.body_names = self.handler.get_body_names(self.obj_name, sort=False)
+        self.set_body_ids = torch.tensor([self.body_names.index(_name) for _name in self.set_body_names], dtype=torch.int, device="cpu") if self.set_body_names is not None else torch.arange(len(self.body_names), dtype=torch.int, device="cpu")
+        self.default_masses = deepcopy(self._get_masses())
 
-#         # resolve environment ids
-#         if env_ids is None:
-#             env_ids = torch.arange(env.scene.num_envs, device="cpu")
-#         else:
-#             env_ids = env_ids.cpu()
+    def __call__(self, env_ids: torch.Tensor | None=None):
+        # resolve environment ids
+        if env_ids is None:
+            env_ids = torch.arange(self.handler.num_envs, device="cpu")
+        else:
+            env_ids = torch.tensor(env_ids).cpu()
+        self.randomize(env_ids)
 
-#         # resolve body indices
-#         if self.asset_cfg.body_ids == slice(None):
-#             body_ids = torch.arange(self.asset.num_bodies, dtype=torch.int, device="cpu")
-#         else:
-#             body_ids = torch.tensor(self.asset_cfg.body_ids, dtype=torch.int, device="cpu")
+    def _get_masses(self):
+        if self.simulator_name == "isaacsim":
+            if self.obj_name in self.handler.scene.articulations:
+                obj_inst = self.handler.scene.articulations[self.obj_name]
+            elif self.obj_name in self.handler.scene.rigid_objects:
+                obj_inst = self.handler.scene.rigid_objects[self.obj_name]
+            else:
+                raise ValueError(f"Not found: {self.obj_name}.")
+            masses = obj_inst.root_physx_view.get_masses()
+            return masses
+        else:
+            raise NotImplementedError(f"Mass randomization not implemented for simulator: {self.simulator_name}.")
 
-#         # get the current masses of the bodies (num_assets, num_bodies)
-#         masses = self.asset.root_physx_view.get_masses()
+    def _set_masses(self, masses: torch.Tensor, env_ids: torch.Tensor):
+        if self.simulator_name == "isaacsim":
+            if self.obj_name in self.handler.scene.articulations:
+                obj_inst = self.handler.scene.articulations[self.obj_name]
+            elif self.obj_name in self.handler.scene.rigid_objects:
+                obj_inst = self.handler.scene.rigid_objects[self.obj_name]
+            obj_inst.root_physx_view.set_masses(masses, env_ids)
 
-#         # apply randomization on default values
-#         # this is to make sure when calling the function multiple times, the randomization is applied on the
-#         # default values and not the previously randomized values
-#         masses[env_ids[:, None], body_ids] = self.asset.data.default_mass[env_ids[:, None], body_ids].clone()
+    def _recompute_inertias(self, ratios: torch.Tensor, env_ids: torch.Tensor):
+        # scale the inertia tensors by the the ratios
+        # since mass randomization is done on default values, we can use the default inertia tensors
+        if self.simulator_name == "isaacsim":
+            if self.obj_name in self.handler.scene.articulations:
+                obj_inst = self.handler.scene.articulations[self.obj_name]
+                inertias = obj_inst.root_physx_view.get_inertias()
+                # inertia has shape: (num_envs, num_bodies, 9) for articulation
+                inertias[env_ids[:, None], self.set_body_ids] = (
+                    obj_inst.data.default_inertia[env_ids[:, None], self.set_body_ids] * ratios[..., None]
+                )
+            elif self.obj_name in self.handler.scene.rigid_objects:
+                obj_inst = self.handler.scene.rigid_objects[self.obj_name]
+                # inertia has shape: (num_envs, 9) for rigid object
+                inertias[env_ids] = obj_inst.data.default_inertia[env_ids] * ratios
+            # set the inertia tensors into the physics simulation
+            obj_inst.root_physx_view.set_inertias(inertias, env_ids)
 
-#         # sample from the given range
-#         # note: we modify the masses in-place for all environments
-#         #   however, the setter takes care that only the masses of the specified environments are modified
-#         masses = _randomize_prop_by_op(
-#             masses, mass_distribution_params, env_ids, body_ids, operation=operation, distribution=distribution
-#         )
-
-#         # set the mass into the physics simulation
-#         self.asset.root_physx_view.set_masses(masses, env_ids)
-
-#         # recompute inertia tensors if needed
-#         if recompute_inertia:
-#             # compute the ratios of the new masses to the initial masses
-#             ratios = masses[env_ids[:, None], body_ids] / self.asset.data.default_mass[env_ids[:, None], body_ids]
-#             # scale the inertia tensors by the the ratios
-#             # since mass randomization is done on default values, we can use the default inertia tensors
-#             inertias = self.asset.root_physx_view.get_inertias()
-#             if isinstance(self.asset, Articulation):
-#                 # inertia has shape: (num_envs, num_bodies, 9) for articulation
-#                 inertias[env_ids[:, None], body_ids] = (
-#                     self.asset.data.default_inertia[env_ids[:, None], body_ids] * ratios[..., None]
-#                 )
-#             else:
-#                 # inertia has shape: (num_envs, 9) for rigid object
-#                 inertias[env_ids] = self.asset.data.default_inertia[env_ids] * ratios
-#             # set the inertia tensors into the physics simulation
-#             self.asset.root_physx_view.set_inertias(inertias, env_ids)
-
-
-#     def randomize(self):
-#         pass
-
-
+    def randomize(self, env_ids: torch.Tensor):
+        # get the current masses of the bodies (num_assets, num_bodies)
+        masses = self._get_masses() # shape: (num_envs, num_bodies)
+        # apply randomization on default values
+        # this is to make sure when calling the function multiple times, the randomization is applied on the
+        # default values and not the previously randomized values
+        masses[env_ids[:, None], self.set_body_ids] = self.default_masses[env_ids[:, None], self.set_body_ids].clone()
+        # sample from the given range
+        # note: we modify the masses in-place for all environments
+        #   however, the setter takes care that only the masses of the specified environments are modified
+        masses = _randomize_prop_by_op(
+            masses, self.mass_distribution_params, env_ids, self.set_body_ids, operation=self.operation, distribution=self.distribution
+        )
+        self._set_masses(masses, env_ids)
+        # recompute inertia tensors if needed
+        if self.recompute_inertia:
+            # compute the ratios of the new masses to the initial masses
+            ratios = masses[env_ids[:, None], self.set_body_ids] / self.default_masses[env_ids[:, None], self.set_body_ids]
+            self._recompute_inertias(ratios, env_ids)
 
 ##########################################################################################
 # Private Helper Functions
 # FROM NVIDIA ISAAC LAB
 ##########################################################################################
+
+def _randomize_prop_by_op(
+    data: torch.Tensor,
+    distribution_parameters: tuple[float | torch.Tensor, float | torch.Tensor],
+    dim_0_ids: torch.Tensor | None,
+    dim_1_ids: torch.Tensor | slice,
+    operation: Literal["add", "scale", "abs"],
+    distribution: Literal["uniform", "log_uniform", "gaussian"],
+) -> torch.Tensor:
+    """Perform data randomization based on the given operation and distribution.
+
+    Args:
+        data: The data tensor to be randomized. Shape is (dim_0, dim_1).
+        distribution_parameters: The parameters for the distribution to sample values from.
+        dim_0_ids: The indices of the first dimension to randomize.
+        dim_1_ids: The indices of the second dimension to randomize.
+        operation: The operation to perform on the data. Options: 'add', 'scale', 'abs'.
+        distribution: The distribution to sample the random values from. Options: 'uniform', 'log_uniform'.
+
+    Returns:
+        The data tensor after randomization. Shape is (dim_0, dim_1).
+
+    Raises:
+        NotImplementedError: If the operation or distribution is not supported.
+    """
+    # resolve shape
+    # -- dim 0
+    if dim_0_ids is None:
+        n_dim_0 = data.shape[0]
+        dim_0_ids = slice(None)
+    else:
+        n_dim_0 = len(dim_0_ids)
+        if not isinstance(dim_1_ids, slice):
+            dim_0_ids = dim_0_ids[:, None]
+    # -- dim 1
+    if isinstance(dim_1_ids, slice):
+        n_dim_1 = data.shape[1]
+    else:
+        n_dim_1 = len(dim_1_ids)
+
+    # resolve the distribution
+    if distribution == "uniform":
+        dist_fn = sample_uniform
+    elif distribution == "log_uniform":
+        dist_fn = sample_log_uniform
+    elif distribution == "gaussian":
+        dist_fn = sample_gaussian
+    else:
+        raise NotImplementedError(
+            f"Unknown distribution: '{distribution}' for joint properties randomization."
+            " Please use 'uniform', 'log_uniform', 'gaussian'."
+        )
+    # perform the operation
+    if operation == "add":
+        data[dim_0_ids, dim_1_ids] += dist_fn(*distribution_parameters, (n_dim_0, n_dim_1), device=data.device)
+    elif operation == "scale":
+        data[dim_0_ids, dim_1_ids] *= dist_fn(*distribution_parameters, (n_dim_0, n_dim_1), device=data.device)
+    elif operation == "abs":
+        data[dim_0_ids, dim_1_ids] = dist_fn(*distribution_parameters, (n_dim_0, n_dim_1), device=data.device)
+    else:
+        raise NotImplementedError(
+            f"Unknown operation: '{operation}' for property randomization. Please use 'add', 'scale', or 'abs'."
+        )
+    return data
+
+
 def _validate_scale_range(
     params: tuple[float, float] | None,
     name: str,

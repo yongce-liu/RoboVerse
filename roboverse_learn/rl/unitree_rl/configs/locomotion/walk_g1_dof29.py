@@ -7,7 +7,7 @@ from roboverse_learn.rl.unitree_rl.configs.cfg_base import BaseEnvCfg, Callbacks
 from roboverse_learn.rl.unitree_rl.configs.algorithm import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, RslRlPpoAlgorithmCfg
 from roboverse_learn.rl.unitree_rl.helper.curriculum_utils import lin_vel_cmd_levels
 from roboverse_learn.rl.unitree_rl.configs.cfg_queries import ContactForces
-from roboverse_learn.rl.unitree_rl.configs.cfg_randomizers import MaterialRandomizer
+from roboverse_learn.rl.unitree_rl.configs.cfg_randomizers import MaterialRandomizer, MassRandomizer
 
 
 @configclass
@@ -99,13 +99,18 @@ class WalkG1Dof29EnvCfg(BaseEnvCfg):
     }
 
     callbacks: CallbacksCfg | dict | None = CallbacksCfg(
-        startup={
+        setup={
             "material_randomizer": MaterialRandomizer(
                 obj_name="g1_dof29",
                 static_friction_range = (0.3, 1.0),
                 dynamic_friction_range = (0.3, 1.0),
                 restitution_range = (0.0, 0.0),
-                num_buckets = 64)
+                num_buckets = 64),
+            "mass_randomizer": MassRandomizer(
+                obj_name="g1_dof29",
+                body_names="torso_link",
+                mass_distribution_params=(-1.0, 3.0),
+                operation="add"),
         },
         step={"contact_forces": ContactForces(history_length=3)})
 

@@ -9,9 +9,10 @@ from roboverse_learn.rl.unitree_rl.configs.cfg_queries import ContactForces
 
 @configclass
 class CallbacksCfg:
-    startup: dict = {}
+    setup: dict = {}
     reset: dict = {}
     step: dict = {}
+    termination: dict = {}
 
 
 @configclass

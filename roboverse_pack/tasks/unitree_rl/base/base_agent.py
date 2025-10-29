@@ -45,8 +45,8 @@ class AgentTask(RLTaskEnv):
         self._bind_callbacks(callbacks=self._callbacks_cfg)
 
     def _bind_callbacks(self, callbacks: CallbacksCfg | dict | None = None):
-        # callbacks: startup, reset
-        for _key, _val in callbacks["startup"].items():
+        # callbacks: setup, reset
+        for _key, _val in callbacks["setup"].items():
             _val.bind_handler(self.handler)
             _val()
         self._reset_callbacks: dict = callbacks["reset"]
