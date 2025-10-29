@@ -3,10 +3,11 @@ import math
 
 from metasim.utils import configclass
 
-from roboverse_learn.rl.unitree_rl.configs.cfg_base import BaseEnvCfg
+from roboverse_learn.rl.unitree_rl.configs.cfg_base import BaseEnvCfg, CallbacksCfg
 from roboverse_learn.rl.unitree_rl.configs.algorithm import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, RslRlPpoAlgorithmCfg
 from roboverse_learn.rl.unitree_rl.helper.curriculum_utils import lin_vel_cmd_levels
-from roboverse_learn.rl.unitree_rl.configs.cfg_queries import ContactForces, ObjectRandomCfg, PhysicsRandomCfg
+from roboverse_learn.rl.unitree_rl.configs.cfg_queries import ContactForces
+from roboverse_learn.rl.unitree_rl.configs.cfg_randomizers import MaterialRandomizer
 
 
 @configclass
@@ -97,29 +98,16 @@ class WalkG1Dof29EnvCfg(BaseEnvCfg):
         }
     }
 
-    @configclass
-    class QueriesCfg:
-        contact_forces: ContactForces = ContactForces(history_length=3)
-        # mass_randomizer: ObjectRandomizeOnceCall = ObjectRandomizeOnceCall(
-        #     ObjectRandomCfg(
-        #         obj_name="g1_dof29",
-        #         body_name="torso_link",
-        #         physics= PhysicsRandomCfg(enabled=True,
-        #                                   mass_range= [-1.0, 3.0],
-        #                                   operation="add")
-        #     )
-        # )
-        # material_randomizer: ObjectRandomizeOnceCall = ObjectRandomizeOnceCall(
-        #         ObjectRandomCfg(
-        #         obj_name="g1_dof29",
-        #         physics= PhysicsRandomCfg(enabled=True,
-        #                                   friction_range=[0.3, 1.0],
-        #                                   restitution_range=[0.0, 0.0],
-        #                                     operation="abs"
-        #                                   )
-        #     )
-        # )
-    queries: QueriesCfg = QueriesCfg()
+    callbacks: CallbacksCfg | dict | None = CallbacksCfg(
+        startup={
+            "material_randomizer": MaterialRandomizer(
+                obj_name="g1_dof29",
+                static_friction_range = (0.3, 1.0),
+                dynamic_friction_range = (0.3, 1.0),
+                restitution_range = (0.0, 0.0),
+                num_buckets = 64)
+        },
+        step={"contact_forces": ContactForces(history_length=3)})
 
 @configclass
 class WalkG1Dof29EnvRslRlTrainCfg(RslRlOnPolicyRunnerCfg):

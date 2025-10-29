@@ -1,11 +1,17 @@
 from __future__ import annotations
-from typing import Callable, Literal
+from typing import Callable
 from dataclasses import MISSING
 
 from metasim.utils import configclass
-from metasim.scenario.simulator_params import SimParamCfg
-
+from metasim.utils.configclass import class_to_dict
 from roboverse_learn.rl.unitree_rl.configs.cfg_queries import ContactForces
+
+
+@configclass
+class CallbacksCfg:
+    startup: dict = {}
+    reset: dict = {}
+    step: dict = {}
 
 
 @configclass
@@ -103,10 +109,5 @@ class BaseEnvCfg:
     initial_states = InitialStates()
     default_joint_positions: dict[str, dict[str, float]] = MISSING
 
-    @configclass
-    class QueriesCfg:
-        contact_forces: ContactForces = ContactForces(history_length=3)
-        # Disabled by default to avoid extra overhead/missing-link issues unless explicitly enabled by user
-        # lidar_pointcloud: LidarPointCloud = LidarPointCloud(enabled=False)
-
-    queries: QueriesCfg | dict | None = QueriesCfg()
+    callbacks: CallbacksCfg | dict | None = CallbacksCfg(
+        step={"contact_forces": ContactForces(history_length=3)})

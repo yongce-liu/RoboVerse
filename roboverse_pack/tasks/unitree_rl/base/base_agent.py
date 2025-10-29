@@ -10,8 +10,7 @@ import torch
 from metasim.scenario.scenario import ScenarioCfg
 from metasim.task.rl_task import RLTaskEnv
 from metasim.types import Action, Reward, TensorState
-from roboverse_learn.rl.unitree_rl.configs.cfg_base import BaseEnvCfg
-from roboverse_learn.rl.unitree_rl.configs.cfg_queries import QueriesCfg
+from roboverse_learn.rl.unitree_rl.configs.cfg_base import BaseEnvCfg, CallbacksCfg
 
 
 class AgentTask(RLTaskEnv):
@@ -24,8 +23,9 @@ class AgentTask(RLTaskEnv):
         device: str | torch.device | None = None,
     ) -> None:
         self.cfg = config
-        self._queries_cfg = getattr(self.cfg, "queries", QueriesCfg())
-        self.extras: dict[str, Any] = {}
+        self._callbacks_cfg = asdict(getattr(self.cfg, "callbacks", CallbacksCfg()))
+        self._queries: dict = self._callbacks_cfg.get("step", {})
+        super().__init__(scenario=scenario, device=device)
 
         # buffers will be allocated lazily once handler is available
         self.obs_buf_queue: deque[torch.Tensor] | None = None
@@ -35,11 +35,23 @@ class AgentTask(RLTaskEnv):
         self.rew_buf: torch.Tensor | None = None
         self.reset_buf: torch.Tensor | None = None
         self.time_out_buf: torch.Tensor | None = None
+        self.extras: dict[str, Any] = {}
 
-        super().__init__(scenario=scenario, device=device)
         # self._initial_state_specs_cache: list[dict] | None = None
         self.initial_env_states = deepcopy(self._initial_states)
         self.name = self.robot.name if hasattr(self, "robot") else getattr(self, "name", None)
+        # Callbacks
+        self._reset_callbacks: dict = {}
+        self._bind_callbacks(callbacks=self._callbacks_cfg)
+
+    def _bind_callbacks(self, callbacks: CallbacksCfg | dict | None = None):
+        # callbacks: startup, reset
+        for _key, _val in callbacks["startup"].items():
+            _val.bind_handler(self.handler)
+            _val()
+        self._reset_callbacks: dict = callbacks["reset"]
+        for _key, _val in self._reset_callbacks.items():
+            _val.bind_handler(self.handler)
 
     # ------------------------------------------------------------------ #
     # RLTaskEnv hooks
@@ -54,11 +66,7 @@ class AgentTask(RLTaskEnv):
 
     def _extra_spec(self) -> dict:
         """Expose optional sensor queries to the simulator handler."""
-        if self._queries_cfg is None:
-            return {}
-        if isinstance(self._queries_cfg, dict):
-            return self._queries_cfg
-        return asdict(self._queries_cfg)
+        return self._queries
 
     # ------------------------------------------------------------------ #
     # Helpers

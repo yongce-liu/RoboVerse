@@ -1,17 +1,12 @@
 from __future__ import annotations
-from typing import Dict
-import random
 
 import torch
 import numpy as np
 import warnings
 from collections import deque
-from dataclasses import MISSING
 
 from metasim.sim.base import BaseSimHandler, BaseQueryType
-from metasim.utils import configclass
 from metasim.utils.math import quat_apply, convert_quat
-from metasim.randomization.object_randomizer import ObjectRandomizer, ObjectRandomCfg, PhysicsRandomCfg, PoseRandomCfg
 
 try:
     import isaacgym  # noqa: F401
@@ -106,7 +101,6 @@ class ContactForces(BaseQueryType):
     @property
     def contact_forces(self) -> torch.Tensor:
         return self._contact_forces_queue[-1].view(self.num_envs, -1, 3)[:, self.body_ids_reindex, :]
-
 
 class LidarPointCloud(BaseQueryType):
     """Optional query that produces a LiDAR point cloud using LidarSensor + Warp.
@@ -547,38 +541,3 @@ class LidarPointCloud(BaseQueryType):
         else:
             warnings.warn(f"LidarPointCloud: simulator '{sim_type}' not supported for LiDAR pose fetch.")
             return {robot_name: None}
-
-class MaterialRandomizer(BaseQueryType):
-    def __init__(self,
-                object_name: str,
-                body_names: list[str] | str | None = None,
-                static_friction_range: list | tuple | None = (0.3, 1.0),
-                dynamic_friction_range: list | tuple | None = (0.3, 1.0),
-                restitution_range: list | tuple | None = (0.0, 0.0),
-                distribution: str = "uniform",
-                num_buckets: int = 64):
-        super().__init__()
-
-    def bind_handler(self, handler:BaseSimHandler, *args, **kwargs):
-        super().bind_handler(handler, *args, **kwargs)
-
-class MassRandomizer(BaseQueryType):
-    def __init__(self,
-                object_name: str,
-                body_names: list[str] | str | None = None,
-                mass_range: list | tuple = (-1.0, 3.0),
-                distribution: str = "uniform",
-                operation: str = "add" # "add" or "scale"
-                ):
-        super().__init__()
-
-    def bind_handler(self, handler:BaseSimHandler, *args, **kwargs):
-        super().bind_handler(handler, *args, **kwargs)
-
-@configclass
-class QueriesCfg:
-    startup: dict = MISSING
-    reset: dict = MISSING
-    step: dict = {
-        "contact_forces": ContactForces()
-    }
