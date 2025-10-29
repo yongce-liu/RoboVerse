@@ -1,7 +1,7 @@
 import math
 from metasim.utils import configclass
 from roboverse_learn.rl.unitree_rl.configs.cfg_base import BaseEnvCfg
-from roboverse_learn.rl.unitree_rl.configs.algorithm.rsl_rl.rl_cfg import RslRlOnPolicyRunnerCfg, RslRlPpoAlgorithmCfg, RslRlPpoActorCriticRecurrentCfg
+from roboverse_learn.rl.unitree_rl.configs.algorithm import RslRlOnPolicyRunnerCfg, RslRlPpoAlgorithmCfg, RslRlPpoActorCriticRecurrentCfg
 
 
 @configclass

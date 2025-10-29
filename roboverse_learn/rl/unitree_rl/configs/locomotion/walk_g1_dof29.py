@@ -4,9 +4,9 @@ import math
 from metasim.utils import configclass
 
 from roboverse_learn.rl.unitree_rl.configs.cfg_base import BaseEnvCfg
-from roboverse_learn.rl.unitree_rl.third_party.isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, RslRlPpoAlgorithmCfg
+from roboverse_learn.rl.unitree_rl.configs.algorithm import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, RslRlPpoAlgorithmCfg
 from roboverse_learn.rl.unitree_rl.helper.curriculum_utils import lin_vel_cmd_levels
-from roboverse_learn.rl.unitree_rl.configs.cfg_queries import ContactForces, ObjectRandomizeOnceCall, ObjectRandomCfg, PhysicsRandomCfg
+from roboverse_learn.rl.unitree_rl.configs.cfg_queries import ContactForces, ObjectRandomCfg, PhysicsRandomCfg
 
 
 @configclass

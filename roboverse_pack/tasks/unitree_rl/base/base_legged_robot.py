@@ -9,7 +9,7 @@ import torch
 
 from metasim.scenario.scenario import ScenarioCfg
 from metasim.utils.dict import class_to_dict
-from metasim.utils.math import quat_apply, wrap_to_pi
+from metasim.utils.math import quat_apply, quat_from_euler_xyz, wrap_to_pi
 from metasim.utils.state import TensorState
 from metasim.utils.tensor_util import torch_rand_float
 from roboverse_learn.rl.unitree_rl.configs.cfg_base import BaseEnvCfg
@@ -146,6 +146,13 @@ class LeggedRobotTask(AgentTask):
         #######################################################
         sorted_joint_pos = [default_joint_pos[name] for name in sorted_joint_names]
         self.default_dof_pos = torch.tensor(sorted_joint_pos, device=self.device)  # (n_dof,)
+        default_joint_vel = getattr(robot, "default_joint_velocities", 0)
+        sorted_joint_vel = (
+            [default_joint_vel[name] for name in sorted_joint_names]
+            if isinstance(default_joint_vel, dict)
+            else [default_joint_vel for _ in sorted_joint_names]
+        )
+        self.default_dof_vel = torch.tensor(sorted_joint_vel, device=self.device)  # (n_dof,)
 
     # def _pre_physics_step(self, actions: torch.Tensor):
     #     """Apply action smoothing and wrap actions as dict before physics step."""
@@ -493,20 +500,26 @@ class LeggedRobotTask(AgentTask):
         random_initial_robot_states = self.initial_env_states.robots[self.name]
         env_tensor = torch.tensor(env_ids, dtype=torch.long, device=self.device)
         num_envs = len(env_ids)
-        random_initial_robot_states.joint_pos[env_tensor] = self.default_dof_pos * torch_rand_float(
-            0.5, 1.5, (num_envs, self.num_actions), device=self.device
-        )
-        random_initial_robot_states.joint_vel[env_tensor] = torch_rand_float(
-            -1.0, 1.0, (num_envs, self.num_actions), device=self.device
-        )
+        # root position & orientation
         random_initial_robot_states.root_state[env_tensor, :2] = torch_rand_float(
             -0.5, 0.5, (len(env_ids), 2), device=self.device
         )
-        # random_yaw = torch_rand_float(-math.pi, math.pi, (len(env_ids), 1), device=self.device).flatten()
-        # random_initial_robot_states.root_state[env_tensor, 3:7] = quat_from_euler_xyz(roll=random_yaw.clone()*0.0, pitch=random_yaw.clone()*0.0, yaw=random_yaw)
-        # random_initial_robot_states.root_state[env_tensor, 7:13] = torch_rand_float(
+        random_yaw = torch_rand_float(-math.pi, math.pi, (len(env_ids), 1), device=self.device).flatten()
+        random_initial_robot_states.root_state[env_tensor, 3:7] = quat_from_euler_xyz(
+            roll=random_yaw.clone() * 0.0, pitch=random_yaw.clone() * 0.0, yaw=random_yaw
+        )
+        # root linear & angular velocity
+        # random_initial_robot_states.root_state[env_tensor, 7:10] = torch_rand_float(
         # -0.1, 0.5, (len(env_ids), 6), device=self.device
         # )
+        # joint position
+        random_initial_robot_states.joint_pos[env_tensor] = self.default_dof_pos * torch_rand_float(
+            1.0, 1.0, (num_envs, self.num_actions), device=self.device
+        )
+        # joint velocity
+        random_initial_robot_states.joint_vel[env_tensor] = self.default_dof_vel * torch_rand_float(
+            -1.0, 1.0, (num_envs, self.num_actions), device=self.device
+        )
         return random_initial_robot_states
 
     def _build_initial_state_specs(self) -> list[dict]:

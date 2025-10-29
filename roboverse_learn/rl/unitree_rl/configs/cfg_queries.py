@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import Dict
+import random
 
 import torch
 import numpy as np
@@ -547,19 +548,37 @@ class LidarPointCloud(BaseQueryType):
             warnings.warn(f"LidarPointCloud: simulator '{sim_type}' not supported for LiDAR pose fetch.")
             return {robot_name: None}
 
-class ObjectRandomizeOnceCall(ObjectRandomizer):
-    def bind_handler(self, handler, *args, **kwargs):
-        _ = super().bind_handler(handler, *args, **kwargs)
-        self.randomize_physics()
-        self.randomize_pose()
-        return _
+class MaterialRandomizer(BaseQueryType):
+    def __init__(self,
+                object_name: str,
+                body_names: list[str] | str | None = None,
+                static_friction_range: list | tuple | None = (0.3, 1.0),
+                dynamic_friction_range: list | tuple | None = (0.3, 1.0),
+                restitution_range: list | tuple | None = (0.0, 0.0),
+                distribution: str = "uniform",
+                num_buckets: int = 64):
+        super().__init__()
 
-    def __call__(self):
-        pass
+    def bind_handler(self, handler:BaseSimHandler, *args, **kwargs):
+        super().bind_handler(handler, *args, **kwargs)
 
+class MassRandomizer(BaseQueryType):
+    def __init__(self,
+                object_name: str,
+                body_names: list[str] | str | None = None,
+                mass_range: list | tuple = (-1.0, 3.0),
+                distribution: str = "uniform",
+                operation: str = "add" # "add" or "scale"
+                ):
+        super().__init__()
+
+    def bind_handler(self, handler:BaseSimHandler, *args, **kwargs):
+        super().bind_handler(handler, *args, **kwargs)
 
 @configclass
 class QueriesCfg:
-    contact_forces: ContactForces = ContactForces()
-    # Disabled by default to avoid extra overhead/missing-link issues unless explicitly enabled by user
-    # lidar_pointcloud: LidarPointCloud = LidarPointCloud(enabled=False)
+    startup: dict = MISSING
+    reset: dict = MISSING
+    step: dict = {
+        "contact_forces": ContactForces()
+    }
