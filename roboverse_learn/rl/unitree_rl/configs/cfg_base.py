@@ -44,7 +44,7 @@ class BaseEnvCfg:
     @configclass
     class Control:
         torque_limits_factor: float = 1.0 # scale torque limits from urdf
-        dof_pos_limits_factor: float = 1.0 # scale dof pos limits from urdf
+        soft_joint_pos_limit_factor: float = 1.0 # scale dof pos limits from urdf
         action_clip: float = 100.0
         action_scale = 0.25
         action_offset = True

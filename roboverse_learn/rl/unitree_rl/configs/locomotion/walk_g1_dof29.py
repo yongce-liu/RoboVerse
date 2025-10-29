@@ -20,7 +20,7 @@ class WalkG1Dof29EnvCfg(BaseEnvCfg):
     episode_length_s = 20.0
 
     control = BaseEnvCfg.Control(action_scale = 0.25,
-                                 dof_pos_limits_factor=0.9)
+                                 soft_joint_pos_limit_factor=0.9)
 
     @configclass
     class RewardsScales:
@@ -54,10 +54,6 @@ class WalkG1Dof29EnvCfg(BaseEnvCfg):
     )
 
     domain_rand = BaseEnvCfg.DomainRand(
-        randomize_friction = True,
-        friction_range = [0.1, 1.25],
-        randomize_base_mass = True,
-        added_mass_range = [-1., 3.],
         push_robots = True,
         push_interval = int(5/0.02),
         max_push_vel_xy = 0.5,

@@ -60,7 +60,6 @@ def prepare(args):
 
     return master_runner
 
-
 def play(args):
     master_runner = prepare(args)
     name_0 = list(master_runner.runners.keys())[0]
@@ -81,8 +80,6 @@ def play(args):
 
     cfg_0.curriculum.enabled = False
     cfg_0.commands.resampling_time = 1e6  # effectively disable command changes
-    cfg_0.domain_rand.randomize_friction = False
-    cfg_0.domain_rand.randomize_base_mass = False
     cfg_0.domain_rand.randomize_initial_state = False
     cfg_0.domain_rand.push_robots = False
     cfg_0.domain_rand.add_noise2obs = False

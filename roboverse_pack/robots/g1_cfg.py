@@ -122,7 +122,7 @@ class G1Dof12Cfg(RobotCfg):
     waist_joints = ["waist"]
     arm_joints: list[str] = ["shoulder", "elbow", "wrist", "hand"]
 
-    # soft_joint_pos_limit_factor = 0.9
+    soft_joint_pos_limit_factor = 0.9
     # From default joint armature in XML
     armature: float = 0.01
 

@@ -12,7 +12,7 @@ class WalkG1Dof12EnvCfg(BaseEnvCfg):
     priv_obs_len_history = 1
 
     control = BaseEnvCfg.Control(action_scale = 0.25,
-                                 dof_pos_limits_factor=0.98)
+                                 soft_joint_pos_limit_factor=0.98)
 
     @configclass
     class RewardsScales:

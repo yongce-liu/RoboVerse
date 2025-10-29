@@ -121,16 +121,17 @@ class LeggedRobotTask(AgentTask):
 
         dof_pos_limits = robot.joint_limits
         sorted_dof_pos_limits = [dof_pos_limits[joint] for joint in sorted_joint_names]
-        self.dof_pos_limits = (
-            torch.tensor(sorted_dof_pos_limits, device=self.device) * self.cfg.control.dof_pos_limits_factor
-        )  # (n_dof, 2)
+        self.dof_pos_limits = torch.tensor(sorted_dof_pos_limits, device=self.device)  # (n_dof, 2)
 
-        # _mid = (self.dof_pos_limits[:, 0] + self.dof_pos_limits[:, 1]) / 2.0
-        # _diff = self.dof_pos_limits[:, 1] - self.dof_pos_limits[:, 0]
-        # soft_dof_pos_limits = torch.zeros_like(self.dof_pos_limits, device=self.device)
-        # soft_dof_pos_limits[:, 0] = _mid - 0.5 * _diff * self.cfg.rewards.extras.soft_dof_pos_limit
-        # soft_dof_pos_limits[:, 1] = _mid + 0.5 * _diff * self.cfg.rewards.extras.soft_dof_pos_limit
-        # self.dof_pos_limits = soft_dof_pos_limits
+        soft_limit_factor = getattr(
+            self.cfg.control, "soft_joint_pos_limit_factor", getattr(self.robot, "soft_joint_pos_limit_factor", 1.0)
+        )
+        _mid = (self.dof_pos_limits[:, 0] + self.dof_pos_limits[:, 1]) / 2.0
+        _diff = self.dof_pos_limits[:, 1] - self.dof_pos_limits[:, 0]
+        soft_dof_pos_limits = torch.zeros_like(self.dof_pos_limits, device=self.device)
+        soft_dof_pos_limits[:, 0] = _mid - 0.5 * _diff * soft_limit_factor
+        soft_dof_pos_limits[:, 1] = _mid + 0.5 * _diff * soft_limit_factor
+        self.dof_pos_limits = soft_dof_pos_limits
 
         default_joint_pos = robot.default_joint_positions
         #######################################################
