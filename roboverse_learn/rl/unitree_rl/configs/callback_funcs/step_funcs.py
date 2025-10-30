@@ -1,10 +1,9 @@
 import torch
 
 from metasim.types import TensorState
-from metasim.utils.math import quat_from_euler_xyz, quat_apply, wrap_to_pi
+from metasim.utils.math import quat_from_euler_xyz, quat_apply, wrap_to_pi, sample_uniform
 
 
-from roboverse_learn.rl.unitree_rl.helper.utils import torch_rand_float_tensor
 from roboverse_pack.tasks.unitree_rl.base.types import EnvTypes
 from roboverse_learn.rl.unitree_rl.configs.cfg_base import BaseEnvCfg
 
@@ -57,14 +56,12 @@ def push_by_setting_velocity(env: EnvTypes,
     env_ids = torch.arange(env.num_envs, device=env.device)
     # push_interval = torch_rand_float(interval_range_s[0], interval_range_s[1], (1,1), device=env.device) / env.step_dt
     push_interval = int((interval_range_s[0]+interval_range_s[1]) / env.step_dt)
-    velocity_range = torch.tensor(velocity_range, device=env.device)
 
     push_env_ids = env_ids[env._episode_steps[env_ids] % push_interval == 0]
     if len(push_env_ids) == 0:
         return
 
-    env_states.robots[env.name].root_state[push_env_ids, 7:10] = torch_rand_float_tensor(
-        velocity_range[0], velocity_range[1], (len(push_env_ids), 3), device=env.device
-    )
+    velocity_range = torch.tensor(velocity_range, device=env.device)
+    env_states.robots[env.name].root_state[push_env_ids, 7:10] += sample_uniform(velocity_range[0], velocity_range[1], (len(push_env_ids), 3), device=env.device)
 
     env.handler.set_states(env_states, push_env_ids.tolist())

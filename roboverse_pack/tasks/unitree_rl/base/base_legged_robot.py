@@ -130,10 +130,20 @@ class LeggedRobotTask(AgentTask):
         )
         _mid = (self.dof_pos_limits[:, 0] + self.dof_pos_limits[:, 1]) / 2.0
         _diff = self.dof_pos_limits[:, 1] - self.dof_pos_limits[:, 0]
-        soft_dof_pos_limits = torch.zeros_like(self.dof_pos_limits, device=self.device)
-        soft_dof_pos_limits[:, 0] = _mid - 0.5 * _diff * soft_limit_factor
-        soft_dof_pos_limits[:, 1] = _mid + 0.5 * _diff * soft_limit_factor
-        self.dof_pos_limits = soft_dof_pos_limits
+
+        self.soft_dof_pos_limits = torch.zeros_like(self.dof_pos_limits, device=self.device)
+        self.soft_dof_pos_limits[:, 0] = _mid - 0.5 * _diff * soft_limit_factor
+        self.soft_dof_pos_limits[:, 1] = _mid + 0.5 * _diff * soft_limit_factor
+
+        dof_vel_limits = getattr(
+            robot,
+            "joint_velocity_limits",
+            [getattr(robot.actuators[name], "velocity_limit", torch.inf) for name in sorted_joint_names],
+        )
+        self.dof_vel_limits = torch.tensor(dof_vel_limits, device=self.device)  # (n_dof, 2)
+        self.soft_dof_vel_limits = self.dof_vel_limits * getattr(
+            self.cfg.control, "soft_joint_vel_limit_factor", getattr(self.robot, "soft_joint_vel_limit_factor", 1.0)
+        )
 
         default_joint_pos = self.cfg.initial_states.robots[robot.name].get(
             "default_joint_pos", robot.default_joint_positions
@@ -265,7 +275,8 @@ class LeggedRobotTask(AgentTask):
 
         for _key, _val in self._reset_callbacks.items():
             _return_val = _val[0](self, env_ids, **_val[1])
-        self.handler.set_states(states=self.initial_env_states, env_ids=env_ids)
+
+        self.set_states(states=self.setup_initial_env_states, env_ids=env_ids)
 
         for history in self.history_buffer.values():
             for item in history:
@@ -306,11 +317,6 @@ class LeggedRobotTask(AgentTask):
                 send_action = self.actions * self.action_scale
             env_states = self._physics_step(send_action)
 
-        self._post_physics_step(env_states)
-
-        return self.obs_buf, self.rew_buf, self.reset_buf, self.time_out_buf, self.extras
-
-    def _post_physics_step(self, env_states: TensorState):
         self._episode_steps += 1
         self.common_step_counter += 1
 
@@ -324,8 +330,9 @@ class LeggedRobotTask(AgentTask):
         self.reset(env_ids=reset_env_idx)
 
         self.commands_manager.resample(self)
-        for _key, _val in self._step_callbacks.items():
-            _val[0](self, env_states, **_val[1])
+        # for _, _val in self._step_callbacks.items():
+        #     _step_func, _step_params = _val
+        #     _step_func(self, env_states, **_step_params)
 
         ####### Compute observations after resets ########
         obs_single, priv_single = self._compute_task_observations(env_states)
@@ -342,6 +349,8 @@ class LeggedRobotTask(AgentTask):
                 history.append(getattr(self, key).clone())
             elif hasattr(env_states.robots[self.name], key):
                 history.append(getattr(env_states.robots[self.name], key).clone())
+
+        return self.obs_buf, self.rew_buf, self.reset_buf, self.time_out_buf, self.extras
 
     def _reward(self, env_states):
         rew_buf = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)

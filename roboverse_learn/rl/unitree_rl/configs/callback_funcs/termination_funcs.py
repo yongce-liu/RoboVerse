@@ -12,7 +12,6 @@ def root_height_below_minimum(env: EnvTypes, env_states: TensorState, minimum_he
         This is currently only supported for flat terrains, i.e. the minimum height is in the world frame.
     """
     robot_state = env_states.robots[env.name]
-    base_quat = robot_state.root_state[:, 3:7]
     return robot_state.root_state[:, 2] < minimum_height
 
 def bad_orientation(env: EnvTypes, env_states: TensorState, limit_angle: float) -> torch.Tensor:

@@ -78,8 +78,8 @@ def joint_pos_limits(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
     This is computed as a sum of the absolute value of the difference between the joint position and the soft limits.
     """
     robot_state = env_states.robots[env.name]
-    out_of_limits = -(robot_state.joint_pos - env.dof_pos_limits[:, 0]).clip(max=0.0)
-    out_of_limits += (robot_state.joint_pos - env.dof_pos_limits[:, 1]).clip(min=0.0)
+    out_of_limits = -(robot_state.joint_pos - env.soft_dof_pos_limits[:, 0]).clip(max=0.0)
+    out_of_limits += (robot_state.joint_pos - env.soft_dof_pos_limits[:, 1]).clip(min=0.0)
     return torch.sum(out_of_limits, dim=1)
 
 def energy(env: EnvTypes, env_states: TensorState) -> torch.Tensor:

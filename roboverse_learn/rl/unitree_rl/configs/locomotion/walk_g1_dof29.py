@@ -60,8 +60,6 @@ class WalkG1Dof29EnvCfg(BaseEnvCfg):
 
     domain_rand = BaseEnvCfg.DomainRand(
         push_robots = True,
-        push_interval = int(5/0.02),
-        max_push_vel_xy = 0.5,
         randomize_initial_state = True
     )
 
@@ -115,7 +113,7 @@ class WalkG1Dof29EnvCfg(BaseEnvCfg):
                            )
         },
         terminate={
-            "time_out": term_funcs.time_out,
+            # "time_out": term_funcs.time_out,
             "base_height": (term_funcs.root_height_below_minimum, {"minimum_height": 0.2}),
             "bad_orientation": (term_funcs.bad_orientation, {"limit_angle": 0.8}),
         },

@@ -229,11 +229,6 @@ def get_export_jit_path(load_root: str, scenario: ScenarioCfg) -> str:
     os.makedirs(exported_root_dir, exist_ok=True)
     return f"{load_root}/exported/model_exported_jit.pt"
 
-@torch.jit.script
-def torch_rand_float_tensor(lower: torch.Tensor, upper: torch.Tensor, shape: tuple[int, int], device: torch.device) -> torch.Tensor:
-    """Generate a tensor of random floats in the range [lower, upper]."""
-    return (upper - lower) * torch.rand(*shape, device=device) + lower
-
 def pattern_match(sub_names: dict[str, any], all_names: list[str]) -> dict[str, any]:
     """Pattern match the sub_names to all_names using regex."""
     matched_names = {_key: 0.0 for _key in all_names}
