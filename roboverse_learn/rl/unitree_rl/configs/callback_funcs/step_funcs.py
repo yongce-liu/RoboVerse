@@ -16,24 +16,22 @@ def resample_commands(env: EnvTypes, env_states: TensorState = None):
     """
     cfg: BaseEnvCfg.Commands = env.cfg.commands
     if cfg.value is None:
-        cfg.value = torch.zeros(
-            size=(env.num_envs, cfg.num_commands),
-            dtype=torch.float,
-            device=env.device
-        )
+        cfg.value = torch.zeros(size=(env.num_envs, cfg.num_commands), dtype=torch.float, device=env.device)
+    if cfg.ranges_tensor is None:
+        cfg.ranges_tensor = torch.tensor([
+            cfg.ranges.lin_vel_x,
+            cfg.ranges.lin_vel_y,
+            cfg.ranges.heading if cfg.heading_command else cfg.ranges.ang_vel_yaw
+        ], device=env.device)
+
     env_ids = (env._episode_steps % int(cfg.resampling_time / env.step_dt) == 0).nonzero(as_tuple=False).flatten()
     if len(env_ids) == 0:
         return
-    r = torch.empty(len(env_ids), device=env.device)
 
-    cfg.value[env_ids, 0] = r.uniform_(*cfg.ranges.lin_vel_x)
-    cfg.value[env_ids, 1] = r.uniform_(*cfg.ranges.lin_vel_y)
-    cfg.value[env_ids, 2] = r.uniform_(*cfg.ranges.ang_vel_yaw)
-    if cfg.heading_command:
-        cfg.value[env_ids, 2] = r.uniform_(*cfg.ranges.heading)
+    cfg.value[env_ids, :] = sample_uniform(cfg.ranges_tensor[:, 0], cfg.ranges_tensor[:, 1], (len(env_ids), cfg.ranges_tensor.size(0)), device=env.device)
 
     # low_cmd_mask = torch.norm(cfg.value[env_ids, :2], dim=1) < 0.1
-    random_mask = r.uniform_(0.0, 1.0) <= cfg.rel_standing_envs
+    random_mask = sample_uniform(0, 1, (len(env_ids),), device=env.device) <= cfg.rel_standing_envs
     final_env_ids = random_mask.nonzero(as_tuple=False).flatten()
     cfg.value[env_ids][final_env_ids, :] *= 0.0
 
