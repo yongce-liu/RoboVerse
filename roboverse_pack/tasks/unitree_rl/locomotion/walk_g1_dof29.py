@@ -113,7 +113,7 @@ class WalkG1Dof29Task(HumanoidTask):
         projected_gravity = quat_rotate_inverse(base_quat, self.gravity_vec)
 
         q = env_states.robots[self.name].joint_pos - self.default_dof_pos
-        dq = env_states.robots[self.name].joint_vel
+        dq = env_states.robots[self.name].joint_vel - self.default_dof_vel
 
         # gait = self._gait_phase()
 
