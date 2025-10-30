@@ -1,5 +1,4 @@
 import torch
-from copy import deepcopy
 
 from metasim.types import TensorState
 from metasim.utils.math import quat_from_euler_xyz
@@ -13,9 +12,9 @@ def random_root_state(env: EnvTypes, env_ids: torch.Tensor | list, pose_range=to
     if len(env_ids) == 0:
         return
     if not env.cfg.domain_rand.randomize_initial_state:
-        env.handler.set_states(states=env._initial_states, env_ids=env_ids)
+        env.handler.set_states(states=env.initial_env_states, env_ids=env_ids)
         return
-    default_initial_env_states = deepcopy(env._initial_states)
+    default_initial_env_states = env.initial_env_states
 
     pose_range = torch.tensor(pose_range, device=env.device)
     velocity_range = torch.tensor(velocity_range, device=env.device)
@@ -44,9 +43,9 @@ def reset_joints_by_scale(env: EnvTypes, env_ids: torch.Tensor | list, position_
     if len(env_ids) == 0:
         return
     if not env.cfg.domain_rand.randomize_initial_state:
-        env.handler.set_states(states=env._initial_states, env_ids=env_ids)
+        env.handler.set_states(states=env.initial_env_states, env_ids=env_ids)
         return
-    default_initial_env_states = deepcopy(env._initial_states)
+    default_initial_env_states = env.initial_env_states
 
     # weak copy
     random_initial_robot_states = default_initial_env_states.robots[env.name]

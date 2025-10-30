@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import deque
+from copy import deepcopy
 from dataclasses import asdict
 from typing import Any
 
@@ -35,6 +36,7 @@ class AgentTask(RLTaskEnv):
         self.reset_buf: torch.Tensor | None = None
         # self.time_out_buf: torch.Tensor | None = None
         self.extras: dict[str, Any] = {}
+        self.initial_env_states = deepcopy(self._initial_states)
 
         # Callbacks
         self._bind_callbacks(callbacks=_callbacks_cfg)
