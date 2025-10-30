@@ -103,10 +103,10 @@ def play(args):
 
     for i in range(1000000):
         # set fixed command
-        env_0.commands[:, 0] = 0.5
-        env_0.commands[:, 1] = 0.0
-        env_0.commands[:, 2] = 0.0
-        env_0.commands[:, 3] = 0.0
+
+        env_0.commands_manager.value[:, 0] = 0.0
+        env_0.commands_manager.value[:, 1] = 0.0
+        env_0.commands_manager.value[:, 2] = 0.0
         actions = policy_0(obs)
         obs, _, _, _ = envwrapper_0.step(actions)
 

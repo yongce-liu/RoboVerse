@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections import deque
-from copy import deepcopy
 from dataclasses import asdict
 from typing import Any
 
@@ -37,9 +36,6 @@ class AgentTask(RLTaskEnv):
         # self.time_out_buf: torch.Tensor | None = None
         self.extras: dict[str, Any] = {}
 
-        # self._initial_state_specs_cache: list[dict] | None = None
-        self.initial_env_states = deepcopy(self._initial_states)
-        self.name = self.robot.name if hasattr(self, "robot") else getattr(self, "name", None)
         # Callbacks
         self._bind_callbacks(callbacks=_callbacks_cfg)
 
@@ -57,20 +53,17 @@ class AgentTask(RLTaskEnv):
         self._reset_callbacks = callbacks.pop("reset", {})
         self._step_callbacks = callbacks.pop("step", {})
         self._terminate_callbacks = callbacks.pop("terminate", {})
-        self.episode_terminations = {}
+        self.episode_not_terminations = {}
         for _key in self._terminate_callbacks.keys():
-            self.episode_terminations[_key] = torch.zeros(size=(self.num_envs,), dtype=torch.float, device=self.device)
+            self.episode_not_terminations[_key] = torch.zeros(
+                size=(self.num_envs,), dtype=torch.float, device=self.device
+            )
 
     # ------------------------------------------------------------------ #
     # RLTaskEnv hooks
     # ------------------------------------------------------------------ #
-    def _build_initial_state_specs(self) -> list[dict]:
-        """Return per-env dict used to seed simulator (override in subclasses)."""
+    def _get_initial_states(self):
         raise NotImplementedError
-
-    def _get_initial_states(self) -> list[dict]:
-        self._initial_state_specs_cache = self._build_initial_state_specs()
-        return self._initial_state_specs_cache
 
     def _extra_spec(self) -> dict:
         """Expose optional sensor queries to the simulator handler."""

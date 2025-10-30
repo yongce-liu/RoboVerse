@@ -109,10 +109,20 @@ class BaseEnvCfg:
             "g1_dof12": {"pos": [0.0, 0.0, 0.78]},
             "g1_dof23": {"pos": [0.0, 0.0, 0.78]},
             "g1_dof29_dex3": {"pos": [0.0, 0.0, 0.78]},
-            "g1_dof29": {"pos": [0.0, 0.0, 0.78]}
+            "g1_dof29": {"pos": [0.0, 0.0, 0.78],
+                         "default_joint_pos":{"left_hip_pitch_joint": -0.1,
+                                              "right_hip_pitch_joint": -0.1,
+                                              ".*_knee_joint": 0.3,
+                                              ".*_ankle_pitch_joint": -0.2,
+                                              ".*_shoulder_pitch_joint": 0.3,
+                                              "left_shoulder_roll_joint": 0.25,
+                                              "right_shoulder_roll_joint": -0.25,
+                                              ".*_elbow_joint": 0.97,
+                                              "left_wrist_roll_joint": 0.15,
+                                              "right_wrist_roll_joint": -0.15},
+                        }
             }
     initial_states = InitialStates()
-    default_joint_positions: dict[str, dict[str, float]] = MISSING
 
     callbacks: CallbacksCfg | dict | None = CallbacksCfg(
         query={"contact_forces": ContactForces(history_length=3)})

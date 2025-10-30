@@ -24,6 +24,8 @@ def resample_commands(env: EnvTypes, env_states: TensorState = None):
             requires_grad=False,
         )
     env_ids = (env._episode_steps % int(cfg.resampling_time / env.step_dt) == 0).nonzero(as_tuple=False).flatten()
+    if len(env_ids) == 0:
+        return
     r = torch.empty(len(env_ids), device=env.device)
 
     cfg.value[env_ids, 0] = r.uniform_(*cfg.ranges.lin_vel_x)
@@ -66,4 +68,4 @@ def push_by_setting_velocity(env: EnvTypes,
         velocity_range[0], velocity_range[1], (len(push_env_ids), 3), device=env.device
     )
 
-    env.set_states(env_states, push_env_ids.tolist())
+    env.handler.set_states(env_states, push_env_ids.tolist())

@@ -9,11 +9,9 @@ import torch
 
 from metasim.scenario.scenario import ScenarioCfg
 from metasim.utils.dict import class_to_dict
-from metasim.utils.math import quat_from_euler_xyz
 from metasim.utils.state import TensorState
-from metasim.utils.tensor_util import torch_rand_float
 from roboverse_learn.rl.unitree_rl.configs.cfg_base import BaseEnvCfg
-from roboverse_learn.rl.unitree_rl.helper import get_indices_from_substring
+from roboverse_learn.rl.unitree_rl.helper import get_indices_from_substring, pattern_match
 from roboverse_pack.robots import G1Dof12Cfg, Go2Cfg
 
 from .base_agent import AgentTask
@@ -29,7 +27,7 @@ class LeggedRobotTask(AgentTask):
         device: str | torch.device | None = None,
     ) -> None:
         super().__init__(scenario=scenario, config=config, device=device)
-        self.name = self.name
+        self.name = self.robot.name if hasattr(self, "robot") else getattr(self, "name", None)
         self.num_actions = len(self.robot.actuators)
         self.sim_dt = self.scenario.sim_params.dt
         self.sorted_body_names = self.handler.get_body_names(self.name, sort=True)
@@ -39,9 +37,8 @@ class LeggedRobotTask(AgentTask):
         self._init_rigid_body_indices()
         self._init_joint_cfg()
         self._init_reward_function()
-
         self._init_buffers()
-        # self._init_initial_state()
+        self.reset()
 
     def _compute_task_observations(self, env_states: TensorState) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Return (policy_obs, privileged_obs). Implemented by subclasses."""
@@ -134,21 +131,16 @@ class LeggedRobotTask(AgentTask):
         soft_dof_pos_limits[:, 1] = _mid + 0.5 * _diff * soft_limit_factor
         self.dof_pos_limits = soft_dof_pos_limits
 
-        default_joint_pos = robot.default_joint_positions
-        #######################################################
-        if hasattr(self.cfg, "default_joint_positions"):
-            import re
-
-            cfg_default_joint_pos = self.cfg.default_joint_positions[robot.name]
-            for joint_name, joint_pos in cfg_default_joint_pos.items():
-                pattern = re.compile(joint_name)
-                for name in sorted_joint_names:
-                    if pattern.fullmatch(name):
-                        default_joint_pos[name] = joint_pos
-        #######################################################
+        default_joint_pos = self.cfg.initial_states.robots[robot.name].get(
+            "default_joint_pos", robot.default_joint_positions
+        )
+        default_joint_pos = pattern_match(default_joint_pos, sorted_joint_names)
         sorted_joint_pos = [default_joint_pos[name] for name in sorted_joint_names]
         self.default_dof_pos = torch.tensor(sorted_joint_pos, device=self.device)  # (n_dof,)
+
         default_joint_vel = getattr(robot, "default_joint_velocities", 0)
+        if isinstance(default_joint_vel, dict):
+            default_joint_vel = pattern_match(default_joint_vel, sorted_joint_names)
         sorted_joint_vel = (
             [default_joint_vel[name] for name in sorted_joint_names]
             if isinstance(default_joint_vel, dict)
@@ -290,15 +282,15 @@ class LeggedRobotTask(AgentTask):
 
         ################# LOGS #################
         for key in self.episode_rewards.keys():
-            self.extras["episode"]["Reward/" + key] = (
+            self.extras["episode"]["Episode_Reward/" + key] = (
                 torch.mean(self.episode_rewards[key][env_ids]) / self.cfg.episode_length_s
             )
             self.episode_rewards[key][env_ids] = 0.0
-        for key in self.episode_terminations.keys():
-            self.extras["episode"]["Termination/" + key] = (
-                torch.mean(self.episode_terminations[key][env_ids]) / self.max_episode_steps
+        for key in self.episode_not_terminations.keys():
+            self.extras["episode"]["Episode_Termination/" + key] = (
+                torch.mean(self.episode_not_terminations[key][env_ids]) / self.max_episode_steps
             )
-            self.episode_terminations[key][env_ids] = 0.0
+            self.episode_not_terminations[key][env_ids] = 0.0
 
     def step(
         self,
@@ -374,7 +366,7 @@ class LeggedRobotTask(AgentTask):
         reset_buf = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
         for _key, _val in self._terminate_callbacks.items():
             _return_val = _val[0](self, env_states, **_val[1])
-            self.episode_terminations[_key] += _return_val
+            self.episode_not_terminations[_key] += torch.logical_not(_return_val)
             reset_buf = torch.logical_or(reset_buf, _return_val)
         return reset_buf
 
@@ -409,43 +401,23 @@ class LeggedRobotTask(AgentTask):
         params[0] = x_value
         return params.tolist()
 
-    def _randomize_initial_state(self, env_ids: list[int]) -> None:
-        """Apply domain randomization to initial robot states."""
-        if not self.cfg.domain_rand.randomize_initial_state or len(env_ids) == 0:
-            return
-        # weak copy/reference to avoid deepcopy
-        random_initial_robot_states = self.initial_env_states.robots[self.name]
-        env_tensor = torch.tensor(env_ids, dtype=torch.long, device=self.device)
-        num_envs = len(env_ids)
-        # root position & orientation
-        random_initial_robot_states.root_state[env_tensor, :2] = torch_rand_float(
-            -0.5, 0.5, (len(env_ids), 2), device=self.device
-        )
-        random_yaw = torch_rand_float(-math.pi, math.pi, (len(env_ids), 1), device=self.device).flatten()
-        random_initial_robot_states.root_state[env_tensor, 3:7] = quat_from_euler_xyz(
-            roll=random_yaw.clone() * 0.0, pitch=random_yaw.clone() * 0.0, yaw=random_yaw
-        )
-        # root linear & angular velocity
-        random_initial_robot_states.root_state[env_tensor, 7:13] = torch_rand_float(
-            0, 0, (len(env_ids), 6), device=self.device
-        )
-        # joint position
-        random_initial_robot_states.joint_pos[env_tensor] = self.default_dof_pos * torch_rand_float(
-            1.0, 1.0, (num_envs, self.num_actions), device=self.device
-        )
-        # joint velocity
-        random_initial_robot_states.joint_vel[env_tensor] = self.default_dof_vel * torch_rand_float(
-            -1.0, 1.0, (num_envs, self.num_actions), device=self.device
-        )
-        return random_initial_robot_states
-
-    def _build_initial_state_specs(self) -> list[dict]:
+    def _get_initial_states(self):
         """Return list of per-env initial states derived from config."""
+        sorted_joint_names = self.handler.get_joint_names(self.robot.name, sort=True)
+
         robot_state = self.cfg.initial_states.robots[self.robot.name]
         pos = robot_state.get("pos", [0.0, 0.0, 0.5])
         rot = robot_state.get("rot", [1.0, 0.0, 0.0, 0.0])
-        joint_pos = robot_state.get("joint_pos", self.robot.default_joint_positions)
-        joint_vel = robot_state.get("joint_vel", {name: 0.0 for name in joint_pos})
+
+        joint_pos = robot_state.get(
+            "joint_pos", robot_state.get("default_joint_pos", self.robot.default_joint_positions)
+        )
+        joint_pos = pattern_match(joint_pos, sorted_joint_names)
+
+        joint_vel = robot_state.get(
+            "joint_vel", robot_state.get("default_joint_vel", getattr(self.robot, "default_joint_velocities", {}))
+        )
+        joint_vel = pattern_match(joint_vel, sorted_joint_names)
 
         template = {
             "objects": {},
@@ -454,7 +426,7 @@ class LeggedRobotTask(AgentTask):
                     "pos": torch.tensor(pos, dtype=torch.float32),
                     "rot": torch.tensor(rot, dtype=torch.float32),
                     "dof_pos": {name: joint_pos[name] for name in joint_pos},
-                    "dof_vel": {name: joint_vel[name] if name in joint_vel else 0.0 for name in joint_pos},
+                    "dof_vel": {name: joint_vel[name] for name in joint_vel},
                 }
             },
         }
