@@ -323,6 +323,11 @@ class LeggedRobotTask(AgentTask):
                 send_action = self.actions * self.action_scale
             env_states = self._physics_step(send_action)
 
+        self._post_physics_step(env_states)
+
+        return self.obs_buf, self.rew_buf, self.reset_buf, self.time_out_buf, self.extras
+
+    def _post_physics_step(self, env_states: TensorState):
         self._episode_steps += 1
         self.common_step_counter += 1
 
@@ -354,8 +359,6 @@ class LeggedRobotTask(AgentTask):
                 history.append(getattr(self, key).clone())
             elif hasattr(env_states.robots[self.name], key):
                 history.append(getattr(env_states.robots[self.name], key).clone())
-
-        return self.obs_buf, self.rew_buf, self.reset_buf, self.time_out_buf, self.extras
 
     def _reward(self, env_states):
         rew_buf = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
