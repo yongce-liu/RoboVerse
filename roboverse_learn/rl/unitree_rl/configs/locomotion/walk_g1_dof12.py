@@ -45,7 +45,19 @@ class WalkG1Dof12EnvCfg(BaseEnvCfg):
         only_positive_rewards=True
     )
 
-    domain_rand = BaseEnvCfg.DomainRand(
+    @configclass
+    class DomainRand:
+        randomize_friction = True
+        friction_range = [0.5, 1.25]
+        randomize_base_mass = False
+        added_mass_range = [-1.0, 1.0]
+        push_robots = True
+        push_interval = int(15 / 0.02)  # [s] average time between pushes
+        max_push_vel_xy = 1.0
+        randomize_initial_state = False
+        add_noise2obs = True
+
+    domain_rand = DomainRand(
         randomize_friction = True,
         friction_range = [0.1, 1.25],
         randomize_base_mass = True,
@@ -55,7 +67,6 @@ class WalkG1Dof12EnvCfg(BaseEnvCfg):
         max_push_vel_xy = 0.5,
         randomize_initial_state = True
     )
-
 
     @configclass
     class Normalization:

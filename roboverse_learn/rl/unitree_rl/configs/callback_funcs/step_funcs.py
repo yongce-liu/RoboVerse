@@ -49,8 +49,6 @@ def push_by_setting_velocity(env: EnvTypes,
                              interval_range_s: tuple|int=5.0,
                              velocity_range: list[list]=[[0]*3, [0]*3]):
     """Randomly set robot's root velocity to simulate a push."""
-    if not env.cfg.domain_rand.push_robots:
-        return
     push_interval = int((interval_range_s[0]+interval_range_s[1]) / env.step_dt)
     # push_interval = torch_rand_float(interval_range_s[0], interval_range_s[1], (1,1), device=env.device) / env.step_dt
     push_env_ids = torch.logical_and(env._episode_steps % push_interval == 0, env._episode_steps > 0).nonzero(as_tuple=False).flatten()

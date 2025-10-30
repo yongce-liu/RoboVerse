@@ -1,31 +1,39 @@
-from typing import Callable, Literal
 import math
 import torch
 
 from metasim.utils import configclass
 
 from roboverse_learn.rl.unitree_rl.configs.cfg_base import BaseEnvCfg, CallbacksCfg
-from roboverse_learn.rl.unitree_rl.configs.algorithm import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, RslRlPpoAlgorithmCfg
+from roboverse_learn.rl.unitree_rl.configs.algorithm import (
+    RslRlOnPolicyRunnerCfg,
+    RslRlPpoActorCriticCfg,
+    RslRlPpoAlgorithmCfg,
+)
 from roboverse_learn.rl.unitree_rl.helper.curriculum_utils import lin_vel_cmd_levels
 from roboverse_learn.rl.unitree_rl.configs.cfg_queries import ContactForces
-from roboverse_learn.rl.unitree_rl.configs.cfg_randomizers import MaterialRandomizer, MassRandomizer
+from roboverse_learn.rl.unitree_rl.configs.cfg_randomizers import (
+    MaterialRandomizer,
+    MassRandomizer,
+)
 
-from roboverse_learn.rl.unitree_rl.configs.callback_funcs import termination_funcs as term_funcs
+from roboverse_learn.rl.unitree_rl.configs.callback_funcs import (
+    termination_funcs as term_funcs,
+)
 from roboverse_learn.rl.unitree_rl.configs.callback_funcs import reset_funcs
 from roboverse_learn.rl.unitree_rl.configs.callback_funcs import step_funcs
+
 
 @configclass
 class WalkG1Dof29EnvCfg(BaseEnvCfg):
     """
     Environment configuration for humanoid walking task.
     """
-    mode: Literal["train", "eval"] = "train"
+
     obs_len_history = 5
     priv_obs_len_history = 5
     episode_length_s = 20.0
 
-    control = BaseEnvCfg.Control(action_scale = 0.25,
-                                 soft_joint_pos_limit_factor=0.9)
+    control = BaseEnvCfg.Control(action_scale=0.25, soft_joint_pos_limit_factor=0.9)
 
     @configclass
     class RewardsScales:
@@ -44,84 +52,87 @@ class WalkG1Dof29EnvCfg(BaseEnvCfg):
         joint_deviation_legs = -1.0
         flat_orientation = -5.0
         base_height = (-10.0, {"target_height": 0.78})
-        feet_gait = (0.5, {"period": 0.8,
-                            "offset": [0.0, 0.5],
-                            "threshold": 0.55})
+        feet_gait = (0.5, {"period": 0.8, "offset": [0.0, 0.5], "threshold": 0.55})
         feet_slide = -0.2
-        feet_clearance = (1.0, {"std": 0.05,
-                                "tanh_mult": 2.0,
-                                "target_height": 0.1,})
+        feet_clearance = (
+            1.0,
+            {
+                "std": 0.05,
+                "tanh_mult": 2.0,
+                "target_height": 0.1,
+            },
+        )
         undesired_contacts = (-1.0, {"threshold": 1})
 
     rewards = BaseEnvCfg.Rewards(
         only_positive_rewards=False,
-        scales = RewardsScales(),
-    )
-
-    domain_rand = BaseEnvCfg.DomainRand(
-        push_robots = True,
-        randomize_initial_state = True
+        scales=RewardsScales(),
     )
 
     commands = BaseEnvCfg.Commands(
-                value=None,
-                resample=step_funcs.resample_commands,
-                heading_command = False,
-                rel_standing_envs=0.02,
-                ranges = BaseEnvCfg.Commands.Ranges(
-                    lin_vel_x=(-0.1, 0.1),
-                    lin_vel_y=(-0.1, 0.1),
-                    ang_vel_yaw=(-0.1, 0.1)
-                ),
-                limit_ranges = BaseEnvCfg.Commands.Ranges(
-                    lin_vel_x=(-0.5, 1.0),
-                    lin_vel_y=(-0.3, 0.3),
-                    ang_vel_yaw=(-0.2, 0.2)
-                ))
+        value=None,
+        resample=step_funcs.resample_commands,
+        heading_command=False,
+        rel_standing_envs=0.02,
+        ranges=BaseEnvCfg.Commands.Ranges(
+            lin_vel_x=(-0.1, 0.1), lin_vel_y=(-0.1, 0.1), ang_vel_yaw=(-0.1, 0.1)
+        ),
+        limit_ranges=BaseEnvCfg.Commands.Ranges(
+            lin_vel_x=(-0.5, 1.0), lin_vel_y=(-0.3, 0.3), ang_vel_yaw=(-0.2, 0.2)
+        ),
+    )
 
     curriculum = BaseEnvCfg.Curriculum(
-        enabled = True,
-        funcs = {"lin_vel_cmd_levels": lin_vel_cmd_levels}
+        enabled=True, funcs={"lin_vel_cmd_levels": lin_vel_cmd_levels}
+    )
+
+    callbacks_query = {"contact_forces": ContactForces(history_length=3)}
+    callbacks_setup = {
+        "material_randomizer": MaterialRandomizer(
+            obj_name="g1_dof29",
+            static_friction_range=(0.3, 1.0),
+            dynamic_friction_range=(0.3, 1.0),
+            restitution_range=(0.0, 0.0),
+            num_buckets=64,
+        ),
+        "mass_randomizer": MassRandomizer(
+            obj_name="g1_dof29",
+            body_names="torso_link",
+            mass_distribution_params=(-1.0, 3.0),
+            operation="add",
+        ),
+    }
+    callbacks_reset = {
+        "random_root_state": (
+            reset_funcs.random_root_state,
+            {
+                "pose_range": [
+                    [-0.5, -0.5, 0.0, 0, 0, -3.14],
+                    [0.5, 0.5, 0.0, 0, 0, 3.14],
+                ],
+                "velocity_range": [[0] * 6, [0] * 6],
+            },
+        ),
+        "reset_joints_by_scale": (
+            reset_funcs.reset_joints_by_scale,
+            {"position_range": (1.0, 1.0), "velocity_range": (-1.0, 1.0)},
+        ),
+    }
+    callbacks_step = {
+        "push_robot": (
+            step_funcs.push_by_setting_velocity,
+            {
+                "interval_range_s": (5.0, 5.0),
+                "velocity_range": [[-0.5, -0.5, 0.0], [0.5, 0.5, 0.0]],
+            },
         )
+    }
+    callbacks_terminate = {
+        # "time_out": term_funcs.time_out,
+        "base_height": (term_funcs.root_height_below_minimum, {"minimum_height": 0.2}),
+        "bad_orientation": (term_funcs.bad_orientation, {"limit_angle": 0.8}),
+    }
 
-    callbacks: CallbacksCfg | dict | None = CallbacksCfg(
-        setup={
-            "material_randomizer": MaterialRandomizer(
-                obj_name="g1_dof29",
-                static_friction_range = (0.3, 1.0),
-                dynamic_friction_range = (0.3, 1.0),
-                restitution_range = (0.0, 0.0),
-                num_buckets = 64),
-            "mass_randomizer": MassRandomizer(
-                obj_name="g1_dof29",
-                body_names="torso_link",
-                mass_distribution_params=(-1.0, 3.0),
-                operation="add"),
-        },
-        reset={
-            "random_root_state": (reset_funcs.random_root_state,
-                                  {"pose_range": [[-0.5, -0.5, 0., 0, 0, -3.14], [0.5, 0.5, 0.0, 0, 0, 3.14]],
-                                   "velocity_range": [[0]*6, [0]*6]}),
-            "reset_joints_by_scale": (reset_funcs.reset_joints_by_scale,
-                                      {"position_range": (1.0, 1.0),
-                                       "velocity_range": (-1.0, 1.0)}),
-        },
-        step={
-            "push_robot": (step_funcs.push_by_setting_velocity,
-                           {"interval_range_s": (5.0, 5.0),
-                            "velocity_range": [[-0.5, -0.5, 0.0], [0.5, 0.5, 0.0]]}
-                           )
-        },
-        terminate={
-            # "time_out": term_funcs.time_out,
-            "base_height": (term_funcs.root_height_below_minimum, {"minimum_height": 0.2}),
-            "bad_orientation": (term_funcs.bad_orientation, {"limit_angle": 0.8}),
-        },
-        query={"contact_forces": ContactForces(history_length=3)})
-
-    # def __post_init__(self):
-    #     if self.mode == "eval":
-    #         self.callbacks = {}
 
 @configclass
 class WalkG1Dof29EnvRslRlTrainCfg(RslRlOnPolicyRunnerCfg):

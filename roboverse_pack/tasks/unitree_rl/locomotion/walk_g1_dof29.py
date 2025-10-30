@@ -144,8 +144,7 @@ class WalkG1Dof29Task(HumanoidTask):
             dim=-1,
         )
 
-        if self.cfg.domain_rand.add_noise2obs:
-            obs_buf += (2 * torch.rand_like(obs_buf) - 1) * self.obs_noise
+        obs_buf += (2 * torch.rand_like(obs_buf) - 1) * self.obs_noise
 
         # clip observations -> scale observations
         obs_buf = obs_buf.clip(-self.obs_clip_limit, self.obs_clip_limit) * self.obs_scale
