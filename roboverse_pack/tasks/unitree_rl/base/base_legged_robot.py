@@ -231,6 +231,12 @@ class LeggedRobotTask(AgentTask):
         self.history_buffer["actions"] = deque([self.actions.clone() * 0.0], maxlen=2)
         self.history_buffer["joint_vel"] = deque([self.actions.clone() * 0.0], maxlen=2)
 
+        # for logs
+        self.episode_not_terminations = {
+            _key: torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
+            for _key in self._terminate_callbacks.keys()
+        }
+
     def _compute_effort(self, actions: torch.Tensor, env_states: TensorState) -> torch.Tensor:
         """Compute effort from actions using PD control."""
         # Scale the actions (generally output from policy)
@@ -273,8 +279,8 @@ class LeggedRobotTask(AgentTask):
                 _return_val = _func(self, env_ids)
                 self.extras["episode"]["Curriculum/" + _name] = _return_val
 
-        for _key, _val in self._reset_callbacks.items():
-            _return_val = _val[0](self, env_ids, **_val[1])
+        for _reset_fn, _params in self._reset_callbacks.values():
+            _ = _reset_fn(self, env_ids, **_params)
 
         self.set_states(states=self.setup_initial_env_states, env_ids=env_ids)
 
@@ -330,9 +336,8 @@ class LeggedRobotTask(AgentTask):
         self.reset(env_ids=reset_env_idx)
 
         self.commands_manager.resample(self)
-        # for _, _val in self._step_callbacks.items():
-        #     _step_func, _step_params = _val
-        #     _step_func(self, env_states, **_step_params)
+        for _step_fn, _params in self._step_callbacks.values():
+            _step_fn(self, env_states, **_params)
 
         ####### Compute observations after resets ########
         obs_single, priv_single = self._compute_task_observations(env_states)
@@ -367,10 +372,11 @@ class LeggedRobotTask(AgentTask):
 
     def _terminated(self, env_states: TensorState | None) -> torch.BoolTensor:
         reset_buf = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
-        for _key, _val in self._terminate_callbacks.items():
-            _return_val = _val[0](self, env_states, **_val[1])
-            self.episode_not_terminations[_key] += torch.logical_not(_return_val)
-            reset_buf = torch.logical_or(reset_buf, _return_val)
+        for _key in self._terminate_callbacks.keys():
+            _terminate_fn, _params = self._terminate_callbacks[_key]
+            _terminate_flag = _terminate_fn(self, env_states, **_params)
+            self.episode_not_terminations[_key] += torch.logical_not(_terminate_flag)
+            reset_buf = torch.logical_or(reset_buf, _terminate_flag)
         return reset_buf
 
     def _time_out(self, env_states: TensorState | None) -> torch.BoolTensor:

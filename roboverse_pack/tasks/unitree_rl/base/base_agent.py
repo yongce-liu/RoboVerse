@@ -43,9 +43,10 @@ class AgentTask(RLTaskEnv):
         self._bind_callbacks(callbacks=_callbacks_cfg)
 
     def _bind_callbacks(self, callbacks: dict | None = None):
-        for _callback_key, _callbacks in callbacks.items():
+        for _callbacks in callbacks.values():
             for _key, _val in _callbacks.items():
                 if not isinstance(_val, tuple):
+                    assert callable(_val) or isinstance(_val, object)
                     _callbacks[_key] = (_val, {})
                 if hasattr(_callbacks[_key][0], "bind_handler"):
                     _callbacks[_key][0].bind_handler(self.handler)
@@ -54,13 +55,11 @@ class AgentTask(RLTaskEnv):
         for _key, _val in _setup_callbacks.items():
             _val[0](**_val[1])  ## call itself
         self._reset_callbacks = callbacks.pop("reset", {})
+        assert isinstance(self._reset_callbacks, dict)
         self._step_callbacks = callbacks.pop("step", {})
+        assert isinstance(self._step_callbacks, dict)
         self._terminate_callbacks = callbacks.pop("terminate", {})
-        self.episode_not_terminations = {}
-        for _key in self._terminate_callbacks.keys():
-            self.episode_not_terminations[_key] = torch.zeros(
-                size=(self.num_envs,), dtype=torch.float, device=self.device
-            )
+        assert isinstance(self._terminate_callbacks, dict)
 
     # ------------------------------------------------------------------ #
     # RLTaskEnv hooks
