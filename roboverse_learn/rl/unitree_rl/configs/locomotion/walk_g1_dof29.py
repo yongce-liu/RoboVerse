@@ -100,8 +100,8 @@ class WalkG1Dof29EnvCfg(BaseEnvCfg):
         },
         reset={
             "random_root_state": (reset_funcs.random_root_state,
-                                  {"pose_range": torch.tensor([[-0.5, -0.5, 0., 0, 0, -3.14], [0.5, 0.5, 0.0, 0, 0, 3.14]]),
-                                   "velocity_range": torch.zeros(size=(2, 6))}),
+                                  {"pose_range": [[-0.5, -0.5, 0., 0, 0, -3.14], [0.5, 0.5, 0.0, 0, 0, 3.14]],
+                                   "velocity_range": [[0]*6, [0]*6]}),
             "reset_joints_by_scale": (reset_funcs.reset_joints_by_scale,
                                       {"position_range": (1.0, 1.0),
                                        "velocity_range": (-1.0, 1.0)}),
@@ -109,7 +109,7 @@ class WalkG1Dof29EnvCfg(BaseEnvCfg):
         step={
             "push_robot": (step_funcs.push_by_setting_velocity,
                            {"interval_range_s": (5.0, 5.0),
-                            "velocity_range": torch.tensor([[-0.5, -0.5, 0.0], [0.5, 0.5, 0.0]])}
+                            "velocity_range": [[-0.5, -0.5, 0.0], [0.5, 0.5, 0.0]]}
                            )
         },
         terminate={

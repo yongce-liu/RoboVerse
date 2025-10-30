@@ -272,6 +272,7 @@ class LeggedRobotTask(AgentTask):
         self.commands_manager.resample(self, env_states)
         for _key, _val in self._reset_callbacks.items():
             _return_val = _val[0](self, env_ids, **_val[1])
+        self.handler.set_states(states=self.initial_env_states, env_ids=env_ids)
 
         for history in self.history_buffer.values():
             for item in history:

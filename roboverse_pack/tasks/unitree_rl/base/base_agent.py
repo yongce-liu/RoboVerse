@@ -36,7 +36,8 @@ class AgentTask(RLTaskEnv):
         self.reset_buf: torch.Tensor | None = None
         # self.time_out_buf: torch.Tensor | None = None
         self.extras: dict[str, Any] = {}
-        self.initial_env_states = deepcopy(self._initial_states)
+        self._initial_env_states = deepcopy(self._initial_states)
+        self.setup_initial_env_states = deepcopy(self._initial_states)
 
         # Callbacks
         self._bind_callbacks(callbacks=_callbacks_cfg)
@@ -121,3 +122,8 @@ class AgentTask(RLTaskEnv):
         if self.priv_obs_buf_queue is None or len(self.priv_obs_buf_queue) == 0:
             raise RuntimeError("Privileged observation buffer not initialized.")
         return torch.cat(list(self.priv_obs_buf_queue), dim=1)
+
+    @property
+    def initial_env_states(self) -> TensorState:
+        """Initial environment states used for resets."""
+        return self._initial_env_states

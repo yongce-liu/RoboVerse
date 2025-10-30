@@ -58,7 +58,8 @@ def push_by_setting_velocity(env: EnvTypes,
     env_ids = torch.arange(env.num_envs, device=env.device)
     # push_interval = torch_rand_float(interval_range_s[0], interval_range_s[1], (1,1), device=env.device) / env.step_dt
     push_interval = int((interval_range_s[0]+interval_range_s[1]) / env.step_dt)
-    velocity_range = torch.tensor(velocity_range, device=env.device)
+    # velocity_range = velocity_range.detach().clone().requires_grad_(False).to(env.device)
+    velocity_range = torch.tensor(velocity_range, device=env.device, requires_grad=False)
 
     push_env_ids = env_ids[env._episode_steps[env_ids] % push_interval == 0]
     if len(push_env_ids) == 0:
