@@ -258,7 +258,7 @@ class LeggedRobotTask(AgentTask):
         effort = torch.clip(effort, -self.torque_limits, self.torque_limits)
         return effort.to(torch.float32)
 
-    def reset(self, env_ids: list[int] | None = None, env_states: TensorState | None = None):
+    def reset(self, env_ids: list[int] | None = None):
         """Reset selected envs (defaults to all)."""
         if env_ids is None:
             env_ids = torch.tensor(list(range(self.num_envs)), device=self.device)

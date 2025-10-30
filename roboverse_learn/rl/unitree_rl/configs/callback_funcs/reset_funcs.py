@@ -10,10 +10,7 @@ from roboverse_pack.tasks.unitree_rl.base.types import EnvTypes
 
 
 def random_root_state(env: EnvTypes, env_ids: torch.Tensor | list, pose_range: list[list]=[[0]*6, [0]*6], velocity_range: list[list]=[[0]*6, [0]*6]) -> torch.Tensor:
-    if len(env_ids) == 0:
-        return
-    if not env.cfg.domain_rand.randomize_initial_state:
-        env.handler.set_states(states=env.initial_env_states, env_ids=env_ids)
+    if len(env_ids) == 0 or not env.cfg.domain_rand.randomize_initial_state:
         return
 
     pose_range = torch.tensor(pose_range, device=env.device)
@@ -42,10 +39,7 @@ def random_root_state(env: EnvTypes, env_ids: torch.Tensor | list, pose_range: l
 
 
 def reset_joints_by_scale(env: EnvTypes, env_ids: torch.Tensor | list, position_range: list|tuple=(1.0, 1.0), velocity_range: list|tuple=(1.0, 1.0)) -> torch.Tensor:
-    if len(env_ids) == 0:
-        return
-    if not env.cfg.domain_rand.randomize_initial_state:
-        env.handler.set_states(states=env.initial_env_states, env_ids=env_ids)
+    if len(env_ids) == 0 or not env.cfg.domain_rand.randomize_initial_state:
         return
 
     # weak copy
