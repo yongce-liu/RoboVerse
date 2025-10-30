@@ -20,8 +20,7 @@ def resample_commands(env: EnvTypes, env_states: TensorState = None):
         cfg.value = torch.zeros(
             size=(env.num_envs, cfg.num_commands),
             dtype=torch.float,
-            device=env.device,
-            requires_grad=False,
+            device=env.device
         )
     env_ids = (env._episode_steps % int(cfg.resampling_time / env.step_dt) == 0).nonzero(as_tuple=False).flatten()
     if len(env_ids) == 0:
@@ -51,15 +50,14 @@ def resample_commands(env: EnvTypes, env_states: TensorState = None):
 def push_by_setting_velocity(env: EnvTypes,
                              env_states: TensorState,
                              interval_range_s: tuple|int=5.0,
-                             velocity_range=torch.zeros(2, 3)):
+                             velocity_range: list[list]=[[0]*3, [0]*3]):
     """Randomly set robot's root velocity to simulate a push."""
     if not env.cfg.domain_rand.push_robots:
         return
     env_ids = torch.arange(env.num_envs, device=env.device)
     # push_interval = torch_rand_float(interval_range_s[0], interval_range_s[1], (1,1), device=env.device) / env.step_dt
     push_interval = int((interval_range_s[0]+interval_range_s[1]) / env.step_dt)
-    # velocity_range = velocity_range.detach().clone().requires_grad_(False).to(env.device)
-    velocity_range = torch.tensor(velocity_range, device=env.device, requires_grad=False)
+    velocity_range = torch.tensor(velocity_range, device=env.device)
 
     push_env_ids = env_ids[env._episode_steps[env_ids] % push_interval == 0]
     if len(push_env_ids) == 0:

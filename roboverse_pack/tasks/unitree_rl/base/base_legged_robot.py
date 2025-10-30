@@ -3,7 +3,6 @@ from __future__ import annotations
 import math
 from collections import deque
 from copy import deepcopy
-from typing import Callable
 
 import torch
 
@@ -11,7 +10,12 @@ from metasim.scenario.scenario import ScenarioCfg
 from metasim.utils.dict import class_to_dict
 from metasim.utils.state import TensorState
 from roboverse_learn.rl.unitree_rl.configs.cfg_base import BaseEnvCfg
-from roboverse_learn.rl.unitree_rl.helper import get_indices_from_substring, pattern_match
+from roboverse_learn.rl.unitree_rl.helper import (
+    get_axis_params,
+    get_indices_from_substring,
+    get_reward_fn,
+    pattern_match,
+)
 from roboverse_pack.robots import G1Dof12Cfg, Go2Cfg
 
 from .base_agent import AgentTask
@@ -177,7 +181,7 @@ class LeggedRobotTask(AgentTask):
         for name, scale in self.reward_scales.items():
             if name == "termination":
                 continue
-            self.reward_functions[name] = self.get_reward_fn(name, self.cfg.rewards.functions)
+            self.reward_functions[name] = get_reward_fn(name, self.cfg.rewards.functions)
 
         # reward episode sums
         self.episode_rewards = {
@@ -186,16 +190,14 @@ class LeggedRobotTask(AgentTask):
         }
 
     def _init_buffers(self):
-        self.actions = torch.zeros(
-            size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device, requires_grad=False
-        )
+        self.actions = torch.zeros(size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device)
         self.rew_buf = torch.zeros(size=(self.num_envs,), dtype=torch.float, device=self.device)
         self.reset_buf = torch.zeros(size=(self.num_envs,), dtype=torch.bool, device=self.device)
         self.time_out_buf = torch.zeros(size=(self.num_envs,), dtype=torch.bool, device=self.device)
 
         self.up_axis_idx = 2
         self.gravity_vec = torch.tensor(
-            self.get_axis_params(-1.0, self.up_axis_idx), dtype=torch.float, device=self.device
+            get_axis_params(-1.0, self.up_axis_idx), dtype=torch.float, device=self.device
         ).repeat((self.num_envs, 1))
         self.forward_vec = torch.tensor([1.0, 0.0, 0.0], dtype=torch.float, device=self.device).repeat((
             self.num_envs,
@@ -269,7 +271,6 @@ class LeggedRobotTask(AgentTask):
                 _return_val = _func(self, env_ids)
                 self.extras["episode"]["Curriculum/" + _name] = _return_val
 
-        self.commands_manager.resample(self, env_states)
         for _key, _val in self._reset_callbacks.items():
             _return_val = _val[0](self, env_ids, **_val[1])
         self.handler.set_states(states=self.initial_env_states, env_ids=env_ids)
@@ -377,30 +378,6 @@ class LeggedRobotTask(AgentTask):
         Note that max_episode_steps is set to -1 by default (no timeout).
         """
         return self._episode_steps > self.max_episode_steps
-
-    @staticmethod
-    def get_reward_fn(target: str, reward_functions: list[Callable] | str) -> Callable:
-        """Resolve a reward function by name from a list or module path."""
-        if isinstance(reward_functions, (list, tuple)):
-            fn = next((f for f in reward_functions if f.__name__ == target), None)
-        elif isinstance(reward_functions, str):
-            reward_module = __import__(reward_functions, fromlist=[target])
-            fn = getattr(reward_module, target, None)
-        else:
-            raise ValueError("reward_functions should be a list of functions or a string module path")
-        if fn is None:
-            raise KeyError(f"No reward function named '{target}'")
-        return fn
-
-    @staticmethod
-    def get_axis_params(value, axis_idx, x_value=0.0, n_dims=3):
-        """Construct arguments to `Vec` according to axis index."""
-        zs = torch.zeros((n_dims,))
-        assert axis_idx < n_dims, "the axis dim should be within the vector dimensions"
-        zs[axis_idx] = 1.0
-        params = torch.where(zs == 1.0, value, zs)
-        params[0] = x_value
-        return params.tolist()
 
     def _get_initial_states(self):
         """Return list of per-env initial states derived from config."""

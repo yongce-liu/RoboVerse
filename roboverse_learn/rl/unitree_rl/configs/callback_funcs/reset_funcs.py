@@ -16,10 +16,8 @@ def random_root_state(env: EnvTypes, env_ids: torch.Tensor | list, pose_range: l
         env.handler.set_states(states=env.initial_env_states, env_ids=env_ids)
         return
 
-    # pose_range = pose_range.detach().clone().requires_grad_(False).to(env.device)
-    # velocity_range = velocity_range.detach().clone().requires_grad_(False).to(env.device)
-    pose_range = torch.tensor(pose_range, device=env.device, requires_grad=False)
-    velocity_range = torch.tensor(velocity_range, device=env.device, requires_grad=False)
+    pose_range = torch.tensor(pose_range, device=env.device)
+    velocity_range = torch.tensor(velocity_range, device=env.device)
 
     # weak copy
     random_initial_robot_states = env.setup_initial_env_states.robots[env.name]

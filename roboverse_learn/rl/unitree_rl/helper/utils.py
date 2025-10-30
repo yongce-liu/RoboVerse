@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Callable
 import re
 import os
 import copy
@@ -242,3 +243,25 @@ def pattern_match(sub_names: dict[str, any], all_names: list[str]) -> dict[str, 
             if pattern.fullmatch(name):
                 matched_names[name] = sub_val
     return matched_names
+
+def get_reward_fn(target: str, reward_functions: list[Callable] | str) -> Callable:
+    """Resolve a reward function by name from a list or module path."""
+    if isinstance(reward_functions, (list, tuple)):
+        fn = next((f for f in reward_functions if f.__name__ == target), None)
+    elif isinstance(reward_functions, str):
+        reward_module = __import__(reward_functions, fromlist=[target])
+        fn = getattr(reward_module, target, None)
+    else:
+        raise ValueError("reward_functions should be a list of functions or a string module path")
+    if fn is None:
+        raise KeyError(f"No reward function named '{target}'")
+    return fn
+
+def get_axis_params(value, axis_idx, x_value=0.0, n_dims=3):
+    """Construct arguments to `Vec` according to axis index."""
+    zs = torch.zeros((n_dims,))
+    assert axis_idx < n_dims, "the axis dim should be within the vector dimensions"
+    zs[axis_idx] = 1.0
+    params = torch.where(zs == 1.0, value, zs)
+    params[0] = x_value
+    return params.tolist()
