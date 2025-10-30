@@ -68,7 +68,7 @@ class BaseEnvCfg:
         ranges = Ranges()
         limit_ranges = Ranges()
         resample: Callable = MISSING
-        value: any = None
+        value: any = MISSING
     commands = Commands()
 
     @configclass

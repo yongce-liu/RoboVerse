@@ -114,8 +114,8 @@ class LeggedRobotTask(AgentTask):
             p_gains.append(actuator_cfg.stiffness if actuator_cfg.stiffness is not None else 0.0)
             d_gains.append(actuator_cfg.damping if actuator_cfg.damping is not None else 0.0)
 
-        self.p_gains = torch.tensor(p_gains, device=self.device).unsqueeze(0).repeat(self.num_envs, 1)
-        self.d_gains = torch.tensor(d_gains, device=self.device).unsqueeze(0).repeat(self.num_envs, 1)
+        self.p_gains = torch.tensor(p_gains, device=self.device)
+        self.d_gains = torch.tensor(d_gains, device=self.device)
 
         # Check if manual PD control is needed (if any joints use effort control)
         control_types = robot.control_type
@@ -204,12 +204,6 @@ class LeggedRobotTask(AgentTask):
             1,
         ))
 
-        # self.commands = torch.zeros(
-        #     size=(self.num_envs, self.cfg.commands.num_commands),
-        #     dtype=torch.float,
-        #     device=self.device,
-        #     requires_grad=False,
-        # )
         self.commands_manager.resample(self)
 
         # for observation history
@@ -247,8 +241,6 @@ class LeggedRobotTask(AgentTask):
         elif not isinstance(target_pos, torch.Tensor):
             target_pos = torch.tensor(target_pos, dtype=torch.float32, device=self.device)
         target_pos = target_pos.to(self.device)
-        if target_pos.dim() == 1:
-            target_pos = target_pos.unsqueeze(0).repeat(self.num_envs, 1)
         if self.action_offset:
             effort = self.p_gains * (action_scaled + target_pos - sorted_dof_pos) - self.d_gains * sorted_dof_vel
         else:
@@ -387,6 +379,7 @@ class LeggedRobotTask(AgentTask):
         pos = robot_state.get("pos", [0.0, 0.0, 0.5])
         rot = robot_state.get("rot", [1.0, 0.0, 0.0, 0.0])
 
+        # joint_pos = self.robot.default_joint_positions
         joint_pos = robot_state.get(
             "joint_pos", robot_state.get("default_joint_pos", self.robot.default_joint_positions)
         )

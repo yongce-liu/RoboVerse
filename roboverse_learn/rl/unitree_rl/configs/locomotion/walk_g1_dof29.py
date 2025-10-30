@@ -1,4 +1,4 @@
-from typing import Callable
+from typing import Callable, Literal
 import math
 import torch
 
@@ -19,6 +19,7 @@ class WalkG1Dof29EnvCfg(BaseEnvCfg):
     """
     Environment configuration for humanoid walking task.
     """
+    mode: Literal["train", "eval"] = "train"
     obs_len_history = 5
     priv_obs_len_history = 5
     episode_length_s = 20.0
@@ -65,6 +66,7 @@ class WalkG1Dof29EnvCfg(BaseEnvCfg):
     )
 
     commands = BaseEnvCfg.Commands(
+                value=None,
                 resample=step_funcs.resample_commands,
                 heading_command = False,
                 rel_standing_envs=0.02,
@@ -118,6 +120,10 @@ class WalkG1Dof29EnvCfg(BaseEnvCfg):
             "bad_orientation": (term_funcs.bad_orientation, {"limit_angle": 0.8}),
         },
         query={"contact_forces": ContactForces(history_length=3)})
+
+    # def __post_init__(self):
+    #     if self.mode == "eval":
+    #         self.callbacks = {}
 
 @configclass
 class WalkG1Dof29EnvRslRlTrainCfg(RslRlOnPolicyRunnerCfg):
