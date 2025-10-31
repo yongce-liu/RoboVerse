@@ -2,7 +2,21 @@ import math
 from metasim.utils import configclass
 from metasim.utils.configclass import class_to_dict
 from roboverse_learn.rl.unitree_rl.configs.cfg_base import BaseEnvCfg
-from roboverse_learn.rl.unitree_rl.configs.algorithm import RslRlOnPolicyRunnerCfg, RslRlPpoAlgorithmCfg, RslRlPpoActorCriticRecurrentCfg
+from roboverse_learn.rl.unitree_rl.configs.algorithm import (
+    RslRlOnPolicyRunnerCfg,
+    RslRlPpoAlgorithmCfg,
+    RslRlPpoActorCriticRecurrentCfg,
+)
+from roboverse_learn.rl.unitree_rl.configs.cfg_queries import ContactForces
+from roboverse_learn.rl.unitree_rl.configs.cfg_randomizers import (
+    MaterialRandomizer,
+    MassRandomizer,
+)
+from roboverse_learn.rl.unitree_rl.configs.callback_funcs import (
+    termination_funcs,
+    reset_funcs,
+    step_funcs,
+)
 
 
 @configclass
@@ -11,8 +25,9 @@ class WalkG1Dof12EnvCfg(BaseEnvCfg):
     obs_len_history = 1
     priv_obs_len_history = 1
 
-    control = BaseEnvCfg.Control(action_scale = 0.25,
-                                 soft_joint_pos_limit_factor=0.98)
+    control = BaseEnvCfg.Control(
+        action_scale=0.25, action_clip=100, soft_joint_pos_limit_factor=0.9
+    )
 
     @configclass
     class RewardsScales:
@@ -30,74 +45,94 @@ class WalkG1Dof12EnvCfg(BaseEnvCfg):
         joint_deviation_legs = -1.0
         feet_slide = -0.2
         # feet_swing_height = -20.0
-        feet_clearance = (1.0, {"std": 0.05,
-                                "tanh_mult": 2.0,
-                                "target_height": 0.1,})
+        feet_clearance = (
+            1.0,
+            {
+                "std": 0.05,
+                "tanh_mult": 2.0,
+                "target_height": 0.1,
+            },
+        )
         # contact = 0.18
-        feet_gait = (0.18, {"period": 0.8,
-                        "offset": [0.0, 0.5],
-                        "threshold": 0.55})
+        feet_gait = (0.18, {"period": 0.8, "offset": [0.0, 0.5], "threshold": 0.55})
         energy = -0.00001
         ########################
 
-    rewards = BaseEnvCfg.Rewards(
-        scales = RewardsScales(),
-        only_positive_rewards=True
+    commands = BaseEnvCfg.Commands(
+        value=None,
+        resample=step_funcs.resample_commands,
+        heading_command=False,
+        rel_standing_envs=0.02,
+        ranges=BaseEnvCfg.Commands.Ranges(
+            lin_vel_x=(-0.1, 0.1), lin_vel_y=(-0.1, 0.1), ang_vel_yaw=(-0.1, 0.1)
+        ),
+        limit_ranges=BaseEnvCfg.Commands.Ranges(
+            lin_vel_x=(-0.5, 1.0), lin_vel_y=(-0.3, 0.3), ang_vel_yaw=(-0.2, 0.2)
+        ),
     )
 
-    @configclass
-    class DomainRand:
-        randomize_friction = True
-        friction_range = [0.5, 1.25]
-        randomize_base_mass = False
-        added_mass_range = [-1.0, 1.0]
-        push_robots = True
-        push_interval = int(15 / 0.02)  # [s] average time between pushes
-        max_push_vel_xy = 1.0
-        randomize_initial_state = False
-        add_noise2obs = True
+    rewards = BaseEnvCfg.Rewards(scales=RewardsScales(), only_positive_rewards=True)
 
-    domain_rand = DomainRand(
-        randomize_friction = True,
-        friction_range = [0.1, 1.25],
-        randomize_base_mass = True,
-        added_mass_range = [-1., 3.],
-        push_robots = True,
-        push_interval = int(5/0.02),
-        max_push_vel_xy = 0.5,
-        randomize_initial_state = True
-    )
+    callbacks_query = {"contact_forces": ContactForces(history_length=3)}
+    callbacks_setup = {
+        # "material_randomizer": MaterialRandomizer(
+        #     obj_name="g1_dof12",
+        #     static_friction_range=(0.1, 1.25),
+        #     dynamic_friction_range=(0.1, 1.25),
+        #     restitution_range=(0.0, 0.0),
+        #     num_buckets=64,
+        # ),
+        # "mass_randomizer": MassRandomizer(
+        #     obj_name="g1_dof12",
+        #     body_names="pelvis",
+        #     mass_distribution_params=(-1.0, 3.0),
+        #     operation="add",
+        # ),
+    }
+    callbacks_reset = {
+        "random_root_state": (
+            reset_funcs.random_root_state,
+            {
+                "pose_range": [
+                    [-0.5, -0.5, 0.0, 0, 0, -3.14],
+                    [0.5, 0.5, 0.0, 0, 0, 3.14],
+                ],
+                "velocity_range": [[0] * 6, [0] * 6],
+            },
+        ),
+        "reset_joints_by_scale": (
+            reset_funcs.reset_joints_by_scale,
+            {"position_range": (1.0, 1.0), "velocity_range": (-1.0, 1.0)},
+        ),
+    }
+    callbacks_step = {
+        "push_robot": (
+            step_funcs.push_by_setting_velocity,
+            {
+                "interval_range_s": (5.0, 5.0),
+                "velocity_range": [[-0.5, -0.5, 0.0], [0.5, 0.5, 0.0]],
+            },
+        )
+    }
+    callbacks_terminate = {
+        "time_out": termination_funcs.time_out,
+        "undesired_contact": (
+            termination_funcs.undesired_contact,
+            {
+                "contact_names": [
+                    "pelvis",
+                    "torso",
+                    "waist",
+                    "shoulder",
+                    "elbow",
+                    "wrist",
+                ],
+                "limit_range": 1.0,
+            },
+        ),
+        "bad_orientation": (termination_funcs.bad_orientation, {"limit_angle": 0.8}),
+    }
 
-    @configclass
-    class Normalization:
-        @configclass
-        class ObsScales:
-            lin_vel = 2.0
-            ang_vel = 0.25
-            dof_pos = 1.0
-            dof_vel = 0.05
-            height_measurements = 5.0
-            quat = 1.0
-
-        clip_observations = 100.
-        clip_actions = 100.
-        obs_scales = ObsScales()
-    normalization = Normalization()
-
-    @configclass
-    class Noise:
-        class Scales:
-            dof_pos = 0.01
-            dof_vel = 1.5
-            lin_vel = 0.1
-            ang_vel = 0.2
-            gravity = 0.05
-            # height_measurements = 0.1
-
-        add_noise = True
-        noise_level = 1.0 # scales other values
-        scales = Scales()
-    noise = Noise()
 
 @configclass
 class WalkG1Dof12RslRlTrainCfg(RslRlOnPolicyRunnerCfg):
@@ -107,25 +142,25 @@ class WalkG1Dof12RslRlTrainCfg(RslRlOnPolicyRunnerCfg):
     experiment_name = ""  # same as task name
     empirical_normalization = False
     policy = RslRlPpoActorCriticRecurrentCfg(
-        init_noise_std = 0.8,
-        actor_hidden_dims = [32],
-        critic_hidden_dims = [32],
-        activation = 'elu',
-        rnn_type = 'lstm',
-        rnn_hidden_dim = 64,
-        rnn_num_layers = 1,
+        init_noise_std=0.8,
+        actor_hidden_dims=[32],
+        critic_hidden_dims=[32],
+        activation="elu",
+        rnn_type="lstm",
+        rnn_hidden_dim=64,
+        rnn_num_layers=1,
     )
     algorithm = RslRlPpoAlgorithmCfg(
-        value_loss_coef = 1.0,
-        use_clipped_value_loss = True,
-        clip_param = 0.2,
-        entropy_coef = 0.01,
-        num_learning_epochs = 5,
-        num_mini_batches = 4, # mini batch size = num_envs*nsteps / nminibatches
-        learning_rate = 1.e-3, #5.e-4
-        schedule = 'adaptive', # could be adaptive, fixed
-        gamma = 0.99,
-        lam = 0.95,
-        desired_kl = 0.01,
-        max_grad_norm = 1.
+        value_loss_coef=1.0,
+        use_clipped_value_loss=True,
+        clip_param=0.2,
+        entropy_coef=0.01,
+        num_learning_epochs=5,
+        num_mini_batches=4,  # mini batch size = num_envs*nsteps / nminibatches
+        learning_rate=1.0e-3,  # 5.e-4
+        schedule="adaptive",  # could be adaptive, fixed
+        gamma=0.99,
+        lam=0.95,
+        desired_kl=0.01,
+        max_grad_norm=1.0,
     )

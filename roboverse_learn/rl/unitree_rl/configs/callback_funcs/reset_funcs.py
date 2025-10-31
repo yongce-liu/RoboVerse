@@ -1,5 +1,6 @@
+from __future__ import annotations
+
 import torch
-from copy import deepcopy
 
 from metasim.types import TensorState
 from metasim.utils.math import quat_from_euler_xyz, sample_uniform, quat_mul

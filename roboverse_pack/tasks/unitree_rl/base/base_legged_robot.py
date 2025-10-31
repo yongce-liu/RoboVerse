@@ -71,9 +71,6 @@ class LeggedRobotTask(AgentTask):
         sorted_body_names: list[str] = self.sorted_body_names
 
         self.feet_indices = get_indices_from_substring(robot.feet_links, sorted_body_names).to(self.device)
-        self.termination_contact_indices = get_indices_from_substring(
-            robot.terminate_contacts_links, sorted_body_names
-        ).to(self.device)
         self.penalised_contact_indices = get_indices_from_substring(
             robot.penalized_contacts_links, sorted_body_names
         ).to(self.device)

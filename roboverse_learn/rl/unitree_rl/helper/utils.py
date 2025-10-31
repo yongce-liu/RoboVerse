@@ -70,7 +70,7 @@ def get_args(test=False):
     """Get the command line arguments."""
     custom_parameters = [
         {"name": "--task", "type": str, "default": "walk_g1_dof29", "help": "Task name for training/testing."},
-        {"name": "--robots", "type": str, "default": "g1_dof29", "help": "The used robots."},
+        {"name": "--robots", "type": str, "default": "", "help": "The used robots."},
         {"name": "--objects", "type": str, "default": None, "help": "The used objects."},
         {"name": "--num_envs", "type": int, "default": 128, "help": "number of parallel environments."},
         {"name": "--iter", "type": int, "default": 15000, "help": "Max number of training iterations."},

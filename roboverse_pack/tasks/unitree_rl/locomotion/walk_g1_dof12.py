@@ -10,7 +10,10 @@ from metasim.scenario.simulator_params import SimParamCfg
 from metasim.task.registry import register_task
 from metasim.types import TensorState
 from metasim.utils.math import quat_rotate_inverse
-from roboverse_learn.rl.unitree_rl.configs.locomotion.walk_g1_dof12 import WalkG1Dof12EnvCfg, WalkG1Dof12RslRlTrainCfg
+from roboverse_learn.rl.unitree_rl.configs.locomotion.walk_g1_dof12 import (
+    WalkG1Dof12EnvCfg,
+    WalkG1Dof12RslRlTrainCfg,
+)
 from roboverse_pack.tasks.unitree_rl.base.base_humanoid import HumanoidTask
 
 
@@ -76,10 +79,10 @@ class WalkG1Dof12Task(HumanoidTask):
         super().__init__(scenario=scenario_copy, config=env_cfg, device=device)
 
     def _init_buffers(self):
-        # commands + base_ang_vel + projected_gravity + dof pos/vel/prev actions
-        self.num_obs_single = 3 + 3 + 3 + self.num_actions * 3
-        # commands + base_lin_vel + base_ang_vel + projected_gravity + dof pos/vel/prev actions
-        self.num_priv_obs_single = 3 + 3 + 3 + 3 + self.num_actions * 3
+        # commands + base_ang_vel + projected_gravity + dof pos/vel/prev actions + gait phase
+        self.num_obs_single = 3 + 3 + 3 + self.num_actions * 3 + 2
+        # commands + base_lin_vel + base_ang_vel + projected_gravity + dof pos/vel/prev actions + gait phase
+        self.num_priv_obs_single = 3 + 3 + 3 + 3 + self.num_actions * 3 + 2
         # Rewrite SOME Hyfer-Parameters
         self.obs_clip_limit = 100.0
         self.obs_scale = torch.ones(size=(self.num_obs_single,), dtype=torch.float, device=self.device)
@@ -87,12 +90,12 @@ class WalkG1Dof12Task(HumanoidTask):
         self.obs_noise = torch.zeros(size=(self.num_obs_single,), dtype=torch.float, device=self.device)
 
         ##################### for observation scale #####################
-        self.obs_scale[3:6] = 0.2  # angular velocity
+        self.obs_scale[3:6] = 0.25  # angular velocity
         self.obs_scale[9 + self.num_actions : 9 + 2 * self.num_actions] = 0.05  # joint velocity
 
         ##################### for priviliged observation scale #####################
-        self.priv_obs_scale[6:9] = 0.2  # angular velocity
-        self.priv_obs_scale[12 + self.num_actions : 12 + 2 * self.num_actions] = 0.05  # joint velocity
+        self.priv_obs_scale[6:9] = 0.25  # angular velocity
+        self.priv_obs_scale[12 + self.num_actions : 12 + 2 * self.num_actions] = 1.5  # joint velocity
 
         ################### for noise vector ####################
         # [0:3] -> commands
@@ -102,6 +105,15 @@ class WalkG1Dof12Task(HumanoidTask):
         self.obs_noise[9 + self.num_actions : 9 + 2 * self.num_actions] = 1.5  # joint velocities
         return super()._init_buffers()
 
+    def gait_phase(self, period: float = 0.8) -> torch.Tensor:
+        """Compute gait phase based on episode length buffer."""
+        global_phase = (self._episode_steps * self.step_dt) % period / period
+
+        phase = torch.zeros(self.num_envs, 2, device=self.device)
+        phase[:, 0] = torch.sin(global_phase * torch.pi * 2.0)
+        phase[:, 1] = torch.cos(global_phase * torch.pi * 2.0)
+        return phase
+
     def _compute_task_observations(self, env_states: TensorState):
         robot_state = env_states.robots[self.name]
         base_quat = robot_state.root_state[:, 3:7]
@@ -109,9 +121,7 @@ class WalkG1Dof12Task(HumanoidTask):
         base_ang_vel = quat_rotate_inverse(base_quat, robot_state.root_state[:, 10:13])
         projected_gravity = quat_rotate_inverse(base_quat, self.gravity_vec)
 
-        phase = self.get_phase()
-        sin_phase = torch.sin(2 * torch.pi * phase).unsqueeze(1)
-        cos_phase = torch.cos(2 * torch.pi * phase).unsqueeze(1)
+        gait_phase = self.gait_phase()
 
         q = env_states.robots[self.name].joint_pos - self.default_dof_pos
         dq = env_states.robots[self.name].joint_vel
@@ -124,8 +134,7 @@ class WalkG1Dof12Task(HumanoidTask):
                 q,  # num_actions
                 dq,  # num_actions
                 self.actions,  # num_actions
-                sin_phase,  # 1
-                cos_phase,  # 1
+                gait_phase,
             ),
             dim=-1,
         )
@@ -139,24 +148,15 @@ class WalkG1Dof12Task(HumanoidTask):
                 q,  # num_actions
                 dq,  # num_actions
                 self.actions,
-                sin_phase,
-                cos_phase,
+                gait_phase,
             ),
             dim=-1,
         )
 
-        if self.cfg.domain_rand.add_noise2obs:
-            obs_buf += (2 * torch.rand_like(obs_buf) - 1) * self.obs_noise
+        obs_buf += (2 * torch.rand_like(obs_buf) - 1) * self.obs_noise
 
         # clip observations -> scale observations
         obs_buf = obs_buf.clip(-self.obs_clip_limit, self.obs_clip_limit) * self.obs_scale
         priv_obs_buf = priv_obs_buf.clip(-self.obs_clip_limit, self.obs_clip_limit) * self.priv_obs_scale
 
         return obs_buf, priv_obs_buf
-
-    # def _terminated(self, env_states):
-    #     contact_forces = env_states.extras["contact_forces"][self.name]
-    #     reset_buf = torch.any(torch.norm(contact_forces[:, self.termination_contact_indices, :], dim=-1) > 1.0, dim=1)
-    #     rpy = get_euler_xyz(env_states.robots[self.name].root_state[:, 3:7])
-    #     reset_buf |= torch.logical_or(torch.abs(rpy[:, 1]) > 1.0, torch.abs(rpy[:, 0]) > 0.8)
-    #     return reset_buf
