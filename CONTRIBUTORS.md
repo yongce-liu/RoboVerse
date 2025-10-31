@@ -30,6 +30,7 @@ Guidelines for modifications:
 * Haozhe Lou
 * Jiangran Lyu
 * Krishnan Srinivasan
+* Liu Liu
 * Mingyuan Sun
 * Peihao Li
 * Ran Gong
