@@ -56,7 +56,7 @@ class ContactForces(BaseQueryType):
                 self._current_contact_force = self._get_contact_forces_mujoco()
             else:
                 raise NotImplementedError
-            self._contact_forces_queue.append(self._current_contact_force.clone())
+            self._contact_forces_queue.append(self._current_contact_force.clone().view(self.num_envs, -1, 3)[:, self.body_ids_reindex, :])
 
     def _get_contact_forces_mujoco(self) -> torch.Tensor:
         """

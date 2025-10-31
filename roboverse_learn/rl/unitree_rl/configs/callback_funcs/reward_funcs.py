@@ -146,7 +146,7 @@ def feet_gait(env: EnvTypes, env_states: TensorState, period: float, offset: lis
     command_name = "base_velocity"
 
     contact_forces: ContactForces = env_states.extras["contact_forces"][env.name]
-    is_contact = contact_forces.contact_forces_history[:, :, env.feet_indices, :].norm(dim=-1).max(dim=1)[0] > 1.0
+    is_contact = contact_forces.contact_forces[:, env.feet_indices, :].norm(dim=-1) > 1.0
     # contact_sensor = env.handler.contact_sensor
     # is_contact = contact_sensor.data.current_contact_time[:, env.body_ids_reindex][:, env.feet_indices] > 0
 

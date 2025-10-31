@@ -20,7 +20,7 @@ def resample_commands(env: EnvTypes, env_states: TensorState = None):
     Args:
         env_ids (List[int]): Environments ids for which new commands are needed.
     """
-    cfg: BaseEnvCfg.Commands = env.cfg.commands
+    cfg: BaseEnvCfg.Commands = env.commands_manager
     if cfg.value is None:
         cfg.value = torch.zeros(
             size=(env.num_envs, cfg.num_commands), dtype=torch.float, device=env.device

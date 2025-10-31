@@ -8,7 +8,7 @@ def lin_vel_cmd_levels(
     reward_term_name: str = "track_lin_vel_xy",
 ) -> torch.Tensor:
     if env.common_step_counter % env.max_episode_steps == 0:
-        command_term = env.cfg.commands
+        command_term = env.commands_manager
         ranges = command_term.ranges
         limit_ranges = command_term.limit_ranges
 
@@ -28,4 +28,4 @@ def lin_vel_cmd_levels(
                 limit_ranges.lin_vel_y[1],
             ).tolist()
 
-    return torch.tensor(env.cfg.commands.ranges.lin_vel_x[1], device=env.device)
+    return torch.tensor(env.commands_manager.ranges.lin_vel_x[1], device=env.device)
