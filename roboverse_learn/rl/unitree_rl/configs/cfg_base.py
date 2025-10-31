@@ -51,7 +51,6 @@ class BaseEnvCfg:
         heading_command = True  # if true: compute ang vel command from heading error
         rel_standing_envs: float = 0
         ranges = Ranges()
-        ranges_tensor = None
         limit_ranges = Ranges()
         resample: Callable = MISSING
         value: any = MISSING

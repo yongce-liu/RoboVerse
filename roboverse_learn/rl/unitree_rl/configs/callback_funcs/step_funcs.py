@@ -25,15 +25,14 @@ def resample_commands(env: EnvTypes, env_states: TensorState = None):
         cfg.value = torch.zeros(
             size=(env.num_envs, cfg.num_commands), dtype=torch.float, device=env.device
         )
-    if cfg.ranges_tensor is None:
-        cfg.ranges_tensor = torch.tensor(
-            [
-                cfg.ranges.lin_vel_x,
-                cfg.ranges.lin_vel_y,
-                cfg.ranges.heading if cfg.heading_command else cfg.ranges.ang_vel_yaw,
-            ],
-            device=env.device,
-        )
+    ranges_tensor = torch.tensor(
+        [
+            cfg.ranges.lin_vel_x,
+            cfg.ranges.lin_vel_y,
+            cfg.ranges.heading if cfg.heading_command else cfg.ranges.ang_vel_yaw,
+        ],
+        device=env.device,
+    )
 
     env_ids = (
         (env._episode_steps % int(cfg.resampling_time / env.step_dt) == 0)
@@ -44,9 +43,9 @@ def resample_commands(env: EnvTypes, env_states: TensorState = None):
         return
 
     cfg.value[env_ids, :] = sample_uniform(
-        cfg.ranges_tensor[:, 0],
-        cfg.ranges_tensor[:, 1],
-        (len(env_ids), cfg.ranges_tensor.size(0)),
+        ranges_tensor[:, 0],
+        ranges_tensor[:, 1],
+        (len(env_ids), ranges_tensor.size(0)),
         device=env.device,
     )
 
