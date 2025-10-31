@@ -378,8 +378,8 @@ class LeggedRobotTask(AgentTask):
         for _key in self._terminate_callbacks.keys():
             _terminate_fn, _params = self._terminate_callbacks[_key]
             _terminate_flag = _terminate_fn(self, env_states, **_params)
-            self.episode_not_terminations[_key] += torch.logical_not(_terminate_flag)
             reset_buf = torch.logical_or(reset_buf, _terminate_flag)
+            self.episode_not_terminations[_key] += _terminate_flag.detach().clone().to(torch.float)
         return reset_buf
 
     def _time_out(self, env_states: TensorState | None) -> torch.BoolTensor:
