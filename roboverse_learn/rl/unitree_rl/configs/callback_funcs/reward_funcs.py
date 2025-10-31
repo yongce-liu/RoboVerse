@@ -173,6 +173,7 @@ def feet_slide(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
     agent is penalized only when the feet are in contact with the ground.
     """
     # Penalize feet sliding
+
     contact_forces: ContactForces = env_states.extras["contact_forces"][env.name]
     contacts = contact_forces.contact_forces_history[:, :, env.feet_indices, :].norm(dim=-1).max(dim=1)[0] > 1.0
     # contact_sensor = env.handler.contact_sensor
@@ -202,5 +203,6 @@ def undesired_contacts(env: EnvTypes, env_states: TensorState, threshold: float)
     # without_ankle_mask[env.ankle_indices] = False
     # contact_sensor = env.handler.contact_sensor
     # is_contact = contact_sensor.data.net_forces_w_history[:, :, env.body_ids_reindex, :][:, :, without_ankle_mask, :].norm(dim=-1).max(dim=1)[0] > threshold
+
     # sum over contacts for each environment
     return torch.sum(is_contact, dim=1)
