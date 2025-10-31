@@ -126,7 +126,9 @@ class LeggedRobotTask(AgentTask):
         self.dof_pos_limits = torch.tensor(sorted_dof_pos_limits, device=self.device)  # (n_dof, 2)
 
         soft_limit_factor = getattr(
-            self.cfg.control, "soft_joint_pos_limit_factor", getattr(self.robot, "soft_joint_pos_limit_factor", 1.0)
+            self.cfg.control,
+            "soft_joint_pos_limit_factor",
+            getattr(self.robot, "soft_joint_pos_limit_factor", 1.0),
         )
         _mid = (self.dof_pos_limits[:, 0] + self.dof_pos_limits[:, 1]) / 2.0
         _diff = self.dof_pos_limits[:, 1] - self.dof_pos_limits[:, 0]
@@ -142,7 +144,9 @@ class LeggedRobotTask(AgentTask):
         )
         self.dof_vel_limits = torch.tensor(dof_vel_limits, device=self.device)  # (n_dof, 2)
         self.soft_dof_vel_limits = self.dof_vel_limits * getattr(
-            self.cfg.control, "soft_joint_vel_limit_factor", getattr(self.robot, "soft_joint_vel_limit_factor", 1.0)
+            self.cfg.control,
+            "soft_joint_vel_limit_factor",
+            getattr(self.robot, "soft_joint_vel_limit_factor", 1.0),
         )
 
         default_joint_pos = self.cfg.initial_states.robots[robot.name].get(
@@ -195,19 +199,30 @@ class LeggedRobotTask(AgentTask):
 
         # reward episode sums
         self.episode_rewards = {
-            name: torch.zeros(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
+            name: torch.zeros(
+                self.num_envs,
+                dtype=torch.float,
+                device=self.device,
+                requires_grad=False,
+            )
             for name in self.reward_scales.keys()
         }
 
     def _init_buffers(self):
-        self.actions = torch.zeros(size=(self.num_envs, self.num_actions), dtype=torch.float, device=self.device)
+        self.actions = torch.zeros(
+            size=(self.num_envs, self.num_actions),
+            dtype=torch.float,
+            device=self.device,
+        )
         self.rew_buf = torch.zeros(size=(self.num_envs,), dtype=torch.float, device=self.device)
         self.reset_buf = torch.zeros(size=(self.num_envs,), dtype=torch.bool, device=self.device)
         self.time_out_buf = torch.zeros(size=(self.num_envs,), dtype=torch.bool, device=self.device)
 
         self.up_axis_idx = 2
         self.gravity_vec = torch.tensor(
-            get_axis_params(-1.0, self.up_axis_idx), dtype=torch.float, device=self.device
+            get_axis_params(-1.0, self.up_axis_idx),
+            dtype=torch.float,
+            device=self.device,
         ).repeat((self.num_envs, 1))
         self.forward_vec = torch.tensor([1.0, 0.0, 0.0], dtype=torch.float, device=self.device).repeat((
             self.num_envs,
@@ -220,10 +235,12 @@ class LeggedRobotTask(AgentTask):
         env_states = self.handler.get_states()
         obs_single, priv_single = self._compute_task_observations(env_states)
         self.obs_buf_queue = deque(
-            [deepcopy(obs_single) for _ in range(self.cfg.obs_len_history)], maxlen=self.cfg.obs_len_history
+            [deepcopy(obs_single) for _ in range(self.cfg.obs_len_history)],
+            maxlen=self.cfg.obs_len_history,
         )
         self.priv_obs_buf_queue = deque(
-            [deepcopy(priv_single) for _ in range(self.cfg.priv_obs_len_history)], maxlen=self.cfg.priv_obs_len_history
+            [deepcopy(priv_single) for _ in range(self.cfg.priv_obs_len_history)],
+            maxlen=self.cfg.priv_obs_len_history,
         )
 
         # history buffer for reward computation
@@ -252,7 +269,9 @@ class LeggedRobotTask(AgentTask):
         )
         if isinstance(target_pos, dict):
             target_pos = torch.tensor(
-                [target_pos[name] for name in self.sorted_joint_names], dtype=torch.float32, device=self.device
+                [target_pos[name] for name in self.sorted_joint_names],
+                dtype=torch.float32,
+                device=self.device,
             )
         elif not isinstance(target_pos, torch.Tensor):
             target_pos = torch.tensor(target_pos, dtype=torch.float32, device=self.device)
@@ -325,7 +344,13 @@ class LeggedRobotTask(AgentTask):
 
         self._post_physics_step(env_states)
 
-        return self.obs_buf, self.rew_buf, self.reset_buf, self.time_out_buf, self.extras
+        return (
+            self.obs_buf,
+            self.rew_buf,
+            self.reset_buf,
+            self.time_out_buf,
+            self.extras,
+        )
 
     def _post_physics_step(self, env_states: TensorState):
         self._episode_steps += 1
@@ -333,7 +358,7 @@ class LeggedRobotTask(AgentTask):
 
         # gym-style return values
         self.time_out_buf[:] = self._time_out(env_states)
-        self.reset_buf[:] = torch.logical_or(self._terminated(env_states), self.time_out_buf)
+        self.reset_buf[:] = self._terminated(env_states)
         self.rew_buf[:] = self._reward(env_states)
 
         # reset envs
@@ -377,9 +402,9 @@ class LeggedRobotTask(AgentTask):
         reset_buf = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
         for _key in self._terminate_callbacks.keys():
             _terminate_fn, _params = self._terminate_callbacks[_key]
-            _terminate_flag = _terminate_fn(self, env_states, **_params)
+            _terminate_flag = (_terminate_fn(self, env_states, **_params)).detach().clone().to(torch.bool)
             reset_buf = torch.logical_or(reset_buf, _terminate_flag)
-            self.episode_not_terminations[_key] += _terminate_flag.detach().clone().to(torch.float)
+            self.episode_not_terminations[_key] += _terminate_flag.to(torch.float)
         return reset_buf
 
     def _time_out(self, env_states: TensorState | None) -> torch.BoolTensor:
@@ -387,7 +412,7 @@ class LeggedRobotTask(AgentTask):
 
         Note that max_episode_steps is set to -1 by default (no timeout).
         """
-        return self._episode_steps > self.max_episode_steps
+        return self._episode_steps >= self.max_episode_steps
 
     def _get_initial_states(self):
         """Return list of per-env initial states derived from config."""
@@ -399,12 +424,14 @@ class LeggedRobotTask(AgentTask):
 
         # joint_pos = self.robot.default_joint_positions
         joint_pos = robot_state.get(
-            "joint_pos", robot_state.get("default_joint_pos", self.robot.default_joint_positions)
+            "joint_pos",
+            robot_state.get("default_joint_pos", self.robot.default_joint_positions),
         )
         joint_pos = pattern_match(joint_pos, sorted_joint_names)
 
         joint_vel = robot_state.get(
-            "joint_vel", robot_state.get("default_joint_vel", getattr(self.robot, "default_joint_velocities", {}))
+            "joint_vel",
+            robot_state.get("default_joint_vel", getattr(self.robot, "default_joint_velocities", {})),
         )
         joint_vel = pattern_match(joint_vel, sorted_joint_names)
 

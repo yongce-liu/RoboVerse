@@ -3,7 +3,7 @@ import torch
 
 from metasim.utils import configclass
 
-from roboverse_learn.rl.unitree_rl.configs.cfg_base import BaseEnvCfg, CallbacksCfg
+from roboverse_learn.rl.unitree_rl.configs.cfg_base import BaseEnvCfg
 from roboverse_learn.rl.unitree_rl.configs.algorithm import (
     RslRlOnPolicyRunnerCfg,
     RslRlPpoActorCriticCfg,
@@ -17,10 +17,10 @@ from roboverse_learn.rl.unitree_rl.configs.cfg_randomizers import (
 )
 
 from roboverse_learn.rl.unitree_rl.configs.callback_funcs import (
-    termination_funcs as term_funcs,
+    termination_funcs,
+    reset_funcs,
+    step_funcs,
 )
-from roboverse_learn.rl.unitree_rl.configs.callback_funcs import reset_funcs
-from roboverse_learn.rl.unitree_rl.configs.callback_funcs import step_funcs
 
 
 @configclass
@@ -128,9 +128,12 @@ class WalkG1Dof29EnvCfg(BaseEnvCfg):
         )
     }
     callbacks_terminate = {
-        # "time_out": term_funcs.time_out,
-        "base_height": (term_funcs.root_height_below_minimum, {"minimum_height": 0.2}),
-        "bad_orientation": (term_funcs.bad_orientation, {"limit_angle": 0.8}),
+        "time_out": termination_funcs.time_out,
+        "base_height": (
+            termination_funcs.root_height_below_minimum,
+            {"minimum_height": 0.2},
+        ),
+        "bad_orientation": (termination_funcs.bad_orientation, {"limit_angle": 0.8}),
     }
 
 

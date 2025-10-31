@@ -67,15 +67,11 @@ class BaseEnvCfg:
 
     @configclass
     class Rewards:
-        @configclass
-        class Scales:
-            pass
-
         only_positive_rewards = False  # if true negative total rewards are clipped at zero (avoids early termination problems)
         functions: list[Callable] | str = (
             "roboverse_learn.rl.unitree_rl.configs.callback_funcs.reward_funcs"
         )
-        scales = Scales()
+        scales: any = MISSING
 
     rewards = Rewards()
 
@@ -120,3 +116,26 @@ class BaseEnvCfg:
         self.callbacks.setup = self.callbacks_setup
         self.callbacks.reset = self.callbacks_reset
         self.callbacks.step = self.callbacks_step
+
+        # Type check for callbacks
+        for cb_attr in [
+            "setup",
+            "reset",
+            "step",
+            "terminate",
+            "query",
+        ]:
+            cb_dict = getattr(self.callbacks, cb_attr)
+            for func_name, func_tuple in cb_dict.items():
+                if not (
+                    callable(func_tuple)
+                    or (
+                        isinstance(func_tuple, tuple)
+                        and len(func_tuple) == 2
+                        and (callable(func_tuple[0]) or isinstance(func_tuple[0], object))
+                        and isinstance(func_tuple[1], dict)
+                    )
+                ):
+                    raise ValueError(
+                        f"Callback {func_name} in {cb_attr} must be a callable or a tuple of (callable, dict)."
+                    )
