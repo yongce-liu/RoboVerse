@@ -146,7 +146,7 @@ def feet_gait(env: EnvTypes, env_states: TensorState, period: float, offset: lis
     command_name = "base_velocity"
 
     contact_forces: ContactForces = env_states.extras["contact_forces"][env.name]
-    is_contact = contact_forces.contact_forces_history[:, :, env.feet_indices, 2].max(dim=1)[0] > 1.0
+    is_contact = contact_forces.contact_forces_history[:, :, env.feet_indices, :].norm(dim=-1).max(dim=1)[0] > 1.0
     # contact_sensor = env.handler.contact_sensor
     # is_contact = contact_sensor.data.current_contact_time[:, env.body_ids_reindex][:, env.feet_indices] > 0
 
@@ -197,9 +197,8 @@ def undesired_contacts(env: EnvTypes, env_states: TensorState, threshold: float)
     """Penalize undesired contacts as the number of violations that are above a threshold."""
     without_ankle_mask = torch.ones(size=(len(env.sorted_body_names),), dtype=torch.bool, device=env.device)
     without_ankle_mask[env.ankle_indices] = False
-    without_ankle_id = without_ankle_mask.nonzero(as_tuple=False).flatten()
     contact_forces: ContactForces = env_states.extras["contact_forces"][env.name]
-    is_contact = contact_forces.contact_forces_history[:, :, without_ankle_id, :].norm(dim=-1).max(dim=1)[0] > threshold
+    is_contact = contact_forces.contact_forces_history[:, :, without_ankle_mask, :].norm(dim=-1).max(dim=1)[0] > threshold
 
     # without_ankle_mask = torch.ones_like(env.body_ids_reindex, dtype=torch.bool, device=env.device)
     # without_ankle_mask[env.ankle_indices] = False

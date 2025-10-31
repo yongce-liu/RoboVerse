@@ -86,7 +86,7 @@ class WalkG1Dof29EnvCfg(BaseEnvCfg):
         enabled=True, funcs={"lin_vel_cmd_levels": lin_vel_cmd_levels}
     )
 
-    callbacks_query = {"contact_forces": ContactForces(history_length=3)}
+    callbacks_query = {"contact_forces": ContactForces(history_length=4)}
     callbacks_setup = {
         "material_randomizer": MaterialRandomizer(
             obj_name="g1_dof29",

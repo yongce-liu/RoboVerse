@@ -7,6 +7,7 @@ from roboverse_learn.rl.unitree_rl.configs.algorithm import (
     RslRlPpoAlgorithmCfg,
     RslRlPpoActorCriticRecurrentCfg,
 )
+from roboverse_learn.rl.unitree_rl.helper.curriculum_utils import lin_vel_cmd_levels
 from roboverse_learn.rl.unitree_rl.configs.cfg_queries import ContactForces
 from roboverse_learn.rl.unitree_rl.configs.cfg_randomizers import (
     MaterialRandomizer,
@@ -71,23 +72,27 @@ class WalkG1Dof12EnvCfg(BaseEnvCfg):
         ),
     )
 
+    curriculum = BaseEnvCfg.Curriculum(
+        enabled=True, funcs={"lin_vel_cmd_levels": lin_vel_cmd_levels}
+    )
+
     rewards = BaseEnvCfg.Rewards(scales=RewardsScales(), only_positive_rewards=True)
 
     callbacks_query = {"contact_forces": ContactForces(history_length=3)}
     callbacks_setup = {
-        # "material_randomizer": MaterialRandomizer(
-        #     obj_name="g1_dof12",
-        #     static_friction_range=(0.1, 1.25),
-        #     dynamic_friction_range=(0.1, 1.25),
-        #     restitution_range=(0.0, 0.0),
-        #     num_buckets=64,
-        # ),
-        # "mass_randomizer": MassRandomizer(
-        #     obj_name="g1_dof12",
-        #     body_names="pelvis",
-        #     mass_distribution_params=(-1.0, 3.0),
-        #     operation="add",
-        # ),
+        "material_randomizer": MaterialRandomizer(
+            obj_name="g1_dof12",
+            static_friction_range=(0.1, 1.25),
+            dynamic_friction_range=(0.1, 1.25),
+            restitution_range=(0.0, 0.0),
+            num_buckets=64,
+        ),
+        "mass_randomizer": MassRandomizer(
+            obj_name="g1_dof12",
+            body_names="pelvis",
+            mass_distribution_params=(-1.0, 3.0),
+            operation="add",
+        ),
     }
     callbacks_reset = {
         "random_root_state": (
