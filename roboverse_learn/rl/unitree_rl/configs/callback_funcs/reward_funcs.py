@@ -31,7 +31,7 @@ def track_ang_vel_z(env: EnvTypes, env_states: TensorState, std: float) -> torch
 
 def is_alive(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
     """Reward for being alive."""
-    return (~env._terminated(env_states)).float()
+    return (~env.reset_buf).float()
     # return 1.0
 
 def lin_vel_z(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
