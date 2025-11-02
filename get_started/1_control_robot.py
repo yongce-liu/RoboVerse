@@ -182,3 +182,6 @@ if __name__ == "__main__":
         step += 1
 
     obs_saver.save()
+
+    # close handler for stability
+    handler.close()
