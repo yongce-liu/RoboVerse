@@ -22,6 +22,7 @@ DEFAULT_CONFIG = {
             "robot_target_qpos": 0.1,
             "tracking_approach": 4.0,
             "tracking_progress": 150.0,
+            "rotation_tracking": 2.0,
         }
     },
     # Trajectory tracking settings
@@ -29,6 +30,7 @@ DEFAULT_CONFIG = {
         "num_waypoints": 5,
         "reach_threshold": 0.10,
         "grasp_check_distance": 0.02,
+        "enable_rotation_tracking": False,
     },
     # Randomization settings
     "randomization": {
@@ -144,12 +146,14 @@ class PickPlaceBase(RLTaskEnv):
             self._reward_gripper_close,
             self._reward_robot_target_qpos,
             self._reward_trajectory_tracking,
+            self._reward_rotation_tracking,
         ]
         self.reward_weights = [
             DEFAULT_CONFIG["reward_config"]["scales"]["gripper_approach"],
             DEFAULT_CONFIG["reward_config"]["scales"]["gripper_close"],
             DEFAULT_CONFIG["reward_config"]["scales"]["robot_target_qpos"],
             1.0,
+            DEFAULT_CONFIG["reward_config"]["scales"]["rotation_tracking"],
         ]
 
     def _pre_init_trajectory_tracking(self, scenario, device):
@@ -164,6 +168,7 @@ class PickPlaceBase(RLTaskEnv):
         self.num_waypoints = traj_config["num_waypoints"]
         self.reach_threshold = traj_config["reach_threshold"]
         self.grasp_check_distance = traj_config["grasp_check_distance"]
+        self.enable_rotation_tracking = traj_config.get("enable_rotation_tracking", False)
 
         self.current_waypoint_idx = torch.zeros(self._traj_num_envs, dtype=torch.long, device=self._traj_device)
         self.waypoints_reached = torch.zeros(
@@ -184,16 +189,20 @@ class PickPlaceBase(RLTaskEnv):
 
         first_env_state = initial_states_list[0]
         waypoint_positions = []
+        waypoint_rotations = []
 
         for i in range(self.num_waypoints):
             marker_name = f"traj_marker_{i}"
             if marker_name in first_env_state["objects"]:
                 pos = first_env_state["objects"][marker_name]["pos"]
+                rot = first_env_state["objects"][marker_name]["rot"]
                 waypoint_positions.append(pos)
+                waypoint_rotations.append(rot)
             else:
                 raise ValueError(f"Marker {marker_name} not found in initial states")
 
         self.waypoint_positions = torch.stack(waypoint_positions).to(device)
+        self.waypoint_rotations = torch.stack(waypoint_rotations).to(device)
 
     def _prepare_states(self, states, env_ids):
         """Preprocess initial states, randomizing positions within specified ranges."""
@@ -232,11 +241,10 @@ class PickPlaceBase(RLTaskEnv):
         table_quat = states.objects["table"].root_state[:, 3:7].clone()
         states.objects["table"].root_state = torch.cat([table_pos, table_quat, zero_vel, zero_ang_vel], dim=-1)
 
-        marker_quat = torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device).unsqueeze(0).expand(self.num_envs, -1)
-
         for i in range(self.num_waypoints):
             marker_name = f"traj_marker_{i}"
             marker_pos = self.waypoint_positions[i].unsqueeze(0).expand(self.num_envs, -1)
+            marker_quat = self.waypoint_rotations[i].unsqueeze(0).expand(self.num_envs, -1)
             states.objects[marker_name].root_state = torch.cat(
                 [marker_pos, marker_quat, zero_vel, zero_ang_vel], dim=-1
             )
@@ -452,6 +460,26 @@ class PickPlaceBase(RLTaskEnv):
             tracking_reward = torch.where(all_reached, maintain_reward, approach_reward + progress_reward)
 
         return tracking_reward
+
+    def _reward_rotation_tracking(self, env_states) -> torch.Tensor:
+        """Reward for tracking target rotation at waypoints when object is grasped."""
+        if not self.enable_rotation_tracking:
+            return torch.zeros(self.num_envs, device=self.device)
+
+        grasped_mask = self.object_grasped
+        rotation_reward = torch.zeros(self.num_envs, device=self.device)
+
+        if grasped_mask.any():
+            box_quat = env_states.objects["object"].root_state[:, 3:7]
+            box_mat = matrix_from_quat(box_quat).reshape(self.num_envs, 9)
+
+            target_quat = self.waypoint_rotations[self.current_waypoint_idx]
+            target_mat = matrix_from_quat(target_quat).reshape(self.num_envs, 9)
+
+            rot_err = torch.norm(target_mat[:, :6] - box_mat[:, :6], dim=-1)
+            rotation_reward = (1 - torch.tanh(rot_err)) * grasped_mask.float()
+
+        return rotation_reward
 
     def _observation(self, env_states) -> torch.Tensor:
         """Get observation using RoboVerse tensor state."""
