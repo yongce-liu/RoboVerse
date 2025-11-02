@@ -351,7 +351,7 @@ class LeggedRobotTask(AgentTask):
 
     def _post_physics_step(self, env_states: TensorState):
         self._episode_steps += 1
-        self.common_step_counter += 1
+        self.common_step_counter = (self.common_step_counter + 1) % self.max_episode_steps
 
         # gym-style return values
         self.time_out_buf[:] = self._time_out(env_states)
