@@ -202,11 +202,11 @@ class LeggedRobotTask(AgentTask):
         env_states = self.handler.get_states()
         obs_single, priv_single = self._compute_task_observations(env_states)
         self.obs_buf_queue = deque(
-            [deepcopy(obs_single) for _ in range(self.cfg.obs_len_history)],
+            [deepcopy(obs_single * 0.0) for _ in range(self.cfg.obs_len_history)],
             maxlen=self.cfg.obs_len_history,
         )
         self.priv_obs_buf_queue = deque(
-            [deepcopy(priv_single) for _ in range(self.cfg.priv_obs_len_history)],
+            [deepcopy(priv_single * 0.0) for _ in range(self.cfg.priv_obs_len_history)],
             maxlen=self.cfg.priv_obs_len_history,
         )
 
@@ -274,6 +274,12 @@ class LeggedRobotTask(AgentTask):
         self._episode_steps[env_ids] = 0
         self.actions[env_ids] = 0.0
         self.rew_buf[env_ids] = 0.0
+
+        # reset observation history buffers
+        for _obs in self.obs_buf_queue:
+            _obs[env_ids] = 0.0
+        for _priv_obs in self.priv_obs_buf_queue:
+            _priv_obs[env_ids] = 0.0
 
         ################# LOGS #################
         for key in self.episode_rewards.keys():
