@@ -86,28 +86,28 @@ class WalkG1Dof29EnvCfg(BaseEnvCfg):
         enabled=True, funcs={"lin_vel_cmd_levels": lin_vel_cmd_levels}
     )
 
-    callbacks_query = {"contact_forces": ContactForces(history_length=4)}
+    callbacks_query = {"contact_forces": ContactForces(history_length=3)}
     callbacks_setup = {
-        "material_randomizer": MaterialRandomizer(
-            obj_name="g1_dof29",
-            static_friction_range=(0.3, 1.0),
-            dynamic_friction_range=(0.3, 1.0),
-            restitution_range=(0.0, 0.0),
-            num_buckets=64,
-        ),
-        "mass_randomizer": MassRandomizer(
-            obj_name="g1_dof29",
-            body_names="torso_link",
-            mass_distribution_params=(-1.0, 3.0),
-            operation="add",
-        ),
+        # "material_randomizer": MaterialRandomizer(
+        #     obj_name="g1_dof29",
+        #     static_friction_range=(0.3, 1.0),
+        #     dynamic_friction_range=(0.3, 1.0),
+        #     restitution_range=(0.0, 0.0),
+        #     num_buckets=64,
+        # ),
+        # "mass_randomizer": MassRandomizer(
+        #     obj_name="g1_dof29",
+        #     body_names="torso_link",
+        #     mass_distribution_params=(-1.0, 3.0),
+        #     operation="add",
+        # ),
     }
     callbacks_reset = {
         "random_root_state": (
             reset_funcs.random_root_state,
             {
                 "pose_range": [
-                    [-0.5, -0.5, 0.0, 0, 0, -3.14],
+                    [-0.5, -0.5, 0.0, 0, 0, -3.14],  # x,y,z roll,pitch,yaw
                     [0.5, 0.5, 0.0, 0, 0, 3.14],
                 ],
                 "velocity_range": [[0] * 6, [0] * 6],

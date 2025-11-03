@@ -7,18 +7,21 @@ from metasim.utils.math import quat_rotate_inverse
 
 from roboverse_learn.rl.unitree_rl.configs.cfg_queries import ContactForces
 from roboverse_pack.tasks.unitree_rl.base.types import EnvTypes
+from roboverse_learn.rl.unitree_rl.helper import get_indices_from_substring
 
-def track_lin_vel_xy(env: EnvTypes, env_states: TensorState, std: float) -> torch.Tensor:
+
+def track_lin_vel_xy(
+    env: EnvTypes, env_states: TensorState, std: float
+) -> torch.Tensor:
     """Reward tracking of linear velocity commands (xy axes) in the gravity aligned robot frame using exponential kernel."""
     # extract the used quantities (to enable type-hinting)
     robot_state = env_states.robots[env.name]
     base_quat = robot_state.root_state[:, 3:7]
     base_lin_vel = quat_rotate_inverse(base_quat, robot_state.root_state[:, 7:10])
     lin_vel_diff = env.commands_manager.value[:, :2] - base_lin_vel[:, :2]
-    lin_vel_error = torch.sum(
-        torch.square(lin_vel_diff), dim=1
-    )
-    return torch.exp(-lin_vel_error / std ** 2)
+    lin_vel_error = torch.sum(torch.square(lin_vel_diff), dim=1)
+    return torch.exp(-lin_vel_error / std**2)
+
 
 def track_ang_vel_z(env: EnvTypes, env_states: TensorState, std: float) -> torch.Tensor:
     """
@@ -29,12 +32,14 @@ def track_ang_vel_z(env: EnvTypes, env_states: TensorState, std: float) -> torch
     base_ang_vel = quat_rotate_inverse(base_quat, robot_state.root_state[:, 10:13])
     ang_vel_diff = env.commands_manager.value[:, 2] - base_ang_vel[:, 2]
     ang_vel_error = torch.square(ang_vel_diff)
-    return torch.exp(-ang_vel_error / std ** 2)
+    return torch.exp(-ang_vel_error / std**2)
+
 
 def is_alive(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
     """Reward for being alive."""
     return (~env.reset_buf).float()
     # return 1.0
+
 
 def lin_vel_z(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
     """Penalize z-axis base linear velocity using L2 squared kernel."""
@@ -44,6 +49,7 @@ def lin_vel_z(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
     base_lin_vel = quat_rotate_inverse(base_quat, robot_state.root_state[:, 7:10])
     return torch.square(base_lin_vel[:, 2])
 
+
 def ang_vel_xy(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
     """Penalize xy-axis base angular velocity using L2 squared kernel."""
     # extract the used quantities (to enable type-hinting)
@@ -51,6 +57,7 @@ def ang_vel_xy(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
     base_quat = robot_state.root_state[:, 3:7]
     base_ang_vel = quat_rotate_inverse(base_quat, robot_state.root_state[:, 10:13])
     return torch.sum(torch.square(base_ang_vel[:, :2]), dim=1)
+
 
 def joint_vel(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
     """Penalize joint velocities on the articulation using L2 squared kernel.
@@ -61,6 +68,7 @@ def joint_vel(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
     robot_state = env_states.robots[env.name]
     return torch.sum(torch.square(robot_state.joint_vel), dim=1)
 
+
 def joint_acc(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
     """Penalize joint accelerations on the articulation using L2 squared kernel.
 
@@ -68,11 +76,20 @@ def joint_acc(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
     """
     # extract the used quantities (to enable type-hinting)
     robot_state = env_states.robots[env.name]
-    return torch.sum(torch.square((env.history_buffer["joint_vel"][-1] - robot_state.joint_vel) / env.step_dt), dim=1)
+    return torch.sum(
+        torch.square(
+            (env.history_buffer["joint_vel"][-1] - robot_state.joint_vel) / env.step_dt
+        ),
+        dim=1,
+    )
+
 
 def action_rate(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
     """Penalize the rate of change of the actions using L2 squared kernel."""
-    return torch.sum(torch.square(env.history_buffer["actions"][-1] - env.actions), dim=1)
+    return torch.sum(
+        torch.square(env.history_buffer["actions"][-1] - env.actions), dim=1
+    )
+
 
 def joint_pos_limits(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
     """Penalize joint positions if they cross the soft limits.
@@ -80,18 +97,26 @@ def joint_pos_limits(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
     This is computed as a sum of the absolute value of the difference between the joint position and the soft limits.
     """
     robot_state = env_states.robots[env.name]
-    out_of_limits = -(robot_state.joint_pos - env.soft_dof_pos_limits[:, 0]).clip(max=0.0)
-    out_of_limits += (robot_state.joint_pos - env.soft_dof_pos_limits[:, 1]).clip(min=0.0)
+    out_of_limits = -(robot_state.joint_pos - env.soft_dof_pos_limits[:, 0]).clip(
+        max=0.0
+    )
+    out_of_limits += (robot_state.joint_pos - env.soft_dof_pos_limits[:, 1]).clip(
+        min=0.0
+    )
     return torch.sum(out_of_limits, dim=1)
+
 
 def energy(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
     """Sum |qdot|*|tau| across joints (\"energy\" usage)."""
     base = env_states.robots[env.name]
     qvel = base.joint_vel
-    qfrc  = base.joint_effort_target
+    qfrc = base.joint_effort_target
     return torch.sum(torch.abs(qvel) * torch.abs(qfrc), dim=-1)
 
-def joint_deviation_l1(env: EnvTypes, env_states: TensorState, joint_ids: torch.Tensor) -> torch.Tensor:
+
+def joint_deviation_l1(
+    env: EnvTypes, env_states: TensorState, joint_ids: torch.Tensor
+) -> torch.Tensor:
     """Penalize joint positions that deviate from the default one."""
     # extract the used quantities (to enable type-hinting)
     robot_state = env_states.robots[env.name]
@@ -99,17 +124,35 @@ def joint_deviation_l1(env: EnvTypes, env_states: TensorState, joint_ids: torch.
     angle = robot_state.joint_pos[:, joint_ids] - env.default_dof_pos[joint_ids]
     return torch.sum(torch.abs(angle), dim=1)
 
+
 def joint_deviation_arms(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
-    joint_ids = env.arm_joint_indices
+
+    if not hasattr(env.extras_buffer, "arm_joint_indices"):
+        env.extras_buffer["arm_joint_indices"] = get_indices_from_substring(
+            env.robot.arm_joints, env.sorted_joint_names
+        ).to(env.device)
+    joint_ids = env.extras_buffer.get("arm_joint_indices")
     return joint_deviation_l1(env, env_states, joint_ids)
+
 
 def joint_deviation_waists(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
-    joint_ids = env.waist_joint_indices
+    if not hasattr(env.extras_buffer, "waist_joint_indices"):
+        env.extras_buffer["waist_joint_indices"] = get_indices_from_substring(
+            env.robot.waist_joints, env.sorted_joint_names
+        ).to(env.device)
+    joint_ids = env.extras_buffer.get("waist_joint_indices")
     return joint_deviation_l1(env, env_states, joint_ids)
 
+
 def joint_deviation_legs(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
-    joint_ids = env.hip_yaw_roll_joint_indices
+    if not hasattr(env.extras_buffer, "hip_yaw_roll_joint_indices"):
+        env.extras_buffer["hip_yaw_roll_joint_indices"] = get_indices_from_substring(
+            env.robot.left_hip_yaw_roll_joints + env.robot.right_hip_yaw_roll_joints,
+            env.sorted_joint_names,
+        ).to(env.device)
+    joint_ids = env.extras_buffer.get("hip_yaw_roll_joint_indices")
     return joint_deviation_l1(env, env_states, joint_ids)
+
 
 def flat_orientation(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
     """Penalize non-flat base orientation using L2 squared kernel.
@@ -122,7 +165,10 @@ def flat_orientation(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
     projected_gravity = quat_rotate_inverse(base_quat, env.gravity_vec)
     return torch.sum(torch.square(projected_gravity[:, :2]), dim=1)
 
-def base_height(env: EnvTypes, env_states: TensorState, target_height: float) -> torch.Tensor:
+
+def base_height(
+    env: EnvTypes, env_states: TensorState, target_height: float
+) -> torch.Tensor:
     """Penalize asset height from its target using L2 squared kernel.
 
     Note:
@@ -132,21 +178,32 @@ def base_height(env: EnvTypes, env_states: TensorState, target_height: float) ->
     # extract the used quantities (to enable type-hinting)
     robot_state = env_states.robots[env.name]
     base_height = robot_state.root_state[:, 2]
-    if False: # height scanner
+    if False:  # height scanner
         sensor: RayCaster = env.scene[sensor_cfg.name]
         # Adjust the target height using the sensor data
-        adjusted_target_height = target_height + torch.mean(sensor.data.ray_hits_w[..., 2], dim=1)
+        adjusted_target_height = target_height + torch.mean(
+            sensor.data.ray_hits_w[..., 2], dim=1
+        )
     else:
         # Use the provided target height directly for flat terrain
         adjusted_target_height = target_height
     # Compute the L2 squared penalty
     return torch.square(base_height - adjusted_target_height)
 
-def feet_gait(env: EnvTypes, env_states: TensorState, period: float, offset: list[float], threshold: float = 0.5) -> torch.Tensor:
+
+def feet_gait(
+    env: EnvTypes,
+    env_states: TensorState,
+    period: float,
+    offset: list[float],
+    threshold: float = 0.5,
+) -> torch.Tensor:
     command_name = "base_velocity"
 
     contact_forces: ContactForces = env_states.extras["contact_forces"][env.name]
-    is_contact = contact_forces.contact_forces[:, env.feet_indices, :].norm(dim=-1) > 1.0
+    is_contact = (
+        contact_forces.contact_forces[:, env.feet_indices, :].norm(dim=-1) > 1.0
+    )
     # contact_sensor = env.handler.contact_sensor
     # is_contact = contact_sensor.data.current_contact_time[:, env.body_ids_reindex][:, env.feet_indices] > 0
 
@@ -167,6 +224,7 @@ def feet_gait(env: EnvTypes, env_states: TensorState, period: float, offset: lis
         reward *= (cmd_norm > 0.1).float()
     return reward
 
+
 def feet_slide(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
     """Penalize feet sliding.
 
@@ -177,7 +235,12 @@ def feet_slide(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
     # Penalize feet sliding
 
     contact_forces: ContactForces = env_states.extras["contact_forces"][env.name]
-    contacts = contact_forces.contact_forces_history[:, :, env.feet_indices, :].norm(dim=-1).max(dim=1)[0] > 1.0
+    contacts = (
+        contact_forces.contact_forces_history[:, :, env.feet_indices, :]
+        .norm(dim=-1)
+        .max(dim=1)[0]
+        > 1.0
+    )
     # contact_sensor = env.handler.contact_sensor
     # contacts = contact_sensor.data.net_forces_w_history[:, :, env.body_ids_reindex, :][:, :, env.feet_indices, :].norm(dim=-1).max(dim=1)[0] > 1.0
 
@@ -185,20 +248,45 @@ def feet_slide(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
     reward = torch.sum(body_vel.norm(dim=-1) * contacts, dim=1)
     return reward
 
-def feet_clearance(env: EnvTypes, env_states: TensorState, target_height: float, std: float, tanh_mult: float) -> torch.Tensor:
+
+def feet_clearance(
+    env: EnvTypes,
+    env_states: TensorState,
+    target_height: float,
+    std: float,
+    tanh_mult: float,
+) -> torch.Tensor:
     """Reward the swinging feet for clearing a specified height off the ground"""
     base = env_states.robots[env.name]
-    foot_z_target_error = torch.square(base.body_state[:, env.feet_indices, 2] - target_height)
-    foot_velocity_tanh = torch.tanh(tanh_mult * torch.norm(base.body_state[:, env.feet_indices, 7:9], dim=2))
+    foot_z_target_error = torch.square(
+        base.body_state[:, env.feet_indices, 2] - target_height
+    )
+    foot_velocity_tanh = torch.tanh(
+        tanh_mult * torch.norm(base.body_state[:, env.feet_indices, 7:9], dim=2)
+    )
     reward = foot_z_target_error * foot_velocity_tanh
     return torch.exp(-torch.sum(reward, dim=1) / std)
 
-def undesired_contacts(env: EnvTypes, env_states: TensorState, threshold: float) -> torch.Tensor:
+
+def undesired_contacts(
+    env: EnvTypes, env_states: TensorState, threshold: float
+) -> torch.Tensor:
     """Penalize undesired contacts as the number of violations that are above a threshold."""
-    without_ankle_mask = torch.ones(size=(len(env.sorted_body_names),), dtype=torch.bool, device=env.device)
+    if not hasattr(env, "ankle_indices"):
+        env.ankle_indices = get_indices_from_substring(
+            env.robot.ankle_links, env.sorted_body_names
+        ).to(env.device)
+    without_ankle_mask = torch.ones(
+        size=(len(env.sorted_body_names),), dtype=torch.bool, device=env.device
+    )
     without_ankle_mask[env.ankle_indices] = False
     contact_forces: ContactForces = env_states.extras["contact_forces"][env.name]
-    is_contact = contact_forces.contact_forces_history[:, :, without_ankle_mask, :].norm(dim=-1).max(dim=1)[0] > threshold
+    is_contact = (
+        contact_forces.contact_forces_history[:, :, without_ankle_mask, :]
+        .norm(dim=-1)
+        .max(dim=1)[0]
+        > threshold
+    )
 
     # without_ankle_mask = torch.ones_like(env.body_ids_reindex, dtype=torch.bool, device=env.device)
     # without_ankle_mask[env.ankle_indices] = False

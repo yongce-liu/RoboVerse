@@ -169,8 +169,7 @@ class LeggedRobotTask(AgentTask):
         # delay = torch.rand((self.num_envs, 1), device=self.device)
         # actions = (1 - delay) * actions.to(self.device) + delay * self.actions
         # clip actions
-        clip_action_limit = self.cfg.normalization.clip_actions
-        actions = torch.clip(actions, -clip_action_limit, clip_action_limit).to(self.device)
+        actions = torch.clip(actions, -self.action_clip, self.action_clip).to(self.device)
 
         # TODO: add the support of multi-embodiments
         # should return actions_list, [List, Action:[str, RobotAction:[...]]]
@@ -286,8 +285,6 @@ class LeggedRobotTask(AgentTask):
         """Reset selected envs (defaults to all)."""
         if env_ids is None:
             env_ids = torch.tensor(list(range(self.num_envs)), device=self.device)
-        if len(env_ids) == 0:
-            return
 
         self.extras["episode"] = {}
         if self.cfg.curriculum.enabled:
@@ -329,7 +326,7 @@ class LeggedRobotTask(AgentTask):
         if actions.ndim == 1:
             actions = actions.unsqueeze(0)
 
-        # actions = self._pre_physics_step(actions)
+        actions = self._pre_physics_step(actions)
         self.actions[:] = actions.clip(-self.action_clip, self.action_clip).clone()
         env_states = self.get_states()
         for _ in range(self.decimation):
@@ -355,12 +352,13 @@ class LeggedRobotTask(AgentTask):
 
         # gym-style return values
         self.time_out_buf[:] = self._time_out(env_states)
-        self.reset_buf[:] = self._terminated(env_states)
+        self.reset_buf[:] = torch.logical_or(self.time_out_buf, self._terminated(env_states))
         self.rew_buf[:] = self._reward(env_states)
 
         # reset envs
         reset_env_idx = self.reset_buf.nonzero(as_tuple=False).flatten().tolist()
-        self.reset(env_ids=reset_env_idx)
+        if len(reset_env_idx) > 0:
+            self.reset(env_ids=reset_env_idx)
 
         self.commands_manager.resample(self)
         for _step_fn, _params in self._step_callbacks.values():

@@ -89,6 +89,7 @@ def push_by_setting_velocity(
     if len(push_env_ids) == 0:
         return
     velocity_range = torch.tensor(velocity_range, device=env.device)
+    # env_states = env.get_states()
     env_states.robots[env.name].root_state[push_env_ids, 7:10] += sample_uniform(
         velocity_range[0], velocity_range[1], (len(push_env_ids), 3), device=env.device
     )

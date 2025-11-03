@@ -38,6 +38,7 @@ class AgentTask(RLTaskEnv):
         self.extras: dict[str, Any] = {}
         self._default_env_states = deepcopy(self._initial_states)
         self.setup_initial_env_states = deepcopy(self._initial_states)
+        self.extras_buffer: dict[str, any] = {}
 
         # Callbacks
         self._bind_callbacks(callbacks=_callbacks_cfg)
