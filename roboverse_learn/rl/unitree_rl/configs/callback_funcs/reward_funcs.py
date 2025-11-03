@@ -126,7 +126,7 @@ def joint_deviation_l1(
 
 
 def joint_deviation_arms(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
-    if not hasattr(env.extras_buffer, "arm_joint_indices"):
+    if "arm_joint_indices" not in env.extras_buffer:
         env.extras_buffer["arm_joint_indices"] = get_indices_from_substring(
             env.robot.arm_joints, env.sorted_joint_names
         ).to(env.device)
@@ -135,7 +135,7 @@ def joint_deviation_arms(env: EnvTypes, env_states: TensorState) -> torch.Tensor
 
 
 def joint_deviation_waists(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
-    if not hasattr(env.extras_buffer, "waist_joint_indices"):
+    if "waist_joint_indices" not in env.extras_buffer:
         env.extras_buffer["waist_joint_indices"] = get_indices_from_substring(
             env.robot.waist_joints, env.sorted_joint_names
         ).to(env.device)
@@ -144,7 +144,7 @@ def joint_deviation_waists(env: EnvTypes, env_states: TensorState) -> torch.Tens
 
 
 def joint_deviation_legs(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
-    if not hasattr(env.extras_buffer, "hip_yaw_roll_joint_indices"):
+    if "hip_yaw_roll_joint_indices" not in env.extras_buffer:
         env.extras_buffer["hip_yaw_roll_joint_indices"] = get_indices_from_substring(
             env.robot.left_hip_yaw_roll_joints + env.robot.right_hip_yaw_roll_joints,
             env.sorted_joint_names,
@@ -197,7 +197,7 @@ def feet_gait(
     offset: list[float],
     threshold: float = 0.5,
 ) -> torch.Tensor:
-    if not hasattr(env.extras_buffer, "feet_indices"):
+    if "feet_indices" not in env.extras_buffer:
         env.extras_buffer["feet_indices"] = get_indices_from_substring(
             env.robot.feet_links, env.sorted_body_names
         ).to(env.device)
@@ -241,7 +241,7 @@ def feet_slide(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
     agent is penalized only when the feet are in contact with the ground.
     """
     # Penalize feet sliding
-    if not hasattr(env.extras_buffer, "feet_indices"):
+    if "feet_indices" not in env.extras_buffer:
         env.extras_buffer["feet_indices"] = get_indices_from_substring(
             env.robot.feet_links, env.sorted_body_names
         ).to(env.device)
@@ -273,7 +273,7 @@ def feet_clearance(
     tanh_mult: float,
 ) -> torch.Tensor:
     """Reward the swinging feet for clearing a specified height off the ground"""
-    if not hasattr(env.extras_buffer, "feet_indices"):
+    if "feet_indices" not in env.extras_buffer:
         env.extras_buffer["feet_indices"] = get_indices_from_substring(
             env.robot.feet_links, env.sorted_body_names
         ).to(env.device)
@@ -293,14 +293,14 @@ def undesired_contacts(
     env: EnvTypes, env_states: TensorState, threshold: float
 ) -> torch.Tensor:
     """Penalize undesired contacts as the number of violations that are above a threshold."""
-    if not hasattr(env, "ankle_indices"):
-        env.ankle_indices = get_indices_from_substring(
+    if "ankle_indices" not in env.extras_buffer:
+        env.extras_buffer["ankle_indices"] = get_indices_from_substring(
             env.robot.ankle_links, env.sorted_body_names
         ).to(env.device)
     without_ankle_mask = torch.ones(
         size=(len(env.sorted_body_names),), dtype=torch.bool, device=env.device
     )
-    without_ankle_mask[env.ankle_indices] = False
+    without_ankle_mask[env.extras_buffer["ankle_indices"]] = False
     contact_forces: ContactForces = env_states.extras["contact_forces"][env.name]
     is_contact = (
         contact_forces.contact_forces_history[:, :, without_ankle_mask, :]

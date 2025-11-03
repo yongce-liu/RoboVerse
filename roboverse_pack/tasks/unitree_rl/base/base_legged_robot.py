@@ -57,11 +57,7 @@ class LeggedRobotTask(AgentTask):
         self.common_step_counter = 0
         self.max_episode_steps = math.ceil(self.cfg.episode_length_s / self.step_dt)
         self.commands_manager = self.cfg.commands
-        # self.command_ranges = self.cfg.commands.ranges
-        # self.num_commands = self.cfg.commands.num_commands
-        # self.reward_scales = dict(sorted(class_to_dict(self.cfg.rewards.scales).items(), key=lambda x: x[0]))
         self.reward_scales = class_to_dict(self.cfg.rewards.scales)
-        # self.command_ranges = class_to_dict(self.cfg.commands.ranges)
 
     def _init_joint_cfg(self):
         """Parse default joint positions and torque limits from cfg."""
@@ -323,7 +319,7 @@ class LeggedRobotTask(AgentTask):
 
     def _post_physics_step(self, env_states: TensorState):
         self._episode_steps += 1
-        self.common_step_counter = (self.common_step_counter + 1) % self.max_episode_steps
+        self.common_step_counter += 1
 
         # gym-style return values
         self.time_out_buf[:] = self._time_out(env_states)
