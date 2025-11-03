@@ -10,9 +10,11 @@ from metasim.scenario.simulator_params import SimParamCfg
 from metasim.task.registry import register_task
 from metasim.types import TensorState
 from metasim.utils.math import quat_rotate_inverse
-from roboverse_learn.rl.unitree_rl.configs import SensorsCfg
-from roboverse_learn.rl.unitree_rl.configs.locomotion.walk_g1_dof12 import WalkG1Dof12EnvCfg, WalkG1Dof12RslRlTrainCfg
-from roboverse_pack.tasks.unitree_rl.base.base_humanoid import HumanoidTask
+from roboverse_learn.rl.unitree_rl.configs.locomotion.walk_g1_dof12 import (
+    WalkG1Dof12EnvCfg,
+    WalkG1Dof12RslRlTrainCfg,
+)
+from roboverse_pack.tasks.unitree_rl.base import LeggedRobotTask
 
 
 @register_task(
@@ -20,12 +22,11 @@ from roboverse_pack.tasks.unitree_rl.base.base_humanoid import HumanoidTask
     "g1.walk_g1_dof12",
     "walk_g1_dof12",
 )
-class WalkG1Dof12Task(HumanoidTask):
+class WalkG1Dof12Task(LeggedRobotTask):
     """Registered task wrapper with scenario defaults and cfg hooks."""
 
     env_cfg_cls = WalkG1Dof12EnvCfg
     train_cfg_cls = WalkG1Dof12RslRlTrainCfg
-    sensors_cls = SensorsCfg
     task_name = "walk_g1_dof12"
 
     scenario = ScenarioCfg(
@@ -65,13 +66,9 @@ class WalkG1Dof12Task(HumanoidTask):
         scenario: ScenarioCfg | None = None,
         device: str | torch.device | None = None,
         env_cfg: WalkG1Dof12EnvCfg | None = None,
-        sensors: SensorsCfg | dict | None = None,
     ) -> None:
         scenario_copy = copy.deepcopy(scenario or type(self).scenario)
         scenario_copy.__post_init__()
-
-        if sensors is None:
-            sensors = type(self).sensors_cls() if callable(type(self).sensors_cls) else type(self).sensors_cls
 
         if env_cfg is None:
             env_cfg = type(self).env_cfg_cls()
@@ -79,30 +76,43 @@ class WalkG1Dof12Task(HumanoidTask):
         if device is None:
             device = "cpu" if scenario_copy.simulator == "mujoco" else ("cuda" if torch.cuda.is_available() else "cpu")
 
-        super().__init__(scenario=scenario_copy, config=env_cfg, sensors=sensors, device=device)
+        super().__init__(scenario=scenario_copy, config=env_cfg, device=device)
 
     def _init_buffers(self):
-        self.noise_scale_vec = self._get_noise_scale_vec()
+        # commands + base_ang_vel + projected_gravity + dof pos/vel/prev actions + gait phase
+        self.num_obs_single = 3 + 3 + 3 + self.num_actions * 3 + 2
+        # commands + base_lin_vel + base_ang_vel + projected_gravity + dof pos/vel/prev actions + gait phase
+        self.num_priv_obs_single = 3 + 3 + 3 + 3 + self.num_actions * 3 + 2
+        # Rewrite SOME Hyfer-Parameters
+        self.obs_clip_limit = 100.0
+        self.obs_scale = torch.ones(size=(self.num_obs_single,), dtype=torch.float, device=self.device)
+        self.priv_obs_scale = torch.ones(size=(self.num_priv_obs_single,), dtype=torch.float, device=self.device)
+        self.obs_noise = torch.zeros(size=(self.num_obs_single,), dtype=torch.float, device=self.device)
+
+        ##################### for observation scale #####################
+        self.obs_scale[3:6] = 0.25  # angular velocity
+        self.obs_scale[9 + self.num_actions : 9 + 2 * self.num_actions] = 0.05  # joint velocity
+
+        ##################### for priviliged observation scale #####################
+        self.priv_obs_scale[6:9] = 0.25  # angular velocity
+        self.priv_obs_scale[12 + self.num_actions : 12 + 2 * self.num_actions] = 1.5  # joint velocity
+
+        ################### for noise vector ####################
+        # [0:3] -> commands
+        self.obs_noise[3:6] = 0.2  # [3:6] -> base_ang_vel
+        self.obs_noise[6:9] = 0.05  # projected_gravity
+        self.obs_noise[9 : 9 + self.num_actions] = 0.01
+        self.obs_noise[9 + self.num_actions : 9 + 2 * self.num_actions] = 1.5  # joint velocities
         return super()._init_buffers()
 
-    def _get_noise_scale_vec(self):
-        noise_vec = torch.zeros(size=(47,), dtype=torch.float, device=self.device)
-        self.add_noise = self.cfg.noise.add_noise
-        noise_scales = self.cfg.noise.scales
-        noise_level = self.cfg.noise.noise_level
-        noise_vec[:3] = noise_scales.ang_vel * noise_level * self.cfg.normalization.obs_scales.ang_vel
-        noise_vec[3:6] = noise_scales.gravity * noise_level
-        noise_vec[6:9] = 0.0  # commands
-        noise_vec[9 : 9 + self.num_actions] = (
-            noise_scales.dof_pos * noise_level * self.cfg.normalization.obs_scales.dof_pos
-        )
-        noise_vec[9 + self.num_actions : 9 + 2 * self.num_actions] = (
-            noise_scales.dof_vel * noise_level * self.cfg.normalization.obs_scales.dof_vel
-        )
-        noise_vec[9 + 2 * self.num_actions : 9 + 3 * self.num_actions] = 0.0  # previous actions
-        noise_vec[9 + 3 * self.num_actions : 9 + 3 * self.num_actions + 2] = 0.0  # sin/cos phase
+    def gait_phase(self, period: float = 0.8) -> torch.Tensor:
+        """Compute gait phase based on episode length buffer."""
+        global_phase = (self._episode_steps * self.step_dt) % period / period
 
-        return noise_vec
+        phase = torch.zeros(self.num_envs, 2, device=self.device)
+        phase[:, 0] = torch.sin(global_phase * torch.pi * 2.0)
+        phase[:, 1] = torch.cos(global_phase * torch.pi * 2.0)
+        return phase
 
     def _compute_task_observations(self, env_states: TensorState):
         robot_state = env_states.robots[self.name]
@@ -111,44 +121,42 @@ class WalkG1Dof12Task(HumanoidTask):
         base_ang_vel = quat_rotate_inverse(base_quat, robot_state.root_state[:, 10:13])
         projected_gravity = quat_rotate_inverse(base_quat, self.gravity_vec)
 
-        phase = self.get_phase()
-        sin_phase = torch.sin(2 * torch.pi * phase).unsqueeze(1)
-        cos_phase = torch.cos(2 * torch.pi * phase).unsqueeze(1)
+        gait_phase = self.gait_phase()
 
-        q = (env_states.robots[self.name].joint_pos - self.default_dof_pos) * self.cfg.normalization.obs_scales.dof_pos
-        dq = env_states.robots[self.name].joint_vel * self.cfg.normalization.obs_scales.dof_vel
+        q = env_states.robots[self.name].joint_pos - self.default_dof_pos
+        dq = env_states.robots[self.name].joint_vel
 
         obs_buf = torch.cat(
             (
-                base_ang_vel * self.cfg.normalization.obs_scales.ang_vel,  # 3
+                self.commands_manager.value,  # 3
+                base_ang_vel,  # 3
                 projected_gravity,  # 3
-                self.commands[:, :3] * self.commands_scale,  # 3
                 q,  # num_actions
                 dq,  # num_actions
                 self.actions,  # num_actions
-                sin_phase,  # 1
-                cos_phase,  # 1
+                gait_phase,
             ),
             dim=-1,
         )
-
-        # add noise if needed
-        if self.add_noise:
-            obs_buf += (2 * torch.rand_like(obs_buf) - 1) * self.noise_scale_vec
 
         priv_obs_buf = torch.cat(
             (
-                base_lin_vel * self.cfg.normalization.obs_scales.lin_vel,
-                base_ang_vel * self.cfg.normalization.obs_scales.ang_vel,
+                self.commands_manager.value,
+                base_lin_vel,
+                base_ang_vel,
                 projected_gravity,
-                self.commands[:, :3] * self.commands_scale,
                 q,  # num_actions
                 dq,  # num_actions
                 self.actions,
-                sin_phase,
-                cos_phase,
+                gait_phase,
             ),
             dim=-1,
         )
+
+        obs_buf += (2 * torch.rand_like(obs_buf) - 1) * self.obs_noise
+
+        # clip observations -> scale observations
+        obs_buf = obs_buf.clip(-self.obs_clip_limit, self.obs_clip_limit) * self.obs_scale
+        priv_obs_buf = priv_obs_buf.clip(-self.obs_clip_limit, self.obs_clip_limit) * self.priv_obs_scale
 
         return obs_buf, priv_obs_buf

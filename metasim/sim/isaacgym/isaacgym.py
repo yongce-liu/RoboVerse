@@ -27,13 +27,9 @@ from metasim.scenario.objects import (
     RigidObjCfg,
     _FileBasedMixin,
 )
-
-# FIXME: fix this
-# from metasim.scenario.randomization import FrictionRandomCfg, MassRandomCfg
 from metasim.scenario.scenario import ScenarioCfg
 from metasim.sim import BaseSimHandler
 from metasim.types import Action, DictEnvState
-from metasim.utils.dict import class_to_dict
 from metasim.utils.state import CameraState, ObjectState, RobotState, TensorState
 
 # TODO: add it to the randomization of metasim
@@ -527,7 +523,7 @@ class IsaacgymHandler(BaseSimHandler):
         # get object and robot asset
         obj_assets_list = [self._load_object_asset(obj) for obj in self.objects]
         robot_asset, robot_dof_props = self._load_robot_assets()
-        robot_rigid_shape_props_asset = self.gym.get_asset_rigid_shape_properties(robot_asset)
+        # robot_rigid_shape_props_asset = self.gym.get_asset_rigid_shape_properties(robot_asset)
 
         #### Joint Info ####
         for art_obj_name, art_obj_joint_dict in self._articulated_joint_dict_dict.items():
@@ -681,8 +677,12 @@ class IsaacgymHandler(BaseSimHandler):
 
             self._env_rigid_body_global_indices[-1]["robot"] = robot_rigid_body_indices
 
+            # NOTE
             # domain randomization for robots
-            # FIXME: add domain randomization with new API
+            # please refer to
+            # roboverse_learn.rl.unitree_rl.config.cfg_randomizer
+            # for material and mass randomization for isaacgym and isaacsim
+
             # self.rand_rigid_body_fric(self.scenario.random.friction, i, robot_rigid_shape_props_asset)
             # robot_body_props = self.gym.get_actor_rigid_body_properties(env, robot_handle)
             # self.rand_rigid_body_mass(self.scenario.random.mass, i, robot_body_props)
@@ -1161,35 +1161,6 @@ class IsaacgymHandler(BaseSimHandler):
 
     def _get_joint_ids_reindex(self, obj_name: str) -> list[int]:
         return [self._joint_info[obj_name]["global_indices"][jn] for jn in self._get_joint_names(obj_name)]
-
-    def rand_rigid_body_fric(self, cfg, env_id: int, props: list[gymapi.RigidShapeProperties]):
-        """Randomize the friction of the rigid bodies."""
-        if not cfg.enabled:
-            return
-        if not hasattr(self, "_rand_fric_dist"):
-            params_dict = class_to_dict(cfg)
-            params_dict["num_envs"] = self.num_envs
-            params_dict["device"] = self.device
-            dist_fn = cfg.dist_fn
-            self._rand_fric_dist = dist_fn(params_dict)
-        # TODO: add rigid body id index
-        for s in range(len(props)):
-            props[s].friction = self._rand_fric_dist[env_id]
-        return props
-
-    def rand_rigid_body_mass(self, cfg, env_id: int, props: list[gymapi.RigidBodyProperties]):
-        """Randomize the base mass."""
-        if not cfg.enabled:
-            return
-        if not hasattr(self, "_rand_mass_dist"):
-            params_dict = class_to_dict(cfg)
-            params_dict["num_envs"] = self.num_envs
-            params_dict["device"] = self.device
-            dist_fn = cfg.dist_fn
-            self._rand_mass_dist = dist_fn(params_dict)
-        # TODO: add rigid body id index
-        props[0].mass += self._rand_mass_dist[env_id]
-        return props
 
     def _add_ground(self, if_random: bool = False):
         if if_random:

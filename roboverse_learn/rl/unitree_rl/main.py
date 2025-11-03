@@ -16,7 +16,7 @@ import torch
 from metasim.scenario.scenario import ScenarioCfg
 from metasim.task.registry import get_task_class
 
-from roboverse_pack.tasks.unitree_rl.base import EnvTypes
+from roboverse_pack.tasks.unitree_rl.base.types import EnvTypes
 from roboverse_learn.rl.unitree_rl.helper import (get_args, make_objects, get_log_dir,
                                                   make_robots, set_seed, get_load_path,
                                                   PolicyExporterLSTM, export_policy_as_jit,
@@ -60,7 +60,6 @@ def prepare(args):
 
     return master_runner
 
-
 def play(args):
     master_runner = prepare(args)
     name_0 = list(master_runner.runners.keys())[0]
@@ -79,13 +78,8 @@ def play(args):
     envwrapper_0: EnvWrapperTypes = runner_0.env_wrapper
     cfg_0 = env_0.cfg
 
-    cfg_0.commands.curriculum = False
+    cfg_0.curriculum.enabled = False
     cfg_0.commands.resampling_time = 1e6  # effectively disable command changes
-    cfg_0.domain_rand.randomize_friction = False
-    cfg_0.domain_rand.randomize_base_mass = False
-    cfg_0.domain_rand.randomize_initial_state = False
-    cfg_0.domain_rand.push_robots = False
-    cfg_0.noise.add_noise = False
 
     # export jit policy
     export_jit_path = get_export_jit_path(get_log_dir(task_name=master_runner.task_name, now=args.resume), master_runner.scenario)
@@ -106,10 +100,9 @@ def play(args):
 
     for i in range(1000000):
         # set fixed command
-        env_0.commands[:, 0] = 0.5
-        env_0.commands[:, 1] = 0.0
-        env_0.commands[:, 2] = 0.0
-        env_0.commands[:, 3] = 0.0
+        env_0.commands_manager.value[:, 0] = 0.5
+        env_0.commands_manager.value[:, 1] = 0.0
+        env_0.commands_manager.value[:, 2] = 0.0
         actions = policy_0(obs)
         obs, _, _, _ = envwrapper_0.step(actions)
 

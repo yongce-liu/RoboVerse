@@ -11,10 +11,9 @@ import sys
 import torch
 
 from metasim.scenario.scenario import ScenarioCfg
-from roboverse_learn.rl.unitree_rl.configs import SensorsCfg
 from roboverse_learn.rl.unitree_rl.configs.cfg_base import BaseEnvCfg
 from roboverse_learn.rl.unitree_rl.helper import get_class, get_log_dir, get_load_path
-from roboverse_pack.tasks.unitree_rl.base import EnvTypes
+from roboverse_pack.tasks.unitree_rl.base.types import EnvTypes
 
 
 class BaseRunnerWrapper:
@@ -53,7 +52,6 @@ class MasterRunner:
 
         env_cfg_cls: Type[BaseEnvCfg] = getattr(task_cls, "env_cfg_cls", BaseEnvCfg)
         train_cfg_cls = getattr(task_cls, "train_cfg_cls", None)
-        sensors_cls = getattr(task_cls, "sensors_cls", SensorsCfg)
         runner_cls = get_class(lib_name, suffix="Wrapper", library="roboverse_learn.rl.unitree_rl.runners")
 
         module = sys.modules[task_cls.__module__]
@@ -74,12 +72,10 @@ class MasterRunner:
                 )
 
             env_cfg = env_cfg_cls()
-            sensors = sensors_cls() if callable(sensors_cls) else sensors_cls
             env: EnvTypes = task_cls(
                 scenario=scenario_copy,
                 device=resolved_device,
                 env_cfg=env_cfg,
-                sensors=sensors,
             )
 
             train_cfg = train_cfg_cls() if callable(train_cfg_cls) else train_cfg_cls

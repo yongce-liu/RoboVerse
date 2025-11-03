@@ -10,7 +10,7 @@ import torch
 from metasim.scenario.scenario import ScenarioCfg
 from metasim.task.rl_task import RLTaskEnv
 from metasim.types import Action, Reward, TensorState
-from roboverse_learn.rl.unitree_rl.configs import SensorsCfg
+from roboverse_learn.rl.unitree_rl.configs.cfg_base import BaseEnvCfg, CallbacksCfg
 
 
 class AgentTask(RLTaskEnv):
@@ -19,48 +19,58 @@ class AgentTask(RLTaskEnv):
     def __init__(
         self,
         scenario: ScenarioCfg,
-        config: Any,
-        sensors: SensorsCfg | dict | None = None,
+        config: Any | BaseEnvCfg,
         device: str | torch.device | None = None,
     ) -> None:
         self.cfg = config
-        self._sensor_cfg = sensors
-        self.extras: dict[str, Any] = {}
+        _callbacks_cfg = asdict(getattr(self.cfg, "callbacks", CallbacksCfg()))
+        self._query: dict = _callbacks_cfg.pop("query", {})
+        super().__init__(scenario=scenario, device=device)
 
         # buffers will be allocated lazily once handler is available
         self.obs_buf_queue: deque[torch.Tensor] | None = None
         self.priv_obs_buf_queue: deque[torch.Tensor] | None = None
         self.actions: torch.Tensor | None = None
-        self.torques: torch.Tensor | None = None
+        # self.torques: torch.Tensor | None = None
         self.rew_buf: torch.Tensor | None = None
         self.reset_buf: torch.Tensor | None = None
-        self.time_out_buf: torch.Tensor | None = None
+        # self.time_out_buf: torch.Tensor | None = None
+        self.extras: dict[str, Any] = {}
+        self._default_env_states = deepcopy(self._initial_states)
+        self.setup_initial_env_states = deepcopy(self._initial_states)
+        self.extras_buffer: dict[str, any] = {}
 
-        self._initial_state_specs_cache: list[dict] | None = None
+        # Callbacks
+        self._bind_callbacks(callbacks=_callbacks_cfg)
 
-        super().__init__(scenario=scenario, device=device)
+    def _bind_callbacks(self, callbacks: dict | None = None):
+        for _callbacks in callbacks.values():
+            for _key, _val in _callbacks.items():
+                if not isinstance(_val, tuple):
+                    assert callable(_val) or isinstance(_val, object)
+                    _callbacks[_key] = (_val, {})
+                if hasattr(_callbacks[_key][0], "bind_handler"):
+                    _callbacks[_key][0].bind_handler(self.handler)
 
-        self._initial_states_default = deepcopy(self._initial_states)
-        self.name = self.robot.name if hasattr(self, "robot") else getattr(self, "name", None)
+        _setup_callbacks = callbacks.pop("setup", {})
+        for _setup_fn, _params in _setup_callbacks.values():
+            _setup_fn(**_params)  ## call itself
+        self._reset_callbacks = callbacks.pop("reset", {})
+        assert isinstance(self._reset_callbacks, dict)
+        self._step_callbacks = callbacks.pop("step", {})
+        assert isinstance(self._step_callbacks, dict)
+        self._terminate_callbacks = callbacks.pop("terminate", {})
+        assert isinstance(self._terminate_callbacks, dict)
 
     # ------------------------------------------------------------------ #
     # RLTaskEnv hooks
     # ------------------------------------------------------------------ #
-    def _build_initial_state_specs(self) -> list[dict]:
-        """Return per-env dict used to seed simulator (override in subclasses)."""
+    def _get_initial_states(self):
         raise NotImplementedError
-
-    def _get_initial_states(self) -> list[dict]:
-        self._initial_state_specs_cache = self._build_initial_state_specs()
-        return self._initial_state_specs_cache
 
     def _extra_spec(self) -> dict:
         """Expose optional sensor queries to the simulator handler."""
-        if self._sensor_cfg is None:
-            return {}
-        if isinstance(self._sensor_cfg, dict):
-            return self._sensor_cfg
-        return asdict(self._sensor_cfg)
+        return self._query
 
     # ------------------------------------------------------------------ #
     # Helpers
@@ -88,6 +98,14 @@ class AgentTask(RLTaskEnv):
     def _time_out(self, env_states: TensorState | None) -> torch.BoolTensor:
         raise NotImplementedError
 
+    def _observation(self, env_states):
+        # return super()._observation(env_states) --- IGNORE ---
+        pass
+
+    def _privileged_observation(self, env_states):
+        # return super()._privileged_observation(env_states) --- IGNORE ---
+        pass
+
     # ------------------------------------------------------------------ #
     # Observation utilities
     # ------------------------------------------------------------------ #
@@ -104,3 +122,8 @@ class AgentTask(RLTaskEnv):
         if self.priv_obs_buf_queue is None or len(self.priv_obs_buf_queue) == 0:
             raise RuntimeError("Privileged observation buffer not initialized.")
         return torch.cat(list(self.priv_obs_buf_queue), dim=1)
+
+    @property
+    def default_env_states(self) -> TensorState:
+        """Initial environment states used for resets."""
+        return self._default_env_states
