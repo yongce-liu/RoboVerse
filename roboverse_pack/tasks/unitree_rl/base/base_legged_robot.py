@@ -12,7 +12,6 @@ from metasim.utils.state import TensorState
 from roboverse_learn.rl.unitree_rl.configs.cfg_base import BaseEnvCfg
 from roboverse_learn.rl.unitree_rl.helper import (
     get_axis_params,
-    get_indices_from_substring,
     get_reward_fn,
     pattern_match,
 )
@@ -38,7 +37,6 @@ class LeggedRobotTask(AgentTask):
         self.sorted_joint_names = self.handler.get_joint_names(self.name, sort=True)
 
         self._instantiate_cfg(self.cfg)
-        self._init_rigid_body_indices()
         self._init_joint_cfg()
         self._init_reward_function()
         self._init_buffers()
@@ -64,29 +62,6 @@ class LeggedRobotTask(AgentTask):
         # self.reward_scales = dict(sorted(class_to_dict(self.cfg.rewards.scales).items(), key=lambda x: x[0]))
         self.reward_scales = class_to_dict(self.cfg.rewards.scales)
         # self.command_ranges = class_to_dict(self.cfg.commands.ranges)
-
-    def _init_rigid_body_indices(self):
-        """Parse rigid body indices from robot cfg."""
-        robot: G1Dof12Cfg | Go2Cfg = self.robot
-        sorted_body_names: list[str] = self.sorted_body_names
-
-        self.feet_indices = get_indices_from_substring(robot.feet_links, sorted_body_names).to(self.device)
-        self.penalised_contact_indices = get_indices_from_substring(
-            robot.penalized_contacts_links, sorted_body_names
-        ).to(self.device)
-        # ##########################################################
-        # if self.handler.scenario.simulator in ["isaacgym", "mujoco"]:
-        #     self.body_ids_reindex = self.handler._get_body_ids_reindex(self.name)
-        # elif self.handler.scenario.simulator == "isaacsim":
-        #     sorted_body_names = self.handler.get_body_names(self.name, True)
-        #     self.body_ids_reindex = torch.tensor(
-        #         [self.handler.contact_sensor.body_names.index(name) for name in sorted_body_names],
-        #         dtype=torch.int,
-        #         device=self.handler.device,
-        #     )
-        # else:
-        #     raise NotImplementedError(f"Simulator handler {self.handler} not supported.")
-        # ################################################################
 
     def _init_joint_cfg(self):
         """Parse default joint positions and torque limits from cfg."""

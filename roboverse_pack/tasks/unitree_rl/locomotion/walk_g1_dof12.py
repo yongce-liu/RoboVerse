@@ -14,7 +14,7 @@ from roboverse_learn.rl.unitree_rl.configs.locomotion.walk_g1_dof12 import (
     WalkG1Dof12EnvCfg,
     WalkG1Dof12RslRlTrainCfg,
 )
-from roboverse_pack.tasks.unitree_rl.base.base_humanoid import HumanoidTask
+from roboverse_pack.tasks.unitree_rl.base import LeggedRobotTask
 
 
 @register_task(
@@ -22,7 +22,7 @@ from roboverse_pack.tasks.unitree_rl.base.base_humanoid import HumanoidTask
     "g1.walk_g1_dof12",
     "walk_g1_dof12",
 )
-class WalkG1Dof12Task(HumanoidTask):
+class WalkG1Dof12Task(LeggedRobotTask):
     """Registered task wrapper with scenario defaults and cfg hooks."""
 
     env_cfg_cls = WalkG1Dof12EnvCfg

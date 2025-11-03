@@ -126,7 +126,6 @@ def joint_deviation_l1(
 
 
 def joint_deviation_arms(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
-
     if not hasattr(env.extras_buffer, "arm_joint_indices"):
         env.extras_buffer["arm_joint_indices"] = get_indices_from_substring(
             env.robot.arm_joints, env.sorted_joint_names
@@ -198,14 +197,21 @@ def feet_gait(
     offset: list[float],
     threshold: float = 0.5,
 ) -> torch.Tensor:
+    if not hasattr(env.extras_buffer, "feet_indices"):
+        env.extras_buffer["feet_indices"] = get_indices_from_substring(
+            env.robot.feet_links, env.sorted_body_names
+        ).to(env.device)
     command_name = "base_velocity"
 
     contact_forces: ContactForces = env_states.extras["contact_forces"][env.name]
     is_contact = (
-        contact_forces.contact_forces[:, env.feet_indices, :].norm(dim=-1) > 1.0
+        contact_forces.contact_forces[:, env.extras_buffer["feet_indices"], :].norm(
+            dim=-1
+        )
+        > 1.0
     )
     # contact_sensor = env.handler.contact_sensor
-    # is_contact = contact_sensor.data.current_contact_time[:, env.body_ids_reindex][:, env.feet_indices] > 0
+    # is_contact = contact_sensor.data.current_contact_time[:, env.body_ids_reindex][:, env.extras_buffer["feet_indices"]] > 0
 
     global_phase = ((env._episode_steps * env.step_dt) % period / period).unsqueeze(1)
     phases = []
@@ -215,7 +221,7 @@ def feet_gait(
     leg_phase = torch.cat(phases, dim=-1)
 
     reward = torch.zeros(env.num_envs, dtype=torch.float, device=env.device)
-    for i in range(len(env.feet_indices)):
+    for i in range(len(env.extras_buffer["feet_indices"])):
         is_stance = leg_phase[:, i] < threshold
         reward += ~(is_stance ^ is_contact[:, i])
 
@@ -233,18 +239,26 @@ def feet_slide(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
     agent is penalized only when the feet are in contact with the ground.
     """
     # Penalize feet sliding
+    if not hasattr(env.extras_buffer, "feet_indices"):
+        env.extras_buffer["feet_indices"] = get_indices_from_substring(
+            env.robot.feet_links, env.sorted_body_names
+        ).to(env.device)
 
     contact_forces: ContactForces = env_states.extras["contact_forces"][env.name]
     contacts = (
-        contact_forces.contact_forces_history[:, :, env.feet_indices, :]
+        contact_forces.contact_forces_history[
+            :, :, env.extras_buffer["feet_indices"], :
+        ]
         .norm(dim=-1)
         .max(dim=1)[0]
         > 1.0
     )
     # contact_sensor = env.handler.contact_sensor
-    # contacts = contact_sensor.data.net_forces_w_history[:, :, env.body_ids_reindex, :][:, :, env.feet_indices, :].norm(dim=-1).max(dim=1)[0] > 1.0
+    # contacts = contact_sensor.data.net_forces_w_history[:, :, env.body_ids_reindex, :][:, :, env.extras_buffer["feet_indices"], :].norm(dim=-1).max(dim=1)[0] > 1.0
 
-    body_vel = env_states.robots[env.name].body_state[:, env.feet_indices, :2]
+    body_vel = env_states.robots[env.name].body_state[
+        :, env.extras_buffer["feet_indices"], :2
+    ]
     reward = torch.sum(body_vel.norm(dim=-1) * contacts, dim=1)
     return reward
 
@@ -257,12 +271,17 @@ def feet_clearance(
     tanh_mult: float,
 ) -> torch.Tensor:
     """Reward the swinging feet for clearing a specified height off the ground"""
+    if not hasattr(env.extras_buffer, "feet_indices"):
+        env.extras_buffer["feet_indices"] = get_indices_from_substring(
+            env.robot.feet_links, env.sorted_body_names
+        ).to(env.device)
     base = env_states.robots[env.name]
     foot_z_target_error = torch.square(
-        base.body_state[:, env.feet_indices, 2] - target_height
+        base.body_state[:, env.extras_buffer["feet_indices"], 2] - target_height
     )
     foot_velocity_tanh = torch.tanh(
-        tanh_mult * torch.norm(base.body_state[:, env.feet_indices, 7:9], dim=2)
+        tanh_mult
+        * torch.norm(base.body_state[:, env.extras_buffer["feet_indices"], 7:9], dim=2)
     )
     reward = foot_z_target_error * foot_velocity_tanh
     return torch.exp(-torch.sum(reward, dim=1) / std)

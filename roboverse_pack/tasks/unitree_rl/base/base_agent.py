@@ -53,8 +53,8 @@ class AgentTask(RLTaskEnv):
                     _callbacks[_key][0].bind_handler(self.handler)
 
         _setup_callbacks = callbacks.pop("setup", {})
-        for _key, _val in _setup_callbacks.items():
-            _val[0](**_val[1])  ## call itself
+        for _setup_fn, _params in _setup_callbacks.values():
+            _setup_fn(**_params)  ## call itself
         self._reset_callbacks = callbacks.pop("reset", {})
         assert isinstance(self._reset_callbacks, dict)
         self._step_callbacks = callbacks.pop("step", {})
