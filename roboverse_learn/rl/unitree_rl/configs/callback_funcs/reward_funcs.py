@@ -205,9 +205,11 @@ def feet_gait(
 
     contact_forces: ContactForces = env_states.extras["contact_forces"][env.name]
     is_contact = (
-        contact_forces.contact_forces[:, env.extras_buffer["feet_indices"], :].norm(
-            dim=-1
-        )
+        contact_forces.contact_forces_history[
+            :, :, env.extras_buffer["feet_indices"], :
+        ]
+        .norm(dim=-1)
+        .max(dim=1)[0]
         > 1.0
     )
     # contact_sensor = env.handler.contact_sensor
