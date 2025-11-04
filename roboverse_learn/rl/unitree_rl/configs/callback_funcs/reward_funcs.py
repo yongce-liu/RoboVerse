@@ -110,7 +110,8 @@ def energy(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
     """Sum |qdot|*|tau| across joints (\"energy\" usage)."""
     base = env_states.robots[env.name]
     qvel = base.joint_vel
-    qfrc = env.torques # TODO: wait isaacsim handler complete dof_torques in robot_state
+    qfrc = base.joint_effort_target
+    # qfrc = env.torques # TODO: wait isaacsim handler complete dof_torques in robot_state
     return torch.sum(torch.abs(qvel) * torch.abs(qfrc), dim=-1)
 
 
@@ -195,34 +196,34 @@ def feet_gait(
     # contact_sensor = env.handler.contact_sensor
     # is_contact = contact_sensor.data.current_contact_time[:, env.body_ids_reindex][:, env.extras_buffer[bodies_key]] > 0
 
-    # #### Implemention 2: using sine wave phase
-    global_phase = (env._episode_steps * env.step_dt) % period / period
-    sin_pos = torch.sin(2 * torch.pi * global_phase)
-    # Add double support phase
-    is_stance = torch.zeros(
-        (env.num_envs, len(indices)), dtype=torch.bool, device=env.device
-    )
-    # left foot stance
-    is_stance[:, 0] = sin_pos >= 0
-    # right foot stance
-    is_stance[:, 1] = sin_pos < 0
-    # Double support phase
-    is_stance[torch.abs(sin_pos) < threshold - 0.5] = True
+    # # #### Implemention 2: using sine wave phase
+    # global_phase = (env._episode_steps * env.step_dt) % period / period
+    # sin_pos = torch.sin(2 * torch.pi * global_phase)
+    # # Add double support phase
+    # is_stance = torch.zeros(
+    #     (env.num_envs, len(indices)), dtype=torch.bool, device=env.device
+    # )
+    # # left foot stance
+    # is_stance[:, 0] = sin_pos >= 0
+    # # right foot stance
+    # is_stance[:, 1] = sin_pos < 0
+    # # Double support phase
+    # is_stance[torch.abs(sin_pos) < threshold - 0.5] = True
 
-    reward = torch.sum(is_contact == is_stance, dim=1, dtype=torch.float32)
+    # reward = torch.sum(is_contact == is_stance, dim=1, dtype=torch.float32)
 
-    # #### Implemention 1: using phase offsets
-    # global_phase = ((env._episode_steps * env.step_dt) % period / period).unsqueeze(1)
-    # phases = []
-    # for offset_ in offset:
-    #     phase = (global_phase + offset_) % 1.0
-    #     phases.append(phase)
-    # leg_phase = torch.cat(phases, dim=-1)
+    #### Implemention 1: using phase offsets
+    global_phase = ((env._episode_steps * env.step_dt) % period / period).unsqueeze(1)
+    phases = []
+    for offset_ in offset:
+        phase = (global_phase + offset_) % 1.0
+        phases.append(phase)
+    leg_phase = torch.cat(phases, dim=-1)
 
-    # reward = torch.zeros(env.num_envs, dtype=torch.float, device=env.device)
-    # for i in range(len(env.extras_buffer[bodies_key])):
-    #     is_stance = leg_phase[:, i] < threshold
-    #     reward += ~(is_stance ^ is_contact[:, i])
+    reward = torch.zeros(env.num_envs, dtype=torch.float, device=env.device)
+    for i in range(len(indices)):
+        is_stance = leg_phase[:, i] < threshold
+        reward += ~(is_stance ^ is_contact[:, i])
 
     if command_name == "base_velocity":
         cmd_norm = torch.norm(env.commands_manager.value[:, :2], dim=1)
