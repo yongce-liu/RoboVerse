@@ -9,7 +9,7 @@ from roboverse_learn.rl.unitree_rl.configs.algorithm import (
     RslRlPpoActorCriticCfg,
     RslRlPpoAlgorithmCfg,
 )
-from roboverse_learn.rl.unitree_rl.helper.curriculum_utils import lin_vel_cmd_levels
+import roboverse_learn.rl.unitree_rl.helper.curriculum_utils as curr_funs
 from roboverse_learn.rl.unitree_rl.configs.cfg_queries import ContactForces
 from roboverse_learn.rl.unitree_rl.configs.cfg_randomizers import (
     MaterialRandomizer,
@@ -51,17 +51,17 @@ class WalkG1Dof29EnvCfg(BaseEnvCfg):
         joint_deviation_arms = (
             -0.1,
             {"joint_names": (".*_shoulder_.*_joint", ".*_elbow_joint", ".*_wrist_.*")},
-            reward_funcs.joint_deviation_l1
+            reward_funcs.joint_deviation_l1,
         )
         joint_deviation_waists = (
             -1.0,
             {"joint_names": "waist.*"},
-            reward_funcs.joint_deviation_l1
+            reward_funcs.joint_deviation_l1,
         )
         joint_deviation_legs = (
             -1.0,
             {"joint_names": (".*_hip_roll_joint", ".*_hip_yaw_joint")},
-            reward_funcs.joint_deviation_l1
+            reward_funcs.joint_deviation_l1,
         )
         flat_orientation = -5.0
         base_height = (-10.0, {"target_height": 0.78})
@@ -96,7 +96,11 @@ class WalkG1Dof29EnvCfg(BaseEnvCfg):
     )
 
     curriculum = BaseEnvCfg.Curriculum(
-        enabled=True, funcs={"lin_vel_cmd_levels": lin_vel_cmd_levels}
+        enabled=True,
+        funcs={
+            "lin_vel_cmd_levels": curr_funs.lin_vel_cmd_levels,
+            #  "terrain_levels": curr_funs.terrain_levels_vel
+        },
     )
 
     callbacks_query = {"contact_forces": ContactForces(history_length=3)}

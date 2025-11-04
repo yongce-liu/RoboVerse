@@ -110,15 +110,17 @@ def energy(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
     """Sum |qdot|*|tau| across joints (\"energy\" usage)."""
     base = env_states.robots[env.name]
     qvel = base.joint_vel
-    qfrc = base.joint_effort_target
+    qfrc = env.torques # TODO: wait isaacsim handler complete dof_torques in robot_state
     return torch.sum(torch.abs(qvel) * torch.abs(qfrc), dim=-1)
 
 
-def _get_indices(env: EnvTypes, sub_names, all_names):
+def _get_indices(
+    env: EnvTypes, sub_names: tuple[str] | str, all_names: list[str] | tuple[str]
+):
     hash_key = hash_names(sub_names)
     if hash_key not in env.extras_buffer:
         env.extras_buffer[hash_key] = get_indices_from_substring(
-            sub_names, all_names
+            sub_names, all_names, fullmatch=True
         ).to(env.device)
     return env.extras_buffer[hash_key]
 

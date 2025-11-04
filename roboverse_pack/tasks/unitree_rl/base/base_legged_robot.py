@@ -191,6 +191,11 @@ class LeggedRobotTask(AgentTask):
             dtype=torch.float,
             device=self.device,
         )
+        self.torques = torch.zeros(
+            size=(self.num_envs, self.num_actions),
+            dtype=torch.float,
+            device=self.device,
+        )
         self.rew_buf = torch.zeros(size=(self.num_envs,), dtype=torch.float, device=self.device)
         self.reset_buf = torch.zeros(size=(self.num_envs,), dtype=torch.bool, device=self.device)
         self.time_out_buf = torch.zeros(size=(self.num_envs,), dtype=torch.bool, device=self.device)
@@ -322,6 +327,7 @@ class LeggedRobotTask(AgentTask):
             else:
                 send_action = self.actions * self.action_scale
             env_states = self._physics_step(send_action)
+        self.torques[:] = send_action.clone()
 
         self._post_physics_step(env_states)
 
