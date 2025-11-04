@@ -8,6 +8,7 @@ import argparse
 import datetime
 import importlib
 from loguru import logger as log
+from functools import lru_cache
 
 import random
 import torch
@@ -237,7 +238,9 @@ def find_unique_candidate(candidates: list[any], data_base: list[any]) -> int:
 
 
 def get_indices_from_substring(
-    candidates_list: list[str] | str, data_base: list[str], use_regex: bool = True
+    candidates_list: list[str] | tuple[str] | str,
+    data_base: list[str],
+    fullmatch: bool = True,
 ) -> torch.Tensor:
     """Get indices of items matching the candidates patterns.
 
@@ -256,25 +259,24 @@ def get_indices_from_substring(
         tensor([0, 1])
     """
     found_indices = []
-    if not isinstance(candidates_list, list):
-        candidates_list = [candidates_list]
+    if isinstance(candidates_list, str):
+        candidates_list = (candidates_list,)
+    assert isinstance(
+        candidates_list, (list, tuple)
+    ), "candidates_list must be a list, tuple or string."
 
     for candidate in candidates_list:
-        if use_regex:
-            # Compile regex pattern for efficiency
-            try:
-                pattern = re.compile(candidate)
-            except re.error as e:
-                raise ValueError(f"Invalid regex pattern '{candidate}': {e}")
+        # Compile regex pattern for efficiency
+        try:
+            pattern = re.compile(candidate)
+        except re.error as e:
+            raise ValueError(f"Invalid regex pattern '{candidate}': {e}")
 
-            for i, name in enumerate(data_base):
-                if pattern.search(name):  # Use search() for partial match
-                    found_indices.append(i)
-        else:
-            # Fallback to simple substring matching
-            for i, name in enumerate(data_base):
-                if candidate in name:
-                    found_indices.append(i)
+        for i, name in enumerate(data_base):
+            if fullmatch and pattern.fullmatch(name):
+                found_indices.append(i)
+            elif not fullmatch and pattern.search(name):
+                found_indices.append(i)
 
     # Remove duplicates and sort
     found_indices = sorted(set(found_indices))
@@ -378,3 +380,14 @@ def get_axis_params(value, axis_idx, x_value=0.0, n_dims=3):
     params = torch.where(zs == 1.0, value, zs)
     params[0] = x_value
     return params.tolist()
+
+
+@lru_cache(maxsize=128)
+def hash_names(names: str | tuple[str]) -> str:
+    if isinstance(names, str):
+        names = (names,)
+    assert isinstance(names, tuple) and all(
+        isinstance(_, str) for _ in names
+    ), "body_names must be a string or a list of strings."
+    hash_key = "_".join(sorted(names))
+    return hash_key

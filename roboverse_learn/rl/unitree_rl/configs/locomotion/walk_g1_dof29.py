@@ -20,6 +20,7 @@ from roboverse_learn.rl.unitree_rl.configs.callback_funcs import (
     termination_funcs,
     reset_funcs,
     step_funcs,
+    reward_funcs,
 )
 
 
@@ -47,31 +48,34 @@ class WalkG1Dof29EnvCfg(BaseEnvCfg):
         action_rate = -0.05
         joint_pos_limits = -5.0
         energy = -2e-5
-        joint_deviation_arms = -0.1
-        joint_deviation_waists = -1.0
-        joint_deviation_legs = -1.0
+        joint_deviation_arms = (
+            -0.1,
+            {"joint_names": (".*_shoulder_.*_joint", ".*_elbow_joint", ".*_wrist_.*")},
+            reward_funcs.joint_deviation_l1
+        )
+        joint_deviation_waists = (
+            -1.0,
+            {"joint_names": "waist.*"},
+            reward_funcs.joint_deviation_l1
+        )
+        joint_deviation_legs = (
+            -1.0,
+            {"joint_names": (".*_hip_roll_joint", ".*_hip_yaw_joint")},
+            reward_funcs.joint_deviation_l1
+        )
         flat_orientation = -5.0
         base_height = (-10.0, {"target_height": 0.78})
-        feet_gait = (
-            0.5,
-            {
-                "period": 0.8,
-                "offset": [0.0, 0.5],
-                "threshold": 0.55,
-                "body_names": ".*ankle_roll.*",
-            },
-        )
-        feet_slide = (-0.2, {"body_names": ".*ankle_roll.*"})
+        feet_gait = (0.5, {"period": 0.8, "offset": [0.0, 0.5], "threshold": 0.55})
+        feet_slide = -0.2
         feet_clearance = (
             1.0,
             {
                 "std": 0.05,
                 "tanh_mult": 2.0,
                 "target_height": 0.1,
-                "body_names": ".*ankle_roll.*",
             },
         )
-        undesired_contacts = (-1.0, {"threshold": 1, "body_names": "(?!.*ankle.*).*"})
+        undesired_contacts = (-1.0, {"threshold": 1})
 
     rewards = BaseEnvCfg.Rewards(
         only_positive_rewards=False,
@@ -97,19 +101,19 @@ class WalkG1Dof29EnvCfg(BaseEnvCfg):
 
     callbacks_query = {"contact_forces": ContactForces(history_length=3)}
     callbacks_setup = {
-        # "material_randomizer": MaterialRandomizer(
-        #     obj_name="g1_dof29",
-        #     static_friction_range=(0.3, 1.0),
-        #     dynamic_friction_range=(0.3, 1.0),
-        #     restitution_range=(0.0, 0.0),
-        #     num_buckets=64,
-        # ),
-        # "mass_randomizer": MassRandomizer(
-        #     obj_name="g1_dof29",
-        #     body_names="torso_link",
-        #     mass_distribution_params=(-1.0, 3.0),
-        #     operation="add",
-        # ),
+        "material_randomizer": MaterialRandomizer(
+            obj_name="g1_dof29",
+            static_friction_range=(0.3, 1.0),
+            dynamic_friction_range=(0.3, 1.0),
+            restitution_range=(0.0, 0.0),
+            num_buckets=64,
+        ),
+        "mass_randomizer": MassRandomizer(
+            obj_name="g1_dof29",
+            body_names="torso_link",
+            mass_distribution_params=(-1.0, 3.0),
+            operation="add",
+        ),
     }
     callbacks_reset = {
         "random_root_state": (

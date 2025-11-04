@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import torch
-from functools import lru_cache
 
 from metasim.types import TensorState
 from metasim.utils.math import quat_rotate_inverse
 
 from roboverse_learn.rl.unitree_rl.configs.cfg_queries import ContactForces
 from roboverse_pack.tasks.unitree_rl.base.types import EnvTypes
-from roboverse_learn.rl.unitree_rl.helper import get_indices_from_substring
+from roboverse_learn.rl.unitree_rl.helper import get_indices_from_substring, hash_names
 
 
 def track_lin_vel_xy(
@@ -116,42 +115,23 @@ def energy(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
 
 
 def joint_deviation_l1(
-    env: EnvTypes, env_states: TensorState, joint_ids: torch.Tensor
+    env: EnvTypes, env_states: TensorState, joint_names: str | list[str]
 ) -> torch.Tensor:
     """Penalize joint positions that deviate from the default one."""
+    joints_key = hash_names(joint_names)
+    if joints_key not in env.extras_buffer:
+        env.extras_buffer[joints_key] = get_indices_from_substring(
+            joint_names, env.sorted_joint_names
+        ).to(env.device)
+
     # extract the used quantities (to enable type-hinting)
     robot_state = env_states.robots[env.name]
     # compute out of limits constraints
-    angle = robot_state.joint_pos[:, joint_ids] - env.default_dof_pos[joint_ids]
+    angle = (
+        robot_state.joint_pos[:, env.extras_buffer[joints_key]]
+        - env.default_dof_pos[env.extras_buffer[joints_key]]
+    )
     return torch.sum(torch.abs(angle), dim=1)
-
-
-def joint_deviation_arms(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
-    if "arm_joint_indices" not in env.extras_buffer:
-        env.extras_buffer["arm_joint_indices"] = get_indices_from_substring(
-            env.robot.arm_joints, env.sorted_joint_names
-        ).to(env.device)
-    joint_ids = env.extras_buffer.get("arm_joint_indices")
-    return joint_deviation_l1(env, env_states, joint_ids)
-
-
-def joint_deviation_waists(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
-    if "waist_joint_indices" not in env.extras_buffer:
-        env.extras_buffer["waist_joint_indices"] = get_indices_from_substring(
-            env.robot.waist_joints, env.sorted_joint_names
-        ).to(env.device)
-    joint_ids = env.extras_buffer.get("waist_joint_indices")
-    return joint_deviation_l1(env, env_states, joint_ids)
-
-
-def joint_deviation_legs(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
-    if "hip_yaw_roll_joint_indices" not in env.extras_buffer:
-        env.extras_buffer["hip_yaw_roll_joint_indices"] = get_indices_from_substring(
-            env.robot.left_hip_yaw_roll_joints + env.robot.right_hip_yaw_roll_joints,
-            env.sorted_joint_names,
-        ).to(env.device)
-    joint_ids = env.extras_buffer.get("hip_yaw_roll_joint_indices")
-    return joint_deviation_l1(env, env_states, joint_ids)
 
 
 def flat_orientation(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
@@ -191,17 +171,6 @@ def base_height(
     return torch.square(base_height - adjusted_target_height)
 
 
-@lru_cache(maxsize=128)
-def _get_body_names_key(body_names: str | list[str]) -> torch.Tensor:
-    if isinstance(body_names, str):
-        body_names = [body_names]
-    assert isinstance(body_names, list) and all(
-        isinstance(name, str) for name in body_names
-    ), "body_names must be a string or a list of strings."
-    pattern_key = "_".join(sorted(body_names))
-    return pattern_key
-
-
 def feet_gait(
     env: EnvTypes,
     env_states: TensorState,
@@ -210,7 +179,7 @@ def feet_gait(
     threshold: float = 0.55,
     body_names: str | list[str] = ".*ankle_roll.*",
 ) -> torch.Tensor:
-    bodies_key = _get_body_names_key(body_names)
+    bodies_key = hash_names(body_names)
     if bodies_key not in env.extras_buffer:
         body_state_names = env_states.robots[env.name].body_names
         env.extras_buffer[bodies_key] = get_indices_from_substring(
@@ -277,7 +246,7 @@ def feet_slide(
     agent is penalized only when the feet are in contact with the ground.
     """
     # Penalize feet sliding
-    bodies_key = _get_body_names_key(body_names)
+    bodies_key = hash_names(body_names)
     if bodies_key not in env.extras_buffer:
         body_state_names = env_states.robots[env.name].body_names
         env.extras_buffer[bodies_key] = get_indices_from_substring(
@@ -308,7 +277,7 @@ def feet_clearance(
     body_names: str | list[str] = ".*ankle_roll.*",
 ) -> torch.Tensor:
     """Reward the swinging feet for clearing a specified height off the ground"""
-    bodies_key = _get_body_names_key(body_names)
+    bodies_key = hash_names(body_names)
     if bodies_key not in env.extras_buffer:
         body_state_names = env_states.robots[env.name].body_names
         env.extras_buffer[bodies_key] = get_indices_from_substring(
@@ -333,7 +302,7 @@ def undesired_contacts(
     body_names: str | list[str] = "(?!.*ankle.*).*",
 ) -> torch.Tensor:
     """Penalize undesired contacts as the number of violations that are above a threshold."""
-    bodies_key = _get_body_names_key(body_names)
+    bodies_key = hash_names(body_names)
     if bodies_key not in env.extras_buffer:
         body_state_names = env_states.robots[env.name].body_names
         env.extras_buffer[bodies_key] = get_indices_from_substring(

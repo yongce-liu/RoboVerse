@@ -3,11 +3,11 @@ from __future__ import annotations
 import math
 from collections import deque
 from copy import deepcopy
+from dataclasses import asdict
 
 import torch
 
 from metasim.scenario.scenario import ScenarioCfg
-from metasim.utils.dict import class_to_dict
 from metasim.utils.state import TensorState
 from roboverse_learn.rl.unitree_rl.configs.cfg_base import BaseEnvCfg
 from roboverse_learn.rl.unitree_rl.helper import (
@@ -57,7 +57,7 @@ class LeggedRobotTask(AgentTask):
         self.common_step_counter = 0
         self.max_episode_steps = math.ceil(self.cfg.episode_length_s / self.step_dt)
         self.commands_manager = self.cfg.commands
-        self.reward_scales = class_to_dict(self.cfg.rewards.scales)
+        self.reward_scales = asdict(self.cfg.rewards.scales)
 
     def _init_joint_cfg(self):
         """Parse default joint positions and torque limits from cfg."""
@@ -148,21 +148,31 @@ class LeggedRobotTask(AgentTask):
 
     def _init_reward_function(self):
         """Prepares a list of reward functions, which will be called to compute the total reward."""
-        for key in list(self.reward_scales.keys()):
-            if isinstance(self.reward_scales[key], tuple):
-                scale, params = self.reward_scales[key][0], self.reward_scales[key][1]
-            else:
-                scale, params = self.reward_scales[key], {}
-            if scale == 0:
-                self.reward_scales.pop(key)
-            else:
-                self.reward_scales[key] = (scale * self.step_dt, params)
-        # prepare list of functions
         self.reward_functions = {}
-        for name, scale in self.reward_scales.items():
-            if name == "termination":
-                continue
-            self.reward_functions[name] = get_reward_fn(name, self.cfg.rewards.functions)
+        for _key in self.reward_scales.keys():
+            if isinstance(self.reward_scales[_key], tuple):
+                if len(self.reward_scales[_key]) == 2:
+                    scale, params = self.reward_scales[_key]
+                    func = get_reward_fn(_key, self.cfg.rewards.functions)
+                elif len(self.reward_scales[_key]) == 3:
+                    scale, params, func = self.reward_scales[_key]
+                else:
+                    raise ValueError("Reward scale tuple must be (scale, params) or (scale, params, func).")
+            elif isinstance(self.reward_scales[_key], (int, float)):
+                scale, params, func = self.reward_scales[_key], {}, get_reward_fn(_key, self.cfg.rewards.functions)
+            else:
+                raise ValueError("Reward scale must be a number, a tuple (scale, params) or (scale, params, func).")
+            # params = asdict(params) if isinstance(params, object) else params
+            # ################ check types ################
+            assert isinstance(scale, (int, float)), "Reward scale must be a number."
+            assert isinstance(params, dict), "Reward params must be a dictionary."
+            assert callable(func), "Reward function must be callable."
+            # ################ check types ################
+            if scale == 0:
+                self.reward_scales.pop(_key)
+            else:
+                self.reward_scales[_key] = (scale * self.step_dt, params)
+                self.reward_functions[_key] = func
 
         # reward episode sums
         self.episode_rewards = {

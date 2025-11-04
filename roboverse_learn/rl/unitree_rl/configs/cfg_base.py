@@ -3,7 +3,6 @@ from typing import Callable, Literal
 from dataclasses import MISSING
 
 from metasim.utils import configclass
-from metasim.utils.configclass import class_to_dict
 from roboverse_learn.rl.unitree_rl.configs.cfg_queries import ContactForces
 
 
