@@ -9,7 +9,6 @@ try:
     import isaacgym  # noqa: F401
 except ImportError:
     pass
-
 import imageio as iio
 import numpy as np
 import rootutils
@@ -19,8 +18,6 @@ from loguru import logger as log
 from numpy.typing import NDArray
 from rich.logging import RichHandler
 from torchvision.utils import make_grid, save_image
-
-from metasim.scenario.cameras import PinholeCameraCfg
 
 # from metasim.scenario.randomization import RandomizationCfg
 from metasim.scenario.render import RenderCfg
@@ -38,15 +35,16 @@ log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
 
 @configclass
 class Args:
-    task: str = "put_banana"
+    task: str = "calvin.base_table"
     robot: str = "franka"
     scene: str | None = None
     render: RenderCfg = RenderCfg()
     # random: RandomizationCfg = RandomizationCfg()
 
     ## Handlers
-    sim: Literal["isaacsim", "isaacgym", "genesis", "pybullet", "sapien2", "sapien3", "mujoco", "mjx"] = "mujoco"
-    renderer: Literal["isaacsim", "isaacgym", "genesis", "pybullet", "mujoco", "sapien2", "sapien3"] | None = None
+    sim: Literal["isaaclab", "isaacgym", "genesis", "pybullet", "sapien2", "sapien3", "mujoco", "mjx"] = "mujoco"
+
+    renderer: Literal["isaaclab", "isaacgym", "genesis", "pybullet", "mujoco", "sapien2", "sapien3"] | None = None
 
     ## Others
     num_envs: int = 1
@@ -133,117 +131,120 @@ class ObsSaver:
 ## Main
 ###########################################################
 def main():
-    task_cls = get_task_class(args.task)
-    camera = PinholeCameraCfg(pos=(1.5, -1.5, 1.5), look_at=(0.0, 0.0, 0.0))
-
-    if args.robot == "None":
-        scenario = task_cls.scenario.update(
-            # robots=[args.robot],
-            scene=args.scene,
-            cameras=[camera],
-            # random=args.random,
-            render=args.render,
-            simulator=args.sim,
-            renderer=args.renderer,
-            num_envs=args.num_envs,
-            headless=args.headless,
-        )
-
-    else:
-        scenario = task_cls.scenario.update(
-            robots=[args.robot],
-            scene=args.scene,
-            cameras=[camera],
-            # random=args.random,
-            render=args.render,
-            simulator=args.sim,
-            renderer=args.renderer,
-            num_envs=args.num_envs,
-            headless=args.headless,
-        )
-
-    num_envs: int = scenario.num_envs
-
     tic = time.time()
+
+    task_cls = get_task_class(args.task)  # e.g., "example.my_task"
+
+    scenario = task_cls.scenario.update(
+        simulator="pybullet",
+    )
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    env = task_cls(scenario, device=device)
+    env = task_cls(scenario=scenario, device=device)
+
+    num_envs = 1
     toc = time.time()
     log.trace(f"Time to launch: {toc - tic:.2f}s")
-    traj_filepath = env.traj_filepath
+
+    traj_filepath_root = (
+        "/home/dyz/RoboVerse/roboverse_pack/tasks/calvin/data_preparation/env_D_val_out/episode_chunk_1_219635_244284/"
+    )
     ## Data
-    tic = time.time()
-    assert os.path.exists(traj_filepath), f"Trajectory file: {traj_filepath} does not exist."
-    init_states, all_actions, all_states = get_traj(
-        traj_filepath, scenario.robots[0], env.handler
-    )  # XXX: only support one robot
-    toc = time.time()
-    log.trace(f"Time to load data: {toc - tic:.2f}s")
 
-    ########################################################
-    ## Main
-    ########################################################
-
-    obs_saver = ObsSaver(image_dir=args.save_image_dir, video_path=args.save_video_path)
-    os.makedirs("test_output", exist_ok=True)
-
-    ## Reset before first step
-    tic = time.time()
-    obs, extras = env.reset()
-    toc = time.time()
-    log.trace(f"Time to reset: {toc - tic:.2f}s")
-    obs_saver.add(obs)
-
-    ## Main loop
-    step = 0
-    while True:
-        log.debug(f"Step {step}")
+    path_list = os.listdir(traj_filepath_root)
+    for i in range(len(path_list)):
+        traj_filepath = traj_filepath_root + path_list[i]
         tic = time.time()
-        if args.object_states:
-            ## TODO: merge states replay into env.step function
-            if all_states is None:
-                raise ValueError("All states are None, please check the trajectory file")
-            states = get_states(all_states, step, num_envs)
-            env.handler.set_states(states)
-            env.handler.refresh_render()
-            obs = env.handler.get_states()
+        assert os.path.exists(traj_filepath), f"Trajectory file: {traj_filepath} does not exist."
+        init_states, all_actions, all_states = get_traj(
+            traj_filepath, scenario.robots[0]
+        )  # XXX: only support one robot
 
-            ## XXX: hack
-            success = env.checker.check(env.handler)
-            if success.any():
-                log.info(f"Env {success.nonzero().squeeze(-1).tolist()} succeeded!")
-            if success.all():
-                break
-
-        else:
-            actions = get_actions(all_actions, step, num_envs, scenario.robots[0])
-            obs, reward, success, time_out, extras = env.step(actions)
-
-            if success.any():
-                log.info(f"Env {success.nonzero().squeeze(-1).tolist()} succeeded!")
-
-            if time_out.any():
-                log.info(f"Env {time_out.nonzero().squeeze(-1).tolist()} timed out!")
-
-            if success.all() or time_out.all():
-                break
+        # import ipdb
+        # ipdb.set_trace()
 
         toc = time.time()
-        log.trace(f"Time to step: {toc - tic:.2f}s")
+        log.trace(f"Time to load data: {toc - tic:.2f}s")
 
+        ########################################################
+        ## Main
+        ########################################################
+
+        obs_saver = ObsSaver(image_dir=args.save_image_dir, video_path=args.save_video_path)
+        os.makedirs("test_output", exist_ok=True)
+
+        ## Reset before first step
         tic = time.time()
-        obs_saver.add(obs)
+        obs, extras = env.reset(init_states[0])
         toc = time.time()
-        log.trace(f"Time to save obs: {toc - tic:.2f}s")
-        step += 1
+        log.trace(f"Time to reset: {toc - tic:.2f}s")
+        # obs_saver.add(obs)
 
-        if args.stop_on_runout and get_runout(all_actions, step):
-            log.info("Run out of actions, stopping")
-            break
+        ## Main loop
+        step = 0
+        error = 0
+        for step in range(len(all_actions[0])):
+            # import ipdb
+            # ipdb.set_trace()
+            # break
+            log.debug(f"Step {step}")
+            tic = time.time()
+            if args.object_states:
+                ## TODO: merge states replay into env.step function
+                if all_states is None:
+                    raise ValueError("All states are None, please check the trajectory file")
+                states = get_states(all_states, step, num_envs)
+                env.handler.set_states(states)
+                env.handler.refresh_render()
+                obs = env.handler.get_states()
+
+            else:
+                # print(all_actions)
+                actions = get_actions(all_actions, step, num_envs, scenario.robots[0])
+                # print(actions)
+                # print(scenario.robots[0])
+                obs, reward, success, time_out, extras = env.step(actions)
+
+                error = 0
+                for obj_name in ["pink_cube", "blue_cube", "red_cube"]:
+                    # Position error
+                    error += torch.sum(
+                        torch.abs(
+                            all_states[0][step]["objects"][obj_name]["pos"] - obs.objects[obj_name].root_state[0][:3]
+                        )
+                    )
+                    # Rotation error
+                    error += torch.sum(
+                        torch.abs(
+                            all_states[0][step]["objects"][obj_name]["rot"] - obs.objects[obj_name].root_state[0][3:7]
+                        )
+                    )
+
+                if success.any():
+                    log.info(f"Env {success.nonzero().squeeze(-1).tolist()} succeeded!")
+
+                if time_out.any():
+                    log.info(f"Env {time_out.nonzero().squeeze(-1).tolist()} timed out!")
+
+                if success.all() or time_out.all():
+                    # pass
+                    break
+
+            toc = time.time()
+            log.trace(f"Time to step: {toc - tic:.2f}s")
+
+            tic = time.time()
+            # obs_saver.add(obs)
+            toc = time.time()
+            log.trace(f"Time to save obs: {toc - tic:.2f}s")
+            step += 1
+
+            if args.stop_on_runout and get_runout(all_actions, step):
+                log.info("Run out of actions, stopping")
+                break
 
     obs_saver.save()
     env.close()
-    if args.sim == "isaacsim":
-        env.handler.simulation_app.close()
 
 
 if __name__ == "__main__":
