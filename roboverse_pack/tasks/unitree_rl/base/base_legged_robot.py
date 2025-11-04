@@ -53,7 +53,7 @@ class LeggedRobotTask(AgentTask):
         self.step_dt = self.sim_dt * self.decimation
         self.action_clip = self.cfg.control.action_clip
         self.action_scale = self.cfg.control.action_scale
-        self.action_offset = self.cfg.control.action_offset
+        # self.action_offset = self.cfg.control.action_offset
         self.common_step_counter = 0
         self.max_episode_steps = math.ceil(self.cfg.episode_length_s / self.step_dt)
         self.commands_manager = self.cfg.commands
@@ -191,11 +191,12 @@ class LeggedRobotTask(AgentTask):
             dtype=torch.float,
             device=self.device,
         )
-        self.torques = torch.zeros(
-            size=(self.num_envs, self.num_actions),
-            dtype=torch.float,
-            device=self.device,
-        )
+        self.actions_offset = self.default_dof_pos.clone() if self.cfg.control.action_offset else 0.0
+        # self.torques = torch.zeros(
+        #     size=(self.num_envs, self.num_actions),
+        #     dtype=torch.float,
+        #     device=self.device,
+        # )
         self.rew_buf = torch.zeros(size=(self.num_envs,), dtype=torch.float, device=self.device)
         self.reset_buf = torch.zeros(size=(self.num_envs,), dtype=torch.bool, device=self.device)
         self.time_out_buf = torch.zeros(size=(self.num_envs,), dtype=torch.bool, device=self.device)
@@ -238,30 +239,12 @@ class LeggedRobotTask(AgentTask):
 
     def _compute_effort(self, actions: torch.Tensor, env_states: TensorState) -> torch.Tensor:
         """Compute effort from actions using PD control."""
-        # Scale the actions (generally output from policy)
-        action_scaled = self.action_scale * actions
-
         # Get current joint positions and velocities
         sorted_dof_pos = env_states.robots[self.name].joint_pos
         sorted_dof_vel = env_states.robots[self.name].joint_vel
 
         # Compute PD control effort
-        target_pos = (
-            self.cfg.default_joint_pd_target if hasattr(self.cfg, "default_joint_pd_target") else self.default_dof_pos
-        )
-        if isinstance(target_pos, dict):
-            target_pos = torch.tensor(
-                [target_pos[name] for name in self.sorted_joint_names],
-                dtype=torch.float32,
-                device=self.device,
-            )
-        elif not isinstance(target_pos, torch.Tensor):
-            target_pos = torch.tensor(target_pos, dtype=torch.float32, device=self.device)
-        target_pos = target_pos.to(self.device)
-        if self.action_offset:
-            effort = self.p_gains * (action_scaled + target_pos - sorted_dof_pos) - self.d_gains * sorted_dof_vel
-        else:
-            effort = self.p_gains * (action_scaled - sorted_dof_pos) - self.d_gains * sorted_dof_vel
+        effort = self.p_gains * (actions - sorted_dof_pos) - self.d_gains * sorted_dof_vel
 
         # Apply torque limits
         effort = torch.clip(effort, -self.torque_limits, self.torque_limits)
@@ -318,16 +301,18 @@ class LeggedRobotTask(AgentTask):
         if actions.ndim == 1:
             actions = actions.unsqueeze(0)
 
-        actions = self._pre_physics_step(actions)
-        self.actions[:] = actions.clip(-self.action_clip, self.action_clip).clone()
+        # actions = self._pre_physics_step(actions)
+        self.actions[:] = actions  # .clip(-self.action_clip, self.action_clip).clone()
+        processed_actions = (
+            (self.actions * self.action_scale + self.actions_offset).clip(-self.action_clip, self.action_clip).clone()
+        )
         env_states = self.get_states()
         for _ in range(self.decimation):
-            if self.manual_pd_on:
-                send_action = self._compute_effort(self.actions, env_states)
-            else:
-                send_action = self.actions * self.action_scale
-            env_states = self._physics_step(send_action)
-        self.torques[:] = send_action.clone()
+            applied_action = (
+                self._compute_effort(processed_actions, env_states) if self.manual_pd_on else processed_actions
+            )
+            env_states = self._physics_step(applied_action)
+        # self.torques[:] = applied_action.clone()
 
         self._post_physics_step(env_states)
 
@@ -372,6 +357,8 @@ class LeggedRobotTask(AgentTask):
                 history.append(getattr(self, key).clone())
             elif hasattr(env_states.robots[self.name], key):
                 history.append(getattr(env_states.robots[self.name], key).clone())
+            else:
+                raise ValueError(f"History buffer key {key} not found in task or robot states.")
 
     def _reward(self, env_states):
         rew_buf = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
