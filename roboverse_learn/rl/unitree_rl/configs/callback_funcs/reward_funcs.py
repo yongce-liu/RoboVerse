@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import torch
+from functools import lru_cache
 
 from metasim.types import TensorState
 from metasim.utils.math import quat_rotate_inverse
@@ -190,42 +191,58 @@ def base_height(
     return torch.square(base_height - adjusted_target_height)
 
 
+@lru_cache(maxsize=128)
+def _get_body_names_key(body_names: str | list[str]) -> torch.Tensor:
+    if isinstance(body_names, str):
+        body_names = [body_names]
+    assert isinstance(body_names, list) and all(
+        isinstance(name, str) for name in body_names
+    ), "body_names must be a string or a list of strings."
+    pattern_key = "_".join(sorted(body_names))
+    return pattern_key
+
+
 def feet_gait(
     env: EnvTypes,
     env_states: TensorState,
     period: float,
     offset: list[float],
     threshold: float = 0.55,
+    body_names: str | list[str] = ".*ankle_roll.*",
 ) -> torch.Tensor:
-    if "feet_indices" not in env.extras_buffer:
-        env.extras_buffer["feet_indices"] = get_indices_from_substring(
-            env.robot.feet_links, env.sorted_body_names
+    bodies_key = _get_body_names_key(body_names)
+    if bodies_key not in env.extras_buffer:
+        body_state_names = env_states.robots[env.name].body_names
+        env.extras_buffer[bodies_key] = get_indices_from_substring(
+            body_names, body_state_names
         ).to(env.device)
     command_name = "base_velocity"
 
     contact_forces: ContactForces = env_states.extras["contact_forces"][env.name]
     is_contact = (
-        contact_forces.contact_forces_history[
-            :, :, env.extras_buffer["feet_indices"], :
-        ]
+        contact_forces.contact_forces_history[:, :, env.extras_buffer[bodies_key], :]
         .norm(dim=-1)
         .max(dim=1)[0]
         > 1.0
     )
     # contact_sensor = env.handler.contact_sensor
-    # is_contact = contact_sensor.data.current_contact_time[:, env.body_ids_reindex][:, env.extras_buffer["feet_indices"]] > 0
+    # is_contact = contact_sensor.data.current_contact_time[:, env.body_ids_reindex][:, env.extras_buffer[bodies_key]] > 0
 
     # #### Implemention 2: using sine wave phase
-    global_phase = ((env._episode_steps * env.step_dt) % period / period)
+    global_phase = (env._episode_steps * env.step_dt) % period / period
     sin_pos = torch.sin(2 * torch.pi * global_phase)
     # Add double support phase
-    is_stance = torch.zeros((env.num_envs, len(env.extras_buffer["feet_indices"])), dtype=torch.bool, device=env.device)
+    is_stance = torch.zeros(
+        (env.num_envs, len(env.extras_buffer[bodies_key])),
+        dtype=torch.bool,
+        device=env.device,
+    )
     # left foot stance
     is_stance[:, 0] = sin_pos >= 0
     # right foot stance
     is_stance[:, 1] = sin_pos < 0
     # Double support phase
-    is_stance[torch.abs(sin_pos) < threshold-0.5] = True
+    is_stance[torch.abs(sin_pos) < threshold - 0.5] = True
 
     reward = torch.sum(is_contact == is_stance, dim=1, dtype=torch.float32)
 
@@ -238,7 +255,7 @@ def feet_gait(
     # leg_phase = torch.cat(phases, dim=-1)
 
     # reward = torch.zeros(env.num_envs, dtype=torch.float, device=env.device)
-    # for i in range(len(env.extras_buffer["feet_indices"])):
+    # for i in range(len(env.extras_buffer[bodies_key])):
     #     is_stance = leg_phase[:, i] < threshold
     #     reward += ~(is_stance ^ is_contact[:, i])
 
@@ -248,7 +265,11 @@ def feet_gait(
     return reward
 
 
-def feet_slide(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
+def feet_slide(
+    env: EnvTypes,
+    env_states: TensorState,
+    body_names: str | list[str] = ".*ankle_roll.*",
+) -> torch.Tensor:
     """Penalize feet sliding.
 
     This function penalizes the agent for sliding its feet on the ground. The reward is computed as the
@@ -256,25 +277,23 @@ def feet_slide(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
     agent is penalized only when the feet are in contact with the ground.
     """
     # Penalize feet sliding
-    if "feet_indices" not in env.extras_buffer:
-        env.extras_buffer["feet_indices"] = get_indices_from_substring(
-            env.robot.feet_links, env.sorted_body_names
+    bodies_key = _get_body_names_key(body_names)
+    if bodies_key not in env.extras_buffer:
+        body_state_names = env_states.robots[env.name].body_names
+        env.extras_buffer[bodies_key] = get_indices_from_substring(
+            body_names, body_state_names
         ).to(env.device)
 
     contact_forces: ContactForces = env_states.extras["contact_forces"][env.name]
     contacts = (
-        contact_forces.contact_forces_history[
-            :, :, env.extras_buffer["feet_indices"], :
-        ]
+        contact_forces.contact_forces_history[:, :, env.extras_buffer[bodies_key], :]
         .norm(dim=-1)
         .max(dim=1)[0]
         > 1.0
     )
-    # contact_sensor = env.handler.contact_sensor
-    # contacts = contact_sensor.data.net_forces_w_history[:, :, env.body_ids_reindex, :][:, :, env.extras_buffer["feet_indices"], :].norm(dim=-1).max(dim=1)[0] > 1.0
 
     body_vel = env_states.robots[env.name].body_state[
-        :, env.extras_buffer["feet_indices"], :2
+        :, env.extras_buffer[bodies_key], :2
     ]
     reward = torch.sum(body_vel.norm(dim=-1) * contacts, dim=1)
     return reward
@@ -286,48 +305,52 @@ def feet_clearance(
     target_height: float,
     std: float,
     tanh_mult: float,
+    body_names: str | list[str] = ".*ankle_roll.*",
 ) -> torch.Tensor:
     """Reward the swinging feet for clearing a specified height off the ground"""
-    if "feet_indices" not in env.extras_buffer:
-        env.extras_buffer["feet_indices"] = get_indices_from_substring(
-            env.robot.feet_links, env.sorted_body_names
+    bodies_key = _get_body_names_key(body_names)
+    if bodies_key not in env.extras_buffer:
+        body_state_names = env_states.robots[env.name].body_names
+        env.extras_buffer[bodies_key] = get_indices_from_substring(
+            body_names, body_state_names
         ).to(env.device)
     base = env_states.robots[env.name]
     foot_z_target_error = torch.square(
-        base.body_state[:, env.extras_buffer["feet_indices"], 2] - target_height
+        base.body_state[:, env.extras_buffer[bodies_key], 2] - target_height
     )
     foot_velocity_tanh = torch.tanh(
         tanh_mult
-        * torch.norm(base.body_state[:, env.extras_buffer["feet_indices"], 7:9], dim=2)
+        * torch.norm(base.body_state[:, env.extras_buffer[bodies_key], 7:9], dim=2)
     )
     reward = foot_z_target_error * foot_velocity_tanh
     return torch.exp(-torch.sum(reward, dim=1) / std)
 
 
 def undesired_contacts(
-    env: EnvTypes, env_states: TensorState, threshold: float
+    env: EnvTypes,
+    env_states: TensorState,
+    threshold: float,
+    body_names: str | list[str] = "(?!.*ankle.*).*",
 ) -> torch.Tensor:
     """Penalize undesired contacts as the number of violations that are above a threshold."""
-    if "ankle_indices" not in env.extras_buffer:
-        env.extras_buffer["ankle_indices"] = get_indices_from_substring(
-            env.robot.ankle_links, env.sorted_body_names
+    bodies_key = _get_body_names_key(body_names)
+    if bodies_key not in env.extras_buffer:
+        body_state_names = env_states.robots[env.name].body_names
+        env.extras_buffer[bodies_key] = get_indices_from_substring(
+            body_names, body_state_names
         ).to(env.device)
-    without_ankle_mask = torch.ones(
+
+    body_mask = torch.zeros(
         size=(len(env.sorted_body_names),), dtype=torch.bool, device=env.device
     )
-    without_ankle_mask[env.extras_buffer["ankle_indices"]] = False
+    body_mask[env.extras_buffer[bodies_key]] = True
     contact_forces: ContactForces = env_states.extras["contact_forces"][env.name]
     is_contact = (
-        contact_forces.contact_forces_history[:, :, without_ankle_mask, :]
+        contact_forces.contact_forces_history[:, :, body_mask, :]
         .norm(dim=-1)
         .max(dim=1)[0]
         > threshold
     )
-
-    # without_ankle_mask = torch.ones_like(env.body_ids_reindex, dtype=torch.bool, device=env.device)
-    # without_ankle_mask[env.ankle_indices] = False
-    # contact_sensor = env.handler.contact_sensor
-    # is_contact = contact_sensor.data.net_forces_w_history[:, :, env.body_ids_reindex, :][:, :, without_ankle_mask, :].norm(dim=-1).max(dim=1)[0] > threshold
 
     # sum over contacts for each environment
     return torch.sum(is_contact, dim=1)

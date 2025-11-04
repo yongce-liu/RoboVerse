@@ -52,17 +52,26 @@ class WalkG1Dof29EnvCfg(BaseEnvCfg):
         joint_deviation_legs = -1.0
         flat_orientation = -5.0
         base_height = (-10.0, {"target_height": 0.78})
-        feet_gait = (0.5, {"period": 0.8, "offset": [0.0, 0.5], "threshold": 0.55})
-        feet_slide = -0.2
+        feet_gait = (
+            0.5,
+            {
+                "period": 0.8,
+                "offset": [0.0, 0.5],
+                "threshold": 0.55,
+                "body_names": ".*ankle_roll.*",
+            },
+        )
+        feet_slide = (-0.2, {"body_names": ".*ankle_roll.*"})
         feet_clearance = (
             1.0,
             {
                 "std": 0.05,
                 "tanh_mult": 2.0,
                 "target_height": 0.1,
+                "body_names": ".*ankle_roll.*",
             },
         )
-        undesired_contacts = (-1.0, {"threshold": 1})
+        undesired_contacts = (-1.0, {"threshold": 1, "body_names": "(?!.*ankle.*).*"})
 
     rewards = BaseEnvCfg.Rewards(
         only_positive_rewards=False,

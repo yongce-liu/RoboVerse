@@ -15,7 +15,7 @@ def lin_vel_cmd_levels(
         reward_term_scales = env.reward_scales[reward_term_name][0]
         reward = torch.mean(env.episode_rewards[reward_term_name][env_ids]) / env.max_episode_steps
 
-        if reward > reward_term_scales * 0.8:
+        if reward > reward_term_scales * 0.7:
             delta_command = torch.tensor([-0.1, 0.1], device=env.device)
             ranges.lin_vel_x = torch.clamp(
                 torch.tensor(ranges.lin_vel_x, device=env.device) + delta_command,
