@@ -107,7 +107,6 @@ class G1Dof12Cfg(RobotCfg):
 
     # rigid body name substrings, to find indices of different rigid bodies.
     feet_links: list[str] = ["ankle_roll"]
-    ankle_links: list[str] = ["ankle"]
     knee_links: list[str] = ["knee"]
     torso_links: list[str] = ["torso_link"]
     elbow_links: list[str] = ["elbow"]
@@ -118,9 +117,6 @@ class G1Dof12Cfg(RobotCfg):
     # joint substrings, to find indices of joints.
     left_hip_yaw_roll_joints: list[str] = ["left_hip_yaw_joint", "left_hip_roll_joint"]
     right_hip_yaw_roll_joints: list[str] = ["right_hip_yaw_joint", "right_hip_roll_joint"]
-    # upper_body_joints = ["wrist", "hand", "torso", "waist", "shoulder", "elbow"]
-    waist_joints = ["waist"]
-    arm_joints: list[str] = ["shoulder", "elbow", "wrist", "hand"]
 
     soft_joint_pos_limit_factor = 0.9
     # From default joint armature in XML
