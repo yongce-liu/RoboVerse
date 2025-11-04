@@ -55,7 +55,7 @@ def resample_commands(env: EnvTypes, env_states: TensorState = None):
         <= cfg.rel_standing_envs
     )
     final_env_ids = random_mask.nonzero(as_tuple=False).flatten()
-    cfg.value[env_ids][final_env_ids, :] *= 0.0
+    cfg.value[env_ids][final_env_ids, :] = 0.0
 
     if cfg.heading_command:
         env_states = env.get_states() if env_states is None else env_states

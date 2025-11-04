@@ -55,7 +55,6 @@ class LeggedRobotTask(AgentTask):
         self.action_scale = self.cfg.control.action_scale
         # self.action_offset = self.cfg.control.action_offset
         self.common_step_counter = 0
-        self.max_episode_steps = math.ceil(self.cfg.episode_length_s / self.step_dt)
         self.commands_manager = self.cfg.commands
         self.reward_scales = asdict(self.cfg.rewards.scales)
 
@@ -250,7 +249,7 @@ class LeggedRobotTask(AgentTask):
         effort = torch.clip(effort, -self.torque_limits, self.torque_limits)
         return effort.to(torch.float32)
 
-    def reset(self, env_ids: list[int] | None = None):
+    def reset(self, env_ids: torch.Tensor | list[int] | None = None):
         """Reset selected envs (defaults to all)."""
         if env_ids is None:
             env_ids = torch.tensor(list(range(self.num_envs)), device=self.device)
@@ -334,7 +333,7 @@ class LeggedRobotTask(AgentTask):
         self.rew_buf[:] = self._reward(env_states)
 
         # reset envs
-        reset_env_idx = self.reset_buf.nonzero(as_tuple=False).flatten().tolist()
+        reset_env_idx = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
         if len(reset_env_idx) > 0:
             self.reset(env_ids=reset_env_idx)
 
@@ -422,3 +421,8 @@ class LeggedRobotTask(AgentTask):
             },
         }
         return [deepcopy(template) for _ in range(self.scenario.num_envs)]
+
+    @property
+    def max_episode_steps(self):
+        """Maximum episode length in steps."""
+        return math.ceil(self.cfg.episode_length_s / self.step_dt)

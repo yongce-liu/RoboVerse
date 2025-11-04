@@ -4,7 +4,7 @@ from roboverse_pack.tasks.unitree_rl.base.types import EnvTypes
 
 def lin_vel_cmd_levels(
     env: EnvTypes,
-    env_ids: Sequence[int],
+    env_ids: list[int] | torch.Tensor,
     reward_term_name: str = "track_lin_vel_xy",
 ) -> torch.Tensor:
     if env.common_step_counter % env.max_episode_steps == 0:
@@ -12,8 +12,8 @@ def lin_vel_cmd_levels(
         ranges = command_term.ranges
         limit_ranges = command_term.limit_ranges
 
-        reward_term_scales = env.reward_scales[reward_term_name][0]
-        reward = torch.mean(env.episode_rewards[reward_term_name][env_ids]) / env.max_episode_steps
+        reward_term_scales = env.reward_scales[reward_term_name][0] / env.step_dt
+        reward = torch.mean(env.episode_rewards[reward_term_name][env_ids]) / env.cfg.episode_length_s
 
         if reward > reward_term_scales * 0.8:
             delta_command = torch.tensor([-0.1, 0.1], device=env.device)
