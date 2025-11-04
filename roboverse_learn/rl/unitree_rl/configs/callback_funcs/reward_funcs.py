@@ -114,23 +114,24 @@ def energy(env: EnvTypes, env_states: TensorState) -> torch.Tensor:
     return torch.sum(torch.abs(qvel) * torch.abs(qfrc), dim=-1)
 
 
+def _get_indices(env: EnvTypes, sub_names, all_names):
+    hash_key = hash_names(sub_names)
+    if hash_key not in env.extras_buffer:
+        env.extras_buffer[hash_key] = get_indices_from_substring(
+            sub_names, all_names
+        ).to(env.device)
+    return env.extras_buffer[hash_key]
+
+
 def joint_deviation_l1(
     env: EnvTypes, env_states: TensorState, joint_names: str | list[str]
 ) -> torch.Tensor:
     """Penalize joint positions that deviate from the default one."""
-    joints_key = hash_names(joint_names)
-    if joints_key not in env.extras_buffer:
-        env.extras_buffer[joints_key] = get_indices_from_substring(
-            joint_names, env.sorted_joint_names
-        ).to(env.device)
-
+    indices = _get_indices(env, joint_names, env.sorted_joint_names)
     # extract the used quantities (to enable type-hinting)
     robot_state = env_states.robots[env.name]
     # compute out of limits constraints
-    angle = (
-        robot_state.joint_pos[:, env.extras_buffer[joints_key]]
-        - env.default_dof_pos[env.extras_buffer[joints_key]]
-    )
+    angle = robot_state.joint_pos[:, indices] - env.default_dof_pos[indices]
     return torch.sum(torch.abs(angle), dim=1)
 
 
@@ -179,17 +180,12 @@ def feet_gait(
     threshold: float = 0.55,
     body_names: str | list[str] = ".*ankle_roll.*",
 ) -> torch.Tensor:
-    bodies_key = hash_names(body_names)
-    if bodies_key not in env.extras_buffer:
-        body_state_names = env_states.robots[env.name].body_names
-        env.extras_buffer[bodies_key] = get_indices_from_substring(
-            body_names, body_state_names
-        ).to(env.device)
+    indices = _get_indices(env, body_names, env_states.robots[env.name].body_names)
     command_name = "base_velocity"
 
     contact_forces: ContactForces = env_states.extras["contact_forces"][env.name]
     is_contact = (
-        contact_forces.contact_forces_history[:, :, env.extras_buffer[bodies_key], :]
+        contact_forces.contact_forces_history[:, :, indices, :]
         .norm(dim=-1)
         .max(dim=1)[0]
         > 1.0
@@ -202,9 +198,7 @@ def feet_gait(
     sin_pos = torch.sin(2 * torch.pi * global_phase)
     # Add double support phase
     is_stance = torch.zeros(
-        (env.num_envs, len(env.extras_buffer[bodies_key])),
-        dtype=torch.bool,
-        device=env.device,
+        (env.num_envs, len(indices)), dtype=torch.bool, device=env.device
     )
     # left foot stance
     is_stance[:, 0] = sin_pos >= 0
@@ -246,24 +240,17 @@ def feet_slide(
     agent is penalized only when the feet are in contact with the ground.
     """
     # Penalize feet sliding
-    bodies_key = hash_names(body_names)
-    if bodies_key not in env.extras_buffer:
-        body_state_names = env_states.robots[env.name].body_names
-        env.extras_buffer[bodies_key] = get_indices_from_substring(
-            body_names, body_state_names
-        ).to(env.device)
+    indices = _get_indices(env, body_names, env_states.robots[env.name].body_names)
 
     contact_forces: ContactForces = env_states.extras["contact_forces"][env.name]
     contacts = (
-        contact_forces.contact_forces_history[:, :, env.extras_buffer[bodies_key], :]
+        contact_forces.contact_forces_history[:, :, indices, :]
         .norm(dim=-1)
         .max(dim=1)[0]
         > 1.0
     )
 
-    body_vel = env_states.robots[env.name].body_state[
-        :, env.extras_buffer[bodies_key], :2
-    ]
+    body_vel = env_states.robots[env.name].body_state[:, indices, :2]
     reward = torch.sum(body_vel.norm(dim=-1) * contacts, dim=1)
     return reward
 
@@ -277,19 +264,11 @@ def feet_clearance(
     body_names: str | list[str] = ".*ankle_roll.*",
 ) -> torch.Tensor:
     """Reward the swinging feet for clearing a specified height off the ground"""
-    bodies_key = hash_names(body_names)
-    if bodies_key not in env.extras_buffer:
-        body_state_names = env_states.robots[env.name].body_names
-        env.extras_buffer[bodies_key] = get_indices_from_substring(
-            body_names, body_state_names
-        ).to(env.device)
+    indices = _get_indices(env, body_names, env_states.robots[env.name].body_names)
     base = env_states.robots[env.name]
-    foot_z_target_error = torch.square(
-        base.body_state[:, env.extras_buffer[bodies_key], 2] - target_height
-    )
+    foot_z_target_error = torch.square(base.body_state[:, indices, 2] - target_height)
     foot_velocity_tanh = torch.tanh(
-        tanh_mult
-        * torch.norm(base.body_state[:, env.extras_buffer[bodies_key], 7:9], dim=2)
+        tanh_mult * torch.norm(base.body_state[:, indices, 7:9], dim=2)
     )
     reward = foot_z_target_error * foot_velocity_tanh
     return torch.exp(-torch.sum(reward, dim=1) / std)
@@ -302,20 +281,10 @@ def undesired_contacts(
     body_names: str | list[str] = "(?!.*ankle.*).*",
 ) -> torch.Tensor:
     """Penalize undesired contacts as the number of violations that are above a threshold."""
-    bodies_key = hash_names(body_names)
-    if bodies_key not in env.extras_buffer:
-        body_state_names = env_states.robots[env.name].body_names
-        env.extras_buffer[bodies_key] = get_indices_from_substring(
-            body_names, body_state_names
-        ).to(env.device)
-
-    body_mask = torch.zeros(
-        size=(len(env.sorted_body_names),), dtype=torch.bool, device=env.device
-    )
-    body_mask[env.extras_buffer[bodies_key]] = True
+    indices = _get_indices(env, body_names, env_states.robots[env.name].body_names)
     contact_forces: ContactForces = env_states.extras["contact_forces"][env.name]
     is_contact = (
-        contact_forces.contact_forces_history[:, :, body_mask, :]
+        contact_forces.contact_forces_history[:, :, indices, :]
         .norm(dim=-1)
         .max(dim=1)[0]
         > threshold
