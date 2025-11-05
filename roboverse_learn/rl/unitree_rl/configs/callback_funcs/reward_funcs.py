@@ -253,7 +253,7 @@ def feet_slide(
         > 1.0
     )
 
-    body_vel = env_states.robots[env.name].body_state[:, indices, :2]
+    body_vel = env_states.robots[env.name].body_state[:, indices, 7:9]
     reward = torch.sum(body_vel.norm(dim=-1) * contacts, dim=1)
     return reward
 
