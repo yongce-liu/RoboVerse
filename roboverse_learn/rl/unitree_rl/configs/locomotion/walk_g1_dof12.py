@@ -22,7 +22,7 @@ from roboverse_learn.rl.unitree_rl.configs.callback_funcs import (
 
 @configclass
 class WalkG1Dof12EnvCfg(BaseEnvCfg):
-    episode_length_s = 24.0
+    episode_length_s = 20.0
     obs_len_history = 1
     priv_obs_len_history = 1
 
@@ -40,7 +40,7 @@ class WalkG1Dof12EnvCfg(BaseEnvCfg):
         base_height = (-10.0, {"target_height": 0.78})
         joint_acc = -2.5e-7
         joint_vel = -0.001
-        action_rate = -0.05
+        action_rate = -0.01
         joint_pos_limits = -5.0
         is_alive = 0.15
         joint_deviation_legs = (
@@ -69,27 +69,34 @@ class WalkG1Dof12EnvCfg(BaseEnvCfg):
                 "body_names": (".*ankle_roll.*"),
             },
         )
-        energy = -0.00001
+        energy = -1e-5
         ########################
+
+    rewards = BaseEnvCfg.Rewards(scales=RewardsScales(), only_positive_rewards=True)
 
     commands = BaseEnvCfg.Commands(
         value=None,
         resample=step_funcs.resample_commands,
-        heading_command=False,
+        heading_command=True,
+        resampling_time=10.0,
         rel_standing_envs=0.02,
         ranges=BaseEnvCfg.Commands.Ranges(
-            lin_vel_x=(-0.1, 0.1), lin_vel_y=(-0.1, 0.1), ang_vel_yaw=(-0.1, 0.1)
+            lin_vel_x=(-1.0, 1.0),
+            lin_vel_y=(-1.0, 1.0),
+            ang_vel_yaw=(-1.0, 1.0),
+            heading=(-3.14, 3.14),
         ),
         limit_ranges=BaseEnvCfg.Commands.Ranges(
-            lin_vel_x=(-0.5, 1.0), lin_vel_y=(-0.3, 0.3), ang_vel_yaw=(-0.2, 0.2)
+            lin_vel_x=(-1.0, 1.0),
+            lin_vel_y=(-1.0, 1.0),
+            ang_vel_yaw=(-1.0, 1.0),
+            heading=(-3.14, 3.14),
         ),
     )
 
     curriculum = BaseEnvCfg.Curriculum(
-        enabled=True, funcs={"lin_vel_cmd_levels": lin_vel_cmd_levels}
+        enabled=False, funcs={"lin_vel_cmd_levels": lin_vel_cmd_levels}
     )
-
-    rewards = BaseEnvCfg.Rewards(scales=RewardsScales(), only_positive_rewards=True)
 
     callbacks_query = {"contact_forces": ContactForces(history_length=3)}
     callbacks_setup = {
@@ -102,7 +109,7 @@ class WalkG1Dof12EnvCfg(BaseEnvCfg):
         ),
         "mass_randomizer": MassRandomizer(
             obj_name="g1_dof12",
-            body_names="pelvis",
+            body_names="torso_link",
             mass_distribution_params=(-1.0, 3.0),
             operation="add",
         ),
@@ -112,15 +119,15 @@ class WalkG1Dof12EnvCfg(BaseEnvCfg):
             reset_funcs.random_root_state,
             {
                 "pose_range": [
-                    [-0.5, -0.5, 0.0, 0, 0, -3.14],
-                    [0.5, 0.5, 0.0, 0, 0, 3.14],
+                    [0., 0., 0, 0, 0, 0],
+                    [0., 0., 0, 0, 0, 0],
                 ],
-                "velocity_range": [[0] * 6, [0] * 6],
+                "velocity_range": [[-0.5] * 6, [0.5] * 6],
             },
         ),
         "reset_joints_by_scale": (
             reset_funcs.reset_joints_by_scale,
-            {"position_range": (1.0, 1.0), "velocity_range": (-1.0, 1.0)},
+            {"position_range": (0.5, 1.5), "velocity_range": (1.0, 1.0)},
         ),
     }
     callbacks_step = {
@@ -128,7 +135,7 @@ class WalkG1Dof12EnvCfg(BaseEnvCfg):
             step_funcs.push_by_setting_velocity,
             {
                 "interval_range_s": (5.0, 5.0),
-                "velocity_range": [[-0.5, -0.5, 0.0], [0.5, 0.5, 0.0]],
+                "velocity_range": [[-1.5, -1.5, 0.0], [1.5, 1.5, 0.0]],
             },
         )
     }

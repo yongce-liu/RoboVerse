@@ -90,12 +90,21 @@ class WalkG1Dof12Task(LeggedRobotTask):
         self.obs_noise = torch.zeros(size=(self.num_obs_single,), dtype=torch.float, device=self.device)
 
         ##################### for observation scale #####################
+        self.obs_scale[0:2] = 0.2  # linear vel commands
+        self.obs_scale[2] = 0.25  # angular vel commands
         self.obs_scale[3:6] = 0.25  # angular velocity
+        # projected_gravity
+        # joint position
         self.obs_scale[9 + self.num_actions : 9 + 2 * self.num_actions] = 0.05  # joint velocity
 
         ##################### for priviliged observation scale #####################
+        self.priv_obs_scale[0:2] = 0.2  # linear vel commands
+        self.priv_obs_scale[2] = 0.25  # angular vel commands
+        self.priv_obs_scale[3:6] = 2.0  # linear velocity
         self.priv_obs_scale[6:9] = 0.25  # angular velocity
-        self.priv_obs_scale[12 + self.num_actions : 12 + 2 * self.num_actions] = 1.5  # joint velocity
+        # projected_gravity
+        # joint position
+        self.priv_obs_scale[12 + self.num_actions : 12 + 2 * self.num_actions] = 0.05  # joint velocity
 
         ################### for noise vector ####################
         # [0:3] -> commands
