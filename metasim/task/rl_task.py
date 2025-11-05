@@ -29,14 +29,22 @@ class RLTaskEnv(BaseTaskEnv):
         self._action_space: spaces.Space | None = None
 
         self.asymmetric_obs = False
-        self.num_envs = scenario.num_envs
-        self.robot = scenario.robots[0]
+
         super().__init__(scenario, device)
 
+        self.num_envs = scenario.num_envs
+        self.robot = scenario.robots[0]
         self._episode_steps = torch.zeros(self.num_envs, dtype=torch.int32, device=self.device)
 
         # convert list state to tensor state for reset acceleration
         self._initial_states = list_state_to_tensor(self.handler, self._get_initial_states(), self.device)
+        # first reset
+        self.reset(env_ids=list(range(self.num_envs)))
+
+        # obs size
+        states = self.handler.get_states()
+        first_obs = self._observation(states)
+        self.num_obs = first_obs.shape[-1]
 
         # action bounds from joint limits (ordered by joint_names)
         limits = self.robot.joint_limits
@@ -48,6 +56,9 @@ class RLTaskEnv(BaseTaskEnv):
             [limits[j][1] for j in self.joint_names], dtype=torch.float32, device=self.device
         )
         self.num_actions = self._action_low.shape[0]
+
+        self.input_dim = self.num_obs
+        self.output_dim = self.num_actions
 
     # -------------------------------------------------------------------------
     # hooks / spaces
