@@ -50,7 +50,7 @@ def undesired_contact(
     """Terminate when undesired contacts are detected."""
     if not hasattr(env, "termination_contact_indices"):
         env.termination_contact_indices = get_indices_from_substring(
-            contact_names, env.sorted_body_names
+            contact_names, env.sorted_body_names, fullmatch=False
         ).to(env.device)
 
     contact_forces = env_states.extras["contact_forces"][env.name]

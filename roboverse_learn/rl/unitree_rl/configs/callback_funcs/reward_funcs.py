@@ -127,7 +127,7 @@ def _get_indices(
 
 
 def joint_deviation_l1(
-    env: EnvTypes, env_states: TensorState, joint_names: str | list[str]
+    env: EnvTypes, env_states: TensorState, joint_names: str | tuple[str]
 ) -> torch.Tensor:
     """Penalize joint positions that deviate from the default one."""
     indices = _get_indices(env, joint_names, env.sorted_joint_names)
@@ -181,7 +181,7 @@ def feet_gait(
     period: float,
     offset: list[float],
     threshold: float = 0.55,
-    body_names: str | list[str] = ".*ankle_roll.*",
+    body_names: str | tuple[str] = ".*ankle_roll.*",
 ) -> torch.Tensor:
     indices = _get_indices(env, body_names, env_states.robots[env.name].body_names)
     command_name = "base_velocity"
@@ -234,7 +234,7 @@ def feet_gait(
 def feet_slide(
     env: EnvTypes,
     env_states: TensorState,
-    body_names: str | list[str] = ".*ankle_roll.*",
+    body_names: str | tuple[str] = ".*ankle_roll.*",
 ) -> torch.Tensor:
     """Penalize feet sliding.
 
@@ -264,7 +264,7 @@ def feet_clearance(
     target_height: float,
     std: float,
     tanh_mult: float,
-    body_names: str | list[str] = ".*ankle_roll.*",
+    body_names: str | tuple[str] = ".*ankle_roll.*",
 ) -> torch.Tensor:
     """Reward the swinging feet for clearing a specified height off the ground"""
     indices = _get_indices(env, body_names, env_states.robots[env.name].body_names)
@@ -274,14 +274,14 @@ def feet_clearance(
         tanh_mult * torch.norm(base.body_state[:, indices, 7:9], dim=2)
     )
     reward = foot_z_target_error * foot_velocity_tanh
-    return torch.exp(-torch.sum(reward, dim=1) / std)
+    return torch.exp(-torch.sum(reward, dim=1) / std**2)
 
 
 def undesired_contacts(
     env: EnvTypes,
     env_states: TensorState,
     threshold: float,
-    body_names: str | list[str] = "(?!.*ankle.*).*",
+    body_names: str | tuple[str] = "(?!.*ankle.*).*",
 ) -> torch.Tensor:
     """Penalize undesired contacts as the number of violations that are above a threshold."""
     indices = _get_indices(env, body_names, env_states.robots[env.name].body_names)

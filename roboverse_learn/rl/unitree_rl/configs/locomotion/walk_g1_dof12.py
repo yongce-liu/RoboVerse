@@ -16,6 +16,7 @@ from roboverse_learn.rl.unitree_rl.configs.callback_funcs import (
     termination_funcs,
     reset_funcs,
     step_funcs,
+    reward_funcs,
 )
 
 
@@ -42,19 +43,32 @@ class WalkG1Dof12EnvCfg(BaseEnvCfg):
         action_rate = -0.05
         joint_pos_limits = -5.0
         is_alive = 0.15
-        joint_deviation_legs = -1.0
-        feet_slide = -0.2
+        joint_deviation_legs = (
+            -1.0,
+            {"joint_names": (".*_hip_roll_joint", ".*_hip_yaw_joint")},
+            reward_funcs.joint_deviation_l1,
+        )
+        feet_slide = (-0.2, {"body_names": (".*ankle_roll.*")})
         # feet_swing_height = -20.0
         feet_clearance = (
             1.0,
             {
-                "std": 0.05,
+                "std": math.sqrt(0.05),
                 "tanh_mult": 2.0,
                 "target_height": 0.1,
+                "body_names": (".*ankle_roll.*"),
             },
         )
         # contact = 0.18
-        feet_gait = (0.18, {"period": 0.8, "offset": [0.0, 0.5], "threshold": 0.55})
+        feet_gait = (
+            0.18,
+            {
+                "period": 0.8,
+                "offset": [0.0, 0.5],
+                "threshold": 0.55,
+                "body_names": (".*ankle_roll.*"),
+            },
+        )
         energy = -0.00001
         ########################
 
@@ -79,19 +93,19 @@ class WalkG1Dof12EnvCfg(BaseEnvCfg):
 
     callbacks_query = {"contact_forces": ContactForces(history_length=3)}
     callbacks_setup = {
-        # "material_randomizer": MaterialRandomizer(
-        #     obj_name="g1_dof12",
-        #     static_friction_range=(0.1, 1.25),
-        #     dynamic_friction_range=(0.1, 1.25),
-        #     restitution_range=(0.0, 0.0),
-        #     num_buckets=64,
-        # ),
-        # "mass_randomizer": MassRandomizer(
-        #     obj_name="g1_dof12",
-        #     body_names="pelvis",
-        #     mass_distribution_params=(-1.0, 3.0),
-        #     operation="add",
-        # ),
+        "material_randomizer": MaterialRandomizer(
+            obj_name="g1_dof12",
+            static_friction_range=(0.1, 1.25),
+            dynamic_friction_range=(0.1, 1.25),
+            restitution_range=(0.0, 0.0),
+            num_buckets=64,
+        ),
+        "mass_randomizer": MassRandomizer(
+            obj_name="g1_dof12",
+            body_names="pelvis",
+            mass_distribution_params=(-1.0, 3.0),
+            operation="add",
+        ),
     }
     callbacks_reset = {
         "random_root_state": (
