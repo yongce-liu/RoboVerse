@@ -70,7 +70,7 @@ class WalkG1Dof29EnvCfg(BaseEnvCfg):
         feet_clearance = (
             1.0,
             {
-                "std": 0.05,
+                "std": math.sqrt(0.05),
                 "tanh_mult": 2.0,
                 "target_height": 0.1,
             },

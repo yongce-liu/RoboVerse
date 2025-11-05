@@ -338,8 +338,6 @@ class LeggedRobotTask(AgentTask):
             self.reset(env_ids=reset_env_idx)
 
         self.commands_manager.resample(self)
-        for _step_fn, _params in self._step_callbacks.values():
-            _step_fn(self, env_states, **_params)
 
         ####### Compute observations after resets ########
         obs_single, priv_single = self._compute_task_observations(env_states)
@@ -358,6 +356,9 @@ class LeggedRobotTask(AgentTask):
                 history.append(getattr(env_states.robots[self.name], key).clone())
             else:
                 raise ValueError(f"History buffer key {key} not found in task or robot states.")
+
+        for _step_fn, _params in self._step_callbacks.values():
+            _step_fn(self, env_states, **_params)
 
     def _reward(self, env_states):
         rew_buf = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
