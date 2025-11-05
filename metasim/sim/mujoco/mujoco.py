@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING
 
 import mujoco
@@ -55,6 +56,9 @@ from metasim.sim import BaseSimHandler
 from metasim.types import Action
 from metasim.utils.state import CameraState, ObjectState, RobotState, TensorState, state_tensor_to_nested
 
+# TODO: add it to the randomization of metasim
+from roboverse_learn.rl.unitree_rl.helper import TerrainGenerator
+
 try:
     import mujoco.viewer
 except (ImportError, AttributeError):
@@ -95,15 +99,6 @@ class MujocoHandler(BaseSimHandler):
             self.cameras.append(camera)
         self._episode_length_buf = 0
 
-        self.decimation = scenario.decimation
-
-        self._manual_pd_on = False
-        self._p_gains = None
-        self._d_gains = None
-        self._torque_limits = None
-        self._robot_default_dof_pos = None
-        self._effort_controlled_joints = []
-        self._position_controlled_joints = []
         self._current_action = None
         self._current_vel_target = None  # Track velocity targets
 
@@ -154,6 +149,9 @@ class MujocoHandler(BaseSimHandler):
     def launch(self) -> None:
         model = self._init_mujoco()
         self.physics = mjcf.Physics.from_mjcf_model(model)
+        if self.hfield_measure is not None:
+            self.physics.model.hfield_data[:] = self.hfield_measure.flatten(order="C")
+
         self.data = self.physics.data
 
         # === Export MJCF + assets to a temp dir. Handle filename variability (dm_control 1.0.34). ===
@@ -200,73 +198,32 @@ class MujocoHandler(BaseSimHandler):
         if self.scenario.gs_scene is not None and self.scenario.gs_scene.with_gs_background:
             self._build_gs_background()
 
-        if self.optional_queries is None:
-            self.optional_queries = {}
-        for query_name, query_type in self.optional_queries.items():
-            query_type.bind_handler(self)
+        super().launch()
 
     def _init_torque_control(self):
         """Initialize torque control parameters based on robot configuration."""
-        self._p_gains = []
-        self._d_gains = []
-        self._torque_limits = []
-        self._robot_default_dof_pos = []
-        self._effort_controlled_joints = []
-        self._position_controlled_joints = []
-
         for robot_idx, robot in enumerate(self.robots):
             joint_names = self._get_joint_names(robot.name, sort=True)
-            robot_num_dof = len(joint_names)
-            self._robot_num_dofs.append(robot_num_dof)
-
-            p_gains = np.zeros(robot_num_dof)
-            d_gains = np.zeros(robot_num_dof)
-            torque_limits = np.zeros(robot_num_dof)
-
-            manual_pd_on = any(mode == "effort" for mode in robot.control_type.values())
-
-            default_dof_pos = []
-
+            self._robot_num_dofs.append(len(joint_names))
             for i, joint_name in enumerate(joint_names):
-                i_actuator_cfg = robot.actuators[joint_name]
-                i_control_mode = robot.control_type.get(joint_name, "position")
+                # Resolve control mode from this robot's config
+                i_control_mode = robot.control_type.get(joint_name, "position") if robot.control_type else "position"
+                # if i_control_mode == "position":
+                #     # Set stiffness (kp) for position actuators and joint damping if provided in the robot config.
+                #     # Note: MuJoCo uses actuator_gainprm[..., 0] for position actuator kp, and dof_damping for joint damping.
+                #     actuator_cfg = robot.actuators.get(joint_name) if robot.actuators else None
+                #     full_name = f"{self._mujoco_robot_names[robot_idx]}{joint_name}"
+                #     if actuator_cfg is not None:
+                #         # Apply actuator stiffness (kp) to the corresponding position actuator
+                #         if actuator_cfg.stiffness is not None:
+                #             actuator = self.physics.model.actuator(full_name)
+                #             self.physics.model.actuator_gainprm[actuator.id, 0] = actuator_cfg.stiffness
 
-                if joint_name in robot.default_joint_positions:
-                    default_pos = robot.default_joint_positions[joint_name]
-                else:
-                    joint_id = self.physics.model.joint(f"{self._mujoco_robot_names[robot_idx]}{joint_name}").id
-                    joint_range = self.physics.model.jnt_range[joint_id]
-                    default_pos = 0.3 * (joint_range[0] + joint_range[1])
-                default_dof_pos.append(default_pos)
-
-                if i_control_mode == "effort":
-                    self._effort_controlled_joints.append((robot_idx, i))
-                    p_gains[i] = i_actuator_cfg.stiffness
-                    d_gains[i] = i_actuator_cfg.damping
-
-                    if i_actuator_cfg.torque_limit is not None:
-                        torque_limit = i_actuator_cfg.torque_limit
-                    else:
-                        actuator_id = self.physics.model.actuator(
-                            f"{self._mujoco_robot_names[robot_idx]}{joint_name}"
-                        ).id
-                        torque_limit = self.physics.model.actuator_forcerange[actuator_id, 1]
-
-                    torque_limits[i] = self.scenario.control.torque_limit_scale * torque_limit
-
-                elif i_control_mode == "position":
-                    self._position_controlled_joints.append((robot_idx, i))
-                else:
-                    log.error(f"Unknown actuator control mode: {i_control_mode}, only support effort and position")
-                    raise ValueError
-
-            self._p_gains.append(p_gains)
-            self._d_gains.append(d_gains)
-            self._torque_limits.append(torque_limits)
-            self._robot_default_dof_pos.append(np.array(default_dof_pos))
-
-        self._manual_pd_on = len(self._effort_controlled_joints) > 0
-        self._current_vel_target = None  # Initialize velocity target tracking
+                #         # Apply joint damping to the corresponding DOF
+                #         if actuator_cfg.damping is not None:
+                #             j = self.physics.model.joint(full_name)
+                #             dof_adr = self.physics.model.jnt_dofadr[j.id]
+                #             self.physics.model.dof_damping[dof_adr] = actuator_cfg.damping
 
     def _apply_scale_to_mjcf(self, mjcf_model, scale):
         """Apply scale to all geoms, bodies, and sites in the MJCF model."""
@@ -366,15 +323,14 @@ class MujocoHandler(BaseSimHandler):
             log.info(f"Loaded scene from: {self.scenario.scene.mjcf_path}")
         else:
             mjcf_model = mjcf.RootElement()
-            self._add_default_ground(mjcf_model)
-
-        if self.scenario.sim_params.dt is not None:
-            mjcf_model.option.timestep = self.scenario.sim_params.dt
+            self.hfield_name, self.hfield_measure = self._add_ground(mjcf_model=mjcf_model, if_random=False)
 
         self._add_cameras_to_model(mjcf_model)
         self._add_objects_to_model(mjcf_model)
         self._add_robots_to_model(mjcf_model)
 
+        if self.scenario.sim_params.dt is not None:
+            mjcf_model.option.timestep = self.scenario.sim_params.dt
         return mjcf_model
 
     def _add_default_ground(self, mjcf_model: mjcf.RootElement) -> None:
@@ -469,6 +425,13 @@ class MujocoHandler(BaseSimHandler):
             robot_attached = mjcf_model.attach(robot_xml)
             if not robot.fix_base_link:
                 robot_attached.add("freejoint")
+            if not hasattr(robot_attached, "inertial") or robot_attached.inertial is None:
+                child_body = robot_attached.find_all("body")[0]
+                pos = child_body.inertial.pos
+                robot_attached.pos = child_body.pos
+                child_body.pos = "0 0 0"  # Reset child body position to origin with respect to the attached robot
+                robot_attached.quat = child_body.quat if child_body.quat is not None else "1 0 0 0"
+                robot_attached.add("inertial", mass="1e-9", diaginertia="1e-9 1e-9 1e-9", pos=pos)
             self.mj_objects[robot.name] = robot_xml
             self._mujoco_robot_names.append(robot_xml.full_identifier)
 
@@ -598,6 +561,12 @@ class MujocoHandler(BaseSimHandler):
                 else None,
                 joint_effort_target=torch.from_numpy(self.physics.data.actuator_force[actuator_reindex]).unsqueeze(0),
             )
+            # FIXME a temporary solution for accessing net contact forces of robots, it will be moved to
+            self._contact_forces = self._get_contact_forces().view(self.num_envs, -1, 3)
+            extra = {
+                "contact_forces": self._contact_forces[:, body_ids_reindex, :],
+            }
+            state.extra = extra
             robot_states[robot.name] = state
 
         camera_states = {}
@@ -811,8 +780,9 @@ class MujocoHandler(BaseSimHandler):
         states_flat = [{**state["objects"], **state["robots"]} for state in states]
 
         for obj_name, obj_state in states_flat[0].items():
-            self._set_root_state(obj_name, obj_state, zero_vel)
-            self._set_joint_state(obj_name, obj_state, zero_vel)
+            if obj_name in self.mj_objects:
+                self._set_root_state(obj_name, obj_state, zero_vel)
+                self._set_joint_state(obj_name, obj_state, zero_vel)
         self.physics.forward()
 
     def _disable_robotgravity(self):
@@ -825,80 +795,20 @@ class MujocoHandler(BaseSimHandler):
             self.physics.data.xfrc_applied[body_id, 0:3] = force_vec
             self.physics.data.xfrc_applied[body_id, 3:6] = 0
 
-    def _compute_effort(self, actions, robot_idx):
-        """Compute effort from actions using PD controller."""
-        # FIXME: hard code for 0-1 action space, should remove all the scale stuff later
-        action_scaled = self._action_scale * actions
-        joint_names = self._get_joint_names(self.robots[robot_idx].name, sort=True)
-        robot_dof_pos = np.array([
-            self.physics.data.joint(f"{self._mujoco_robot_names[robot_idx]}{jn}").qpos[0] for jn in joint_names
-        ])
-        robot_dof_vel = np.array([
-            self.physics.data.joint(f"{self._mujoco_robot_names[robot_idx]}{jn}").qvel[0] for jn in joint_names
-        ])
-
-        if self._action_offset:
-            effort = (
-                self._p_gains[robot_idx] * (action_scaled + self._robot_default_dof_pos[robot_idx] - robot_dof_pos)
-                - self._d_gains[robot_idx] * robot_dof_vel
-            )
-        else:
-            effort = (
-                self._p_gains[robot_idx] * (action_scaled - robot_dof_pos) - self._d_gains[robot_idx] * robot_dof_vel
-            )
-
-        effort = np.clip(effort, -self._torque_limits[robot_idx], self._torque_limits[robot_idx])
-
-        return effort
-
-    def _apply_pd_control(self, actions):
-        """Apply torque control using computed efforts."""
-        for robot_idx, robot in enumerate(self.robots):
-            if any((robot_idx, i) in self._effort_controlled_joints for i in range(self._robot_num_dofs[robot_idx])):
-                effort = self._compute_effort(actions, robot_idx)
-                joint_names = self._get_joint_names(robot.name, sort=True)
-                for i in range(self._robot_num_dofs[robot_idx]):
-                    if (robot_idx, i) in self._effort_controlled_joints:
-                        joint_name = joint_names[i]
-                        actuator_id = self.physics.model.actuator(
-                            f"{self._mujoco_robot_names[robot_idx]}{joint_name}"
-                        ).id
-                        self.physics.data.ctrl[actuator_id] = effort[i]
-
     def set_dof_targets(self, actions) -> None:
         """Unified: Tensor/ndarray -> write ctrl (or cache for PD); dict-list -> name-based."""
         self._actions_cache = actions
 
         # Fast path: tensor-like controls
         if isinstance(actions, torch.Tensor):
+            actions = actions.squeeze()
             vec = actions.detach().to(dtype=torch.float32, device="cpu").numpy()
-            if vec.ndim > 1:
-                vec = vec.squeeze()
-            # Reindex tensor from dictionary order to MuJoCo internal order
-            if len(self.robots) == 1:
-                vec_reindexed = np.zeros_like(vec)
-                # Single robot case
-                robot = self.robots[0]
-                # Get inverse reindex: from dictionary order to original order
-                reindex = self.get_joint_reindex(robot.name, inverse=True)
-
-                vec_reindexed[reindex] = vec
-            else:
-                # Multi-robot case - need to reindex each robot's joints separately
-                vec_reindexed = np.zeros_like(vec)
-                start_idx = 0
-                for robot in self.robots:
-                    robot_dofs = self._robot_num_dofs[self.robots.index(robot)]
-                    end_idx = start_idx + robot_dofs
-                    # Get inverse reindex: from dictionary order to original order
-                    reindex = self.get_joint_reindex(robot.name, inverse=True)
-                    vec_reindexed[start_idx:end_idx][reindex] = vec[start_idx:end_idx]
-                    start_idx = end_idx
-
-            if self._manual_pd_on:
-                self._current_action = vec_reindexed
-            else:
-                self.physics.data.ctrl[:] = vec_reindexed
+            robot_idx = 0
+            joint_names = self.get_joint_names(self.robot.name, sort=True)
+            for i in range(self._robot_num_dofs[robot_idx]):
+                joint_name = joint_names[i]
+                actuator_id = self.physics.model.actuator(f"{self._mujoco_robot_names[robot_idx]}{joint_name}").id
+                self.physics.data.ctrl[actuator_id] = vec[i]
             return
 
         # Dict-list path
@@ -920,43 +830,31 @@ class MujocoHandler(BaseSimHandler):
 
             # Position targets
             joint_targets = payload["dof_pos_target"]
-            if self._manual_pd_on:
-                jnames = self._get_joint_names(robot.name, sort=True)
-                self._current_action = np.zeros(self._robot_num_dofs[robot_idx], dtype=np.float32)
-                for i, jn in enumerate(jnames):
-                    if jn in joint_targets:
-                        self._current_action[i] = joint_targets[jn]
-                for i in range(self._robot_num_dofs[robot_idx]):
-                    if (robot_idx, i) in self._position_controlled_joints:
-                        jn = jnames[i]
-                        if jn in joint_targets:
-                            self.physics.data.actuator(
-                                f"{self._mujoco_robot_names[robot_idx]}{jn}"
-                            ).ctrl = joint_targets[jn]
-            else:
-                for jn, pos in joint_targets.items():
-                    if torch.is_tensor(pos):
-                        pos = pos.detach().cpu().item()
-                    self.physics.data.actuator(f"{self._mujoco_robot_names[robot_idx]}{jn}").ctrl = pos
+            jnames = self._get_joint_names(robot.name, sort=True)
+            self._current_action = np.zeros(self._robot_num_dofs[robot_idx], dtype=np.float32)
+            for i, jn in enumerate(jnames):
+                if jn in joint_targets:
+                    self._current_action[i] = joint_targets[jn]
+            for i in range(self._robot_num_dofs[robot_idx]):
+                jn = jnames[i]
+                if jn in joint_targets:
+                    self.physics.data.actuator(f"{self._mujoco_robot_names[robot_idx]}{jn}").ctrl = joint_targets[jn]
 
     def refresh_render(self) -> None:
         self.physics.forward()  # Recomputes the forward dynamics without advancing the simulation.
         if self.viewer is not None:
             self.viewer.sync()
 
-    def _simulate(self):
+    def _simulate(self, decimation=None):
         # Apply gravity compensation for all robots
         for robot_idx, robot in enumerate(self.robots):
             if self._gravity_compensations[robot_idx]:
                 self._disable_robotgravity()
 
         # Apply torque control if manual PD is enabled
-        if self._manual_pd_on:
-            for _ in range(self.decimation):
-                self._apply_pd_control(self._current_action)
-                self.physics.step()
-        else:
-            self.physics.step(self.decimation)
+        if decimation is None:
+            decimation = self.decimation
+        self.physics.step(decimation)
 
         if not self.headless:
             self.viewer.sync()
@@ -1092,6 +990,125 @@ class MujocoHandler(BaseSimHandler):
             self._body_ids_reindex_cache[obj_name] = body_ids_reindex
 
         return self._body_ids_reindex_cache[obj_name]
+
+    def _get_contact_forces(self) -> torch.Tensor:
+        """
+        Compute net contact forces on each body.
+        Returns:
+            torch.Tensor: shape (nbody, 3), contact forces for each body
+        """
+        nbody = self.physics.model.nbody
+        contact_forces = torch.zeros((nbody, 3), device=self.device)
+
+        for i in range(self.physics.data.ncon):
+            contact = self.physics.data.contact[i]
+            force = np.zeros(6, dtype=np.float64)
+            mujoco.mj_contactForce(self.physics.model.ptr, self.physics.data.ptr, i, force)
+            f_contact = torch.from_numpy(force[:3]).to(device=self.device)
+
+            body1 = self.physics.model.geom_bodyid[contact.geom1]
+            body2 = self.physics.model.geom_bodyid[contact.geom2]
+
+            contact_forces[body1] += f_contact
+            contact_forces[body2] -= f_contact
+
+        return contact_forces
+
+    def _add_ground(self, mjcf_model, if_random: bool = False):
+        if if_random:
+            tg = TerrainGenerator(self.scenario.random.terrain_cfg)
+            static_friction = getattr(self.scenario.random.terrain_cfg, "static_friction", 1.0)
+            dynamic_friction = getattr(self.scenario.random.terrain_cfg, "dynamic_friction", 1.0)
+            restitution = getattr(self.scenario.random.terrain_cfg, "restitution", 0.0)
+
+            height_mat = tg.generate_terrain(self.scenario.random.terrain_cfg, type="heightfield")
+            # Also create a triangular mesh representation for queries (e.g., LiDAR warp raycasts),
+            # consistent with IsaacGym handler's ground mesh exposure.
+            vertices, triangles = tg.generate_terrain(self.scenario.random.terrain_cfg, type="trimesh")
+            # Store mesh for external consumers (e.g., LidarPointCloud)
+            self._ground_mesh_vertices = vertices
+            self._ground_mesh_triangles = triangles.astype(np.int32)
+            hfield_name = "terrain"
+            mjcf_model.asset.add(
+                "hfield",
+                name=hfield_name,
+                nrow=height_mat.shape[0],
+                ncol=height_mat.shape[1],
+                size=[
+                    height_mat.shape[0] * tg.horizontal_scale / 2,
+                    height_mat.shape[1] * tg.horizontal_scale / 2,
+                    1.0,
+                    0.1,
+                ],
+            )
+
+            mjcf_model.worldbody.add(
+                "geom",
+                name="terrain_geom",
+                type="hfield",
+                hfield=hfield_name,
+                pos=f"{-tg.margin} {-tg.margin} 0",
+                rgba="0.8 0.8 0.8 1",
+                friction=[static_friction, dynamic_friction, 0.001],
+                solimp=[restitution, 0.01, 0.99],
+                # contype="0",
+                # conaffinity="1",
+                # condim="6",
+            )
+            hfield_measure = height_mat
+        else:
+            mjcf_model.asset.add(
+                "texture",
+                name="texplane",
+                type="2d",
+                builtin="checker",
+                width=512,
+                height=512,
+                rgb1=[0, 0, 0],
+                rgb2=[1.0, 1.0, 1.0],
+            )
+            mjcf_model.asset.add(
+                "material", name="matplane", reflectance="0.2", texture="texplane", texrepeat=[1, 1], texuniform=True
+            )
+            ground = mjcf_model.worldbody.add(
+                "geom",
+                type="plane",
+                pos="0 0 0",
+                size="100 100 0.001",
+                quat="1 0 0 0",
+                condim="3",
+                conaffinity="15",
+                material="matplane",
+            )
+            hfield_name = None
+            hfield_measure = None
+
+            # Expose a simple quad mesh centered at origin, similar to IsaacGym handler.
+            step = float(self.scenario.env_spacing)
+            num_per_row = math.sqrt(1)  # MujocoHandler supports single env
+            num_rows = 1
+            width = max(1, num_per_row) * step
+            height = max(1, num_rows) * step
+            border_offset = 20.0
+            hw, hh = width * 0.5 + border_offset, height * 0.5 + border_offset
+
+            self._ground_mesh_vertices = np.array(
+                [
+                    [-hw, -hh, 0.0],
+                    [hw, -hh, 0.0],
+                    [-hw, hh, 0.0],
+                    [hw, hh, 0.0],
+                ],
+                dtype=np.float32,
+            )
+            self._ground_mesh_triangles = np.array(
+                [
+                    [0, 2, 1],
+                    [1, 2, 3],
+                ],
+                dtype=np.int32,
+            )
+        return hfield_name, hfield_measure
 
     ############################################################
     ## Misc
