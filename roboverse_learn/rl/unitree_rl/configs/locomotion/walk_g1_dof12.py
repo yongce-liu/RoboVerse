@@ -109,7 +109,7 @@ class WalkG1Dof12EnvCfg(BaseEnvCfg):
         ),
         "mass_randomizer": MassRandomizer(
             obj_name="g1_dof12",
-            body_names="torso_link",
+            body_names="pelvis",
             mass_distribution_params=(-1.0, 3.0),
             operation="add",
         ),
