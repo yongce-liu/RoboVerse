@@ -191,8 +191,7 @@ class IsaacsimHandler(BaseSimHandler):
         # Initialize GS background if enabled
         self._build_gs_background()
 
-        super().launch()
-        self.sim.reset()  # crucial for calling _initialize_callbacks in binded sensors
+        return super().launch()
 
     def close(self) -> None:
         log.info("close Isaacsim Handler")
@@ -446,13 +445,6 @@ class IsaacsimHandler(BaseSimHandler):
                 intrinsics=torch.tensor(camera.intrinsics, device=self.device)[None, ...].repeat(self.num_envs, 1, 1),
             )
         extras = self.get_extra()
-        for key, extra_value in extras.items():
-            if isinstance(extra_value, dict):
-                for rname, rvalue in extra_value.items():
-                    if hasattr(robot_states[rname], "extra"):
-                        robot_states[rname].extra[key] = rvalue
-                    else:
-                        robot_states[rname].extra = {key: rvalue}
         return TensorState(objects=object_states, robots=robot_states, cameras=camera_states, extras=extras)
 
     def _on_keyboard_event(self, event, *args, **kwargs):
@@ -510,14 +502,12 @@ class IsaacsimHandler(BaseSimHandler):
                 )
             start_idx += len(actionable_joint_ids)
 
-    def _simulate(self, decimation=None):
+    def _simulate(self):
         is_rendering = self.sim.has_gui() or self.sim.has_rtx_sensors()
         self.scene.write_data_to_sim()
 
         # Decimation: run physics multiple times per control step for better stability
-        if decimation is None:
-            decimation = self.decimation
-        for _ in range(decimation):
+        for _ in range(self.decimation):
             self.sim.step(render=False)
 
         if self._step_counter % self.render_interval == 0 and is_rendering:
@@ -566,7 +556,7 @@ class IsaacsimHandler(BaseSimHandler):
                     joint_names_expr=[jn],
                     stiffness=actuator.stiffness if not manual_pd else 0.0,
                     damping=actuator.damping if not manual_pd else 0.0,
-                    armature=0.01,
+                    armature=getattr(robot, "armature", 0.01),
                 )
                 for jn, actuator in robot.actuators.items()
             },
@@ -618,7 +608,7 @@ class IsaacsimHandler(BaseSimHandler):
                 ),
             )
         else:
-            rigid_props = sim_utils.RigidBodyPropertiesCfg()
+            rigid_props = sim_utils.RigidBodyPropertiesCfg(disable_gravity=not obj.enabled_gravity)
         if obj.collision_enabled:
             collision_props = sim_utils.CollisionPropertiesCfg(
                 collision_enabled=True,
