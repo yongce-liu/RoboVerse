@@ -130,7 +130,7 @@ class PickPlaceBase(RLTaskEnv):
 
     def _prepare_states(self, states, env_ids):
         """Preprocess initial states, randomizing positions within specified ranges.
-        
+
         Only handles generic objects (object, markers) and robot state.
         Specific objects (wall, window, cup, table) should be handled by subclasses if needed.
         """
@@ -344,7 +344,7 @@ class PickPlaceBase(RLTaskEnv):
 
             # Check distance condition
             distance_reached = (distance < self.reach_threshold) & grasped_mask
-            
+
             # Check rotation condition if rotation tracking is enabled
             rotation_reached = torch.ones(self.num_envs, dtype=torch.bool, device=self.device)
             rot_err = None
@@ -355,7 +355,7 @@ class PickPlaceBase(RLTaskEnv):
                 target_mat = matrix_from_quat(target_quat).reshape(self.num_envs, 9)
                 rot_err = torch.norm(target_mat[:, :6] - box_mat[:, :6], dim=-1)
                 rotation_reached = rot_err < self.rotation_error_threshold
-            
+
             # Both distance and rotation must be satisfied to consider as reached
             reached = distance_reached & rotation_reached
             newly_reached = reached & (

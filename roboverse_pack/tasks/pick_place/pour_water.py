@@ -5,11 +5,12 @@ from __future__ import annotations
 import torch
 
 from metasim.constants import PhysicStateType
-from metasim.scenario.objects import PrimitiveCubeCfg, PrimitiveCylinderCfg, RigidObjCfg
+from metasim.scenario.objects import PrimitiveCubeCfg, RigidObjCfg
 from metasim.scenario.scenario import ScenarioCfg, SimParamCfg
 from metasim.task.registry import register_task
 
-from .base import DEFAULT_CONFIG as BASE_DEFAULT_CONFIG, PickPlaceBase
+from .base import DEFAULT_CONFIG as BASE_DEFAULT_CONFIG
+from .base import PickPlaceBase
 
 DEFAULT_CONFIG = {
     "action_scale": 0.04,
