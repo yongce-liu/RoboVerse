@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import deque
 import torch
 
 from metasim.types import TensorState
@@ -102,3 +103,93 @@ def push_by_setting_velocity(
     )
 
     env.handler.set_states(env_states, push_env_ids.tolist())
+
+class HistoryBuffer(deque):
+    """A simple LIFO buffer that stores multiple tensors per entry under specified keys.
+
+    Each pushed entry is a dict mapping each key -> tensor (cloned on push).
+
+    Usage:
+        buf = HistoryBuffer(maxlen=10, keys=("root_state", "obs"))
+        buf.push({"root_state": t1, "obs": t2})
+        last = buf.pop()  # returns the most-recent dict (LIFO)
+
+    It also provides a convenience call interface to push data directly from
+    env_states when used as a callback: `buf(env, env_states)` will read the
+    attributes named in `keys` from `env_states.robots[env.name]` (or from the
+    buffer instance itself if attributes with those names exist) and push them.
+    """
+
+    def __init__(self, maxlen: int | None, keys: tuple[str] | list[str] | str, name: str | None = None):
+        # maxlen may be None for unbounded deque
+        super().__init__(maxlen=maxlen)
+        self.keys = tuple(keys) if isinstance(keys, (tuple, list)) else (keys,)
+        # optional name used when reading from env_states: if provided, it will
+        # be used as robot key; otherwise, the env.name value is used.
+        self.name = name
+
+    # Basic stack-style methods -------------------------------------------------
+    def push(self, entry: dict):
+        """Push an entry (dict of key->tensor). Clones tensor values on insert.
+
+        Raises KeyError if any configured key is missing from the entry.
+        """
+        if not isinstance(entry, dict):
+            raise TypeError("HistoryBuffer.push requires a dict of key->tensor")
+        item = {}
+        for k in self.keys:
+            if k not in entry:
+                raise KeyError(f"Missing key '{k}' for HistoryBuffer.push")
+            v = entry[k]
+            item[k] = v.clone() if isinstance(v, torch.Tensor) else v
+        # append to the right; pop() will return the most-recent (LIFO)
+        self.append(item)
+
+    def pop_one(self) -> dict:
+        """Pop and return the most-recently pushed entry (LIFO)."""
+        return self.pop()
+
+    def peek(self, index: int = 0) -> dict:
+        """Peek at recently pushed entries without removing.
+
+        index=0 -> last pushed, index=1 -> one-before-last, etc.
+        """
+        if index < 0 or index >= len(self):
+            raise IndexError("peek index out of range")
+        # -1 is last, -2 is one-before-last
+        return self[-1 - index]
+
+    # Convenience methods ------------------------------------------------------
+    def push_from_env(self, env: EnvTypes, env_states: TensorState, env_name: str | None = None):
+        """Collect configured keys from env_states.robots[env_name] (or from
+        the buffer instance) and push them as one entry.
+        """
+        robot_name = env_name or self.name or getattr(env, "name", None)
+        if robot_name is None:
+            raise ValueError("No robot name available for HistoryBuffer.push_from_env")
+
+        robot_state = env_states.robots[robot_name]
+        entry = {}
+        for k in self.keys:
+            # priority: attribute on this buffer instance, else attribute on robot_state
+            if hasattr(self, k):
+                val = getattr(self, k)
+            elif hasattr(robot_state, k):
+                val = getattr(robot_state, k)
+            else:
+                raise ValueError(f"History buffer key {k} not found in task or robot states.")
+            entry[k] = val.clone() if isinstance(val, torch.Tensor) else val
+
+        self.push(entry)
+
+    def __call__(self, env: EnvTypes, env_states: TensorState, *args, **kwds):
+        """Callable convenience so this object can be used as a callback.
+
+        It reads the configured keys from env_states.robots[env.name] (or from
+        attributes on the instance) and pushes a dict entry.
+        """
+        self.push_from_env(env, env_states)
+
+    # keep clear and len behavior from deque; add explicit alias
+    def clear_all(self):
+        super().clear()
