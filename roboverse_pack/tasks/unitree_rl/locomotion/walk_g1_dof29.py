@@ -37,6 +37,7 @@ class WalkG1Dof29Task(LeggedRobotTask):
         simulator="isaacgym",
         headless=True,
         env_spacing=2.5,
+        decimation=1,
         sim_params=SimParamCfg(
             dt=0.005,
             substeps=1,
