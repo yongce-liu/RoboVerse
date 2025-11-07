@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 from typing import TYPE_CHECKING
 
 import mujoco
@@ -55,9 +54,6 @@ from metasim.queries.base import BaseQueryType
 from metasim.sim import BaseSimHandler
 from metasim.types import Action
 from metasim.utils.state import CameraState, ObjectState, RobotState, TensorState, state_tensor_to_nested
-
-# TODO: add it to the randomization of metasim
-from roboverse_learn.rl.unitree_rl.helper import TerrainGenerator
 
 try:
     import mujoco.viewer
@@ -149,9 +145,6 @@ class MujocoHandler(BaseSimHandler):
     def launch(self) -> None:
         model = self._init_mujoco()
         self.physics = mjcf.Physics.from_mjcf_model(model)
-        if self.hfield_measure is not None:
-            self.physics.model.hfield_data[:] = self.hfield_measure.flatten(order="C")
-
         self.data = self.physics.data
 
         # === Export MJCF + assets to a temp dir. Handle filename variability (dm_control 1.0.34). ===
@@ -198,7 +191,7 @@ class MujocoHandler(BaseSimHandler):
         if self.scenario.gs_scene is not None and self.scenario.gs_scene.with_gs_background:
             self._build_gs_background()
 
-        super().launch()
+        return super().launch()
 
     def _init_torque_control(self):
         """Initialize torque control parameters based on robot configuration."""
@@ -323,7 +316,10 @@ class MujocoHandler(BaseSimHandler):
             log.info(f"Loaded scene from: {self.scenario.scene.mjcf_path}")
         else:
             mjcf_model = mjcf.RootElement()
-            self.hfield_name, self.hfield_measure = self._add_ground(mjcf_model=mjcf_model, if_random=False)
+            self._add_default_ground(mjcf_model)
+
+        if self.scenario.sim_params.dt is not None:
+            mjcf_model.option.timestep = self.scenario.sim_params.dt
 
         self._add_cameras_to_model(mjcf_model)
         self._add_objects_to_model(mjcf_model)
@@ -561,12 +557,6 @@ class MujocoHandler(BaseSimHandler):
                 else None,
                 joint_effort_target=torch.from_numpy(self.physics.data.actuator_force[actuator_reindex]).unsqueeze(0),
             )
-            # FIXME a temporary solution for accessing net contact forces of robots, it will be moved to
-            self._contact_forces = self._get_contact_forces().view(self.num_envs, -1, 3)
-            extra = {
-                "contact_forces": self._contact_forces[:, body_ids_reindex, :],
-            }
-            state.extra = extra
             robot_states[robot.name] = state
 
         camera_states = {}
@@ -845,16 +835,14 @@ class MujocoHandler(BaseSimHandler):
         if self.viewer is not None:
             self.viewer.sync()
 
-    def _simulate(self, decimation=None):
+    def _simulate(self):
         # Apply gravity compensation for all robots
         for robot_idx, robot in enumerate(self.robots):
             if self._gravity_compensations[robot_idx]:
                 self._disable_robotgravity()
 
         # Apply torque control if manual PD is enabled
-        if decimation is None:
-            decimation = self.decimation
-        self.physics.step(decimation)
+        self.physics.step(self.decimation)
 
         if not self.headless:
             self.viewer.sync()
@@ -990,125 +978,6 @@ class MujocoHandler(BaseSimHandler):
             self._body_ids_reindex_cache[obj_name] = body_ids_reindex
 
         return self._body_ids_reindex_cache[obj_name]
-
-    def _get_contact_forces(self) -> torch.Tensor:
-        """
-        Compute net contact forces on each body.
-        Returns:
-            torch.Tensor: shape (nbody, 3), contact forces for each body
-        """
-        nbody = self.physics.model.nbody
-        contact_forces = torch.zeros((nbody, 3), device=self.device)
-
-        for i in range(self.physics.data.ncon):
-            contact = self.physics.data.contact[i]
-            force = np.zeros(6, dtype=np.float64)
-            mujoco.mj_contactForce(self.physics.model.ptr, self.physics.data.ptr, i, force)
-            f_contact = torch.from_numpy(force[:3]).to(device=self.device)
-
-            body1 = self.physics.model.geom_bodyid[contact.geom1]
-            body2 = self.physics.model.geom_bodyid[contact.geom2]
-
-            contact_forces[body1] += f_contact
-            contact_forces[body2] -= f_contact
-
-        return contact_forces
-
-    def _add_ground(self, mjcf_model, if_random: bool = False):
-        if if_random:
-            tg = TerrainGenerator(self.scenario.random.terrain_cfg)
-            static_friction = getattr(self.scenario.random.terrain_cfg, "static_friction", 1.0)
-            dynamic_friction = getattr(self.scenario.random.terrain_cfg, "dynamic_friction", 1.0)
-            restitution = getattr(self.scenario.random.terrain_cfg, "restitution", 0.0)
-
-            height_mat = tg.generate_terrain(self.scenario.random.terrain_cfg, type="heightfield")
-            # Also create a triangular mesh representation for queries (e.g., LiDAR warp raycasts),
-            # consistent with IsaacGym handler's ground mesh exposure.
-            vertices, triangles = tg.generate_terrain(self.scenario.random.terrain_cfg, type="trimesh")
-            # Store mesh for external consumers (e.g., LidarPointCloud)
-            self._ground_mesh_vertices = vertices
-            self._ground_mesh_triangles = triangles.astype(np.int32)
-            hfield_name = "terrain"
-            mjcf_model.asset.add(
-                "hfield",
-                name=hfield_name,
-                nrow=height_mat.shape[0],
-                ncol=height_mat.shape[1],
-                size=[
-                    height_mat.shape[0] * tg.horizontal_scale / 2,
-                    height_mat.shape[1] * tg.horizontal_scale / 2,
-                    1.0,
-                    0.1,
-                ],
-            )
-
-            mjcf_model.worldbody.add(
-                "geom",
-                name="terrain_geom",
-                type="hfield",
-                hfield=hfield_name,
-                pos=f"{-tg.margin} {-tg.margin} 0",
-                rgba="0.8 0.8 0.8 1",
-                friction=[static_friction, dynamic_friction, 0.001],
-                solimp=[restitution, 0.01, 0.99],
-                # contype="0",
-                # conaffinity="1",
-                # condim="6",
-            )
-            hfield_measure = height_mat
-        else:
-            mjcf_model.asset.add(
-                "texture",
-                name="texplane",
-                type="2d",
-                builtin="checker",
-                width=512,
-                height=512,
-                rgb1=[0, 0, 0],
-                rgb2=[1.0, 1.0, 1.0],
-            )
-            mjcf_model.asset.add(
-                "material", name="matplane", reflectance="0.2", texture="texplane", texrepeat=[1, 1], texuniform=True
-            )
-            ground = mjcf_model.worldbody.add(
-                "geom",
-                type="plane",
-                pos="0 0 0",
-                size="100 100 0.001",
-                quat="1 0 0 0",
-                condim="3",
-                conaffinity="15",
-                material="matplane",
-            )
-            hfield_name = None
-            hfield_measure = None
-
-            # Expose a simple quad mesh centered at origin, similar to IsaacGym handler.
-            step = float(self.scenario.env_spacing)
-            num_per_row = math.sqrt(1)  # MujocoHandler supports single env
-            num_rows = 1
-            width = max(1, num_per_row) * step
-            height = max(1, num_rows) * step
-            border_offset = 20.0
-            hw, hh = width * 0.5 + border_offset, height * 0.5 + border_offset
-
-            self._ground_mesh_vertices = np.array(
-                [
-                    [-hw, -hh, 0.0],
-                    [hw, -hh, 0.0],
-                    [-hw, hh, 0.0],
-                    [hw, hh, 0.0],
-                ],
-                dtype=np.float32,
-            )
-            self._ground_mesh_triangles = np.array(
-                [
-                    [0, 2, 1],
-                    [1, 2, 3],
-                ],
-                dtype=np.int32,
-            )
-        return hfield_name, hfield_measure
 
     ############################################################
     ## Misc
