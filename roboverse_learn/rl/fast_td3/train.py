@@ -1,19 +1,49 @@
 from __future__ import annotations
 
+import argparse
 import csv
 import os
 import random
 import sys
 import time
 from typing import Any
-import yaml
-import argparse
 
-def load_config(config_path: str) -> dict[str, Any]:
-    """Load configuration from YAML file."""
-    with open(config_path, 'r') as f:
-        config = yaml.safe_load(f)
-    return config
+import yaml
+
+
+def _load_yaml_file(path: str) -> dict[str, Any]:
+    """Load a YAML file and ensure it returns a dictionary."""
+    with open(path, "r", encoding="utf-8") as file:
+        data = yaml.safe_load(file) or {}
+    if not isinstance(data, dict):
+        raise ValueError(f"Configuration file must define a mapping: {path}")
+    return data
+
+
+def _deep_merge_dicts(base: dict[str, Any], overrides: dict[str, Any]) -> dict[str, Any]:
+    """Recursively merge override config into the base config without mutating inputs."""
+    merged: dict[str, Any] = dict(base)
+    for key, value in overrides.items():
+        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+            merged[key] = _deep_merge_dicts(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def load_config(config_path: str, base_config_path: str | None = None) -> dict[str, Any]:
+    """Load configuration from YAML file with optional inheritance from a base config."""
+    if not os.path.exists(config_path):
+        raise FileNotFoundError(f"Configuration file not found: {config_path}")
+
+    base_config: dict[str, Any] = {}
+    if base_config_path:
+        if not os.path.exists(base_config_path):
+            raise FileNotFoundError(f"Base configuration file not found: {base_config_path}")
+        base_config = _load_yaml_file(base_config_path)
+
+    overrides = _load_yaml_file(config_path)
+    return _deep_merge_dicts(base_config, overrides)
 
 def get_config():
     """Get configuration with command line argument support."""
@@ -27,9 +57,8 @@ def get_config():
     configs_dir = os.path.join(script_dir, 'configs')
     config_path = os.path.join(configs_dir, args.config)
 
-    if not os.path.exists(config_path):
-        raise FileNotFoundError(f"Configuration file not found: {config_path}")
-    config = load_config(config_path)
+    base_config_path = os.path.join(configs_dir, "base.yaml")
+    config = load_config(config_path, base_config_path)
     config['yaml_name'] = args.config.replace(".yaml", "")  # Store the config path in the config dictionary
     return config
 
