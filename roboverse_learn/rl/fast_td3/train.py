@@ -29,8 +29,9 @@ def get_config():
 
     if not os.path.exists(config_path):
         raise FileNotFoundError(f"Configuration file not found: {config_path}")
-
-    return load_config(config_path)
+    config = load_config(config_path)
+    config['yaml_name'] = args.config.replace(".yaml", "")  # Store the config path in the config dictionary
+    return config
 
 # Load configuration
 CONFIG = get_config()
@@ -160,6 +161,7 @@ def main() -> None:
     if cfg("use_wandb") and cfg("train_or_eval") == "train":
         wandb.init(
             project=cfg("wandb_project", "fttd3_training"),
+            name=cfg("yaml_name", f"{cfg('sim')}_{cfg('task')}"),
             save_code=True,
         )
 
@@ -181,9 +183,8 @@ def main() -> None:
             raise ValueError("No GPU available")
     log.info(f"Using device: {device}")
 
-    model_dir = cfg("model_dir", "models")
-    run_name = cfg("run_name", cfg("task"))
-    metrics_path = os.path.join(model_dir, f"{run_name}_metrics.csv")
+    model_dir = os.path.join(cfg("model_dir", "models"), cfg("yaml_name"))
+    metrics_path = os.path.join(model_dir, f"metrics.csv")
 
     task_cls = get_task_class(cfg("task"))
     # Get default scenario from task class and update with specific parameters
@@ -520,7 +521,7 @@ def main() -> None:
             if torch.cuda.is_available():
                 torch.cuda.synchronize(device)
 
-            if global_step % 100 == 0 and start_time is not None:
+            if start_time is not None:
                 speed = (global_step - measure_burnin) / (time.time() - start_time)
                 pbar.set_description(f"{speed: 4.4f} sps, " + desc)
                 with torch.no_grad():
@@ -568,7 +569,7 @@ def main() -> None:
 
             if cfg("save_interval") > 0 and global_step > 0 and global_step % cfg("save_interval") == 0:
                 log.info(f"Saving model at global step {global_step}")
-                save_path = os.path.join(model_dir, f"{run_name}_{global_step}.pt")
+                save_path = os.path.join(model_dir, f"checkpoint_{global_step}.pt")
                 save_params(
                     global_step,
                     actor,

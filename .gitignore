@@ -12,7 +12,8 @@ node_modules/
 wandb/
 *.ckpt
 GSNet
-
+.venv
+models
 deploy
 runs
 debug/
