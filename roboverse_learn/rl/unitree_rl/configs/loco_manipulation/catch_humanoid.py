@@ -92,7 +92,7 @@ class CatchHumanoidTaskCfg(BaseEnvCfg):
         scales=RewardsScales(),
     )
     class InitialStates:
-        objects = {"shuttlecock": {"pos": [1.0, 0.0, 1.0]}}
+        objects = {"shuttlecock": {"pos": [1.0, 0.0, 1.0], "vel": [-1.0, 0.0, 0.0]}}
         robots = {
             "g1_dof29": {"pos": [0.0, 0.0, 0.8]},
                 }
