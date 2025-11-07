@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import Literal
 from copy import deepcopy
+from loguru import logger as log
 import torch
 
 from metasim.sim.base import BaseSimHandler, BaseQueryType
@@ -88,9 +89,9 @@ class MaterialRandomizer(BaseQueryType):
         self.all_robot_names = [robot.name for robot in self.handler.robots]
         self.all_object_names = [obj.name for obj in self.handler.objects]
 
-        self.num_shapes_per_body = self._get_num_shapes_per_body()
+        self.set_shape_indices = self._get_set_shape_indices()
 
-    def _get_num_shapes_per_body(self):
+    def _get_set_shape_indices(self):
         num_shapes_per_body = None
         if self.simulator_name == "isaacsim":
             if self.obj_name in self.handler.scene.articulations:
@@ -122,10 +123,13 @@ class MaterialRandomizer(BaseQueryType):
                     self.handler._envs[0], _tmp_handle
                 )
             )
-        else:
-            raise NotImplementedError(
-                f"Material randomization not implemented for simulator: {self.simulator_name}."
-            )
+        elif self.simulator_name == "mujoco":
+            model = self.handler.physics.model
+            num_shapes_per_body = [0] * model.nbody
+            # geom_bodyid[j] = geom j belongs to body geom_bodyid[j]
+            for geom_bodyid in model.geom_bodyid:
+                num_shapes_per_body[geom_bodyid] += 1
+            expected_shapes = model.ngeom
         if (
             num_shapes_per_body is not None
             and sum(num_shapes_per_body) != expected_shapes
@@ -134,16 +138,32 @@ class MaterialRandomizer(BaseQueryType):
                 "Randomization term 'randomize_rigid_body_material' failed to parse the number of shapes per body."
                 f" Expected total shapes: {expected_shapes}, but got: {sum(num_shapes_per_body)}."
             )
-        return num_shapes_per_body
+        # update material buffer with new samples
+        if num_shapes_per_body is not None:
+            set_shape_indices = []
+            # sample material properties from the given ranges
+            for body_id in self.set_body_ids:
+                # obtain indices of shapes for the body
+                start_idx = sum(num_shapes_per_body[:body_id])
+                end_idx = start_idx + num_shapes_per_body[body_id]
+                set_shape_indices.extend(list(range(start_idx, end_idx)))
+                # assign the new materials
+        else:
+            # assign all the materials
+            set_shape_indices = list(range(expected_shapes))
+
+        return set_shape_indices
 
     def randomize(self, env_ids: torch.Tensor):
         if self.simulator_name == "isaacsim":
             self._randomize_isaacsim(env_ids)
         elif self.simulator_name == "isaacgym":
             self._randomize_isaacgym(env_ids)
+        elif self.simulator_name == "mujoco":
+            self._randomize_mujoco(env_ids)
         else:
-            raise NotImplementedError(
-                f"Material randomization not implemented for simulator: {self.simulator_name}."
+            log.warning(
+                f"Material randomization not implemented for simulator: {self.simulator_name}. This randomization step will be skipped."
             )
 
     def _randomize_isaacsim(self, env_ids: torch.Tensor):
@@ -164,21 +184,10 @@ class MaterialRandomizer(BaseQueryType):
             0, self.num_buckets, (len(env_ids), total_num_shapes), device="cpu"
         )
         material_samples = self.material_buckets[bucket_ids]
+
         # update material buffer with new samples
-        if self.num_shapes_per_body is not None:
-            # sample material properties from the given ranges
-            for body_id in self.set_body_ids:
-                # obtain indices of shapes for the body
-                start_idx = sum(self.num_shapes_per_body[:body_id])
-                end_idx = start_idx + self.num_shapes_per_body[body_id]
-                # assign the new materials
-                # material samples are of shape: num_env_ids x total_num_shapes x 3
-                materials[env_ids, start_idx:end_idx] = material_samples[
-                    :, start_idx:end_idx
-                ]
-        else:
-            # assign all the materials
-            materials[env_ids] = material_samples[:]
+        materials[env_ids] = material_samples[:, self.set_shape_indices]
+
         # apply to simulation
         obj_inst.root_physx_view.set_material_properties(materials, env_ids)
 
@@ -210,6 +219,8 @@ class MaterialRandomizer(BaseQueryType):
             bucket_ids
         ]  # static friction, dynamic friction and restitution
 
+        roll_friction_factor = 0.05
+        spin_friction_factor = 0.02
         for i, env_id in enumerate(env_ids):
             env = self.handler._envs[env_id]
             # For objects, find the corresponding object handle
@@ -219,31 +230,65 @@ class MaterialRandomizer(BaseQueryType):
                 env, _tmp_handle
             )
 
-            # update material buffer with new samples
-            if self.num_shapes_per_body is not None:
-                set_shape_indices = []
-                # sample material properties from the given ranges
-                for body_id in self.set_body_ids:
-                    # obtain indices of shapes for the body
-                    start_idx = sum(self.num_shapes_per_body[:body_id])
-                    end_idx = start_idx + self.num_shapes_per_body[body_id]
-                    set_shape_indices.extend(list(range(start_idx, end_idx)))
-                    # assign the new materials
-            else:
-                # assign all the materials
-                set_shape_indices = list(range(len(shape_props)))
-
-            for _id in set_shape_indices:
+            for _id in self.set_shape_indices:
                 shape_prop = shape_props[_id]
                 shape_prop.friction = material_samples[i, _id, 0]
-                shape_prop.rolling_friction = material_samples[i, _id, 1]
-                shape_prop.torsion_friction = material_samples[i, _id, 1]
+                shape_prop.rolling_friction = (
+                    roll_friction_factor * material_samples[i, _id, 1]
+                )
+                shape_prop.torsion_friction = (
+                    spin_friction_factor * material_samples[i, _id, 1]
+                )
                 shape_prop.restitution = material_samples[i, _id, 2]
 
             # Apply the modified properties
             self.handler.gym.set_actor_rigid_shape_properties(
                 env, _tmp_handle, shape_props
             )
+
+    def _randomize_mujoco(self, env_ids: torch.Tensor):
+        """Randomize friction and restitution for MuJoCo simulator."""
+        assert (
+            self.handler.num_envs == 1
+        ), "MuJoCo handler only supports single environment."
+        model = self.handler.physics.model
+
+        bucket_ids = torch.randint(
+            0, self.num_buckets, (len(env_ids), model.ngeom), device="cpu"
+        )
+        material_samples = self.material_buckets[
+            bucket_ids
+        ]  # static friction, dynamic friction and restitution
+
+        static_friction = material_samples[env_ids, self.set_shape_indices, 0]
+        solimp_value = 0.1 * static_friction
+        model.geom_solimp[self.set_shape_indices, 0] = solimp_value
+
+        # model.geom_friction --> friction for (slide, spin, roll)
+        dynamic_friction = material_samples[env_ids, self.set_shape_indices, 1]
+        model.geom_friction[self.set_shape_indices, 0] = (
+            dynamic_friction  # slide friction
+        )
+        model.geom_friction[self.set_shape_indices, 1] = (
+            0.01 * dynamic_friction
+        )  # spin friction
+        model.geom_friction[self.set_shape_indices, 2] = (
+            0.01 * dynamic_friction
+        )  # roll friction
+
+        # restitution and damping calculation
+        restitution_scale = 1.0  # from 0.5 - 2.0
+        restitution = (
+            material_samples[env_ids, self.set_shape_indices, 2] * restitution_scale
+            + 1e-6
+        )
+        damping = (
+            -torch.log(restitution)
+            / torch.sqrt(torch.pi**2 + torch.log(restitution) ** 2)
+        ).clamp(min=0.0, max=1.0)
+
+        # solref：timeconst & damping ratio
+        model.geom_solref[self.set_shape_indices, 1] = damping
 
 
 class MassRandomizer(BaseQueryType):
@@ -314,10 +359,8 @@ class MassRandomizer(BaseQueryType):
             return self._get_masses_isaacsim()
         elif self.simulator_name == "isaacgym":
             return self._get_masses_isaacgym()
-        else:
-            raise NotImplementedError(
-                f"Mass randomization not implemented for simulator: {self.simulator_name}."
-            )
+        elif self.simulator_name == "mujoco":
+            return self._get_masses_mujoco()
 
     def _get_masses_isaacsim(self):
         if self.obj_name in self.handler.scene.articulations:
@@ -364,15 +407,16 @@ class MassRandomizer(BaseQueryType):
 
         return masses
 
+    def _get_masses_mujoco(self):
+        pass
+
     def _set_masses(self, masses: torch.Tensor, env_ids: torch.Tensor):
         if self.simulator_name == "isaacsim":
             self._set_masses_isaacsim(masses, env_ids)
         elif self.simulator_name == "isaacgym":
             self._set_masses_isaacgym(masses, env_ids)
-        else:
-            raise NotImplementedError(
-                f"Mass setting not implemented for simulator: {self.simulator_name}."
-            )
+        elif self.simulator_name == "mujoco":
+            self._set_masses_mujoco(masses, env_ids)
 
     def _set_masses_isaacsim(self, masses: torch.Tensor, env_ids: torch.Tensor):
         if self.obj_name in self.handler.scene.articulations:
@@ -410,6 +454,9 @@ class MassRandomizer(BaseQueryType):
                 env, _tmp_handle, body_props
             )
 
+    def _set_masses_mujoco(self, masses: torch.Tensor, env_ids: torch.Tensor):
+        pass
+
     def _recompute_inertias(self, ratios: torch.Tensor, env_ids: torch.Tensor):
         # scale the inertia tensors by the the ratios
         # since mass randomization is done on default values, we can use the default inertia tensors
@@ -441,6 +488,11 @@ class MassRandomizer(BaseQueryType):
             )
 
     def randomize(self, env_ids: torch.Tensor):
+        if self.simulator_name not in ("isaacsim", "isaacgym", "mujoco"):
+            log.warning(
+                f"Mass randomization not implemented for simulator: {self.simulator_name}. This randomization step will be skipped."
+            )
+            return
         # get the current masses of the bodies (num_assets, num_bodies)
         masses = self._get_masses()  # shape: (num_envs, num_bodies)
         # apply randomization on default values
