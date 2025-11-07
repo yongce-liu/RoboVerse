@@ -79,7 +79,7 @@ measure_burnin: 3
 # -------------------------------------------------------------------------------
 wandb_project: "get_started_fttd3"
 exp_name: "get_started_fttd3"
-use_wandb: false
+use_wandb: true
 checkpoint_path: null
 eval_interval: 10000
 save_interval: 15000

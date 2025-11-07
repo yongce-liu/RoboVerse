@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import os
 import random
 import sys
@@ -119,6 +120,25 @@ def save_params(
     log.info(f"Saved parameters and configuration to {save_path}")
 
 
+def save_metrics_history(save_path: str, metrics_history: list[dict[str, Any]]) -> None:
+    """Write aggregated metrics to a CSV file for readability."""
+    if not metrics_history:
+        return
+
+    fieldnames: list[str] = []
+    for entry in metrics_history:
+        for key in entry.keys():
+            if key not in fieldnames:
+                fieldnames.append(key)
+
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    with open(save_path, "w", newline="", encoding="utf-8") as csv_file:
+        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(metrics_history)
+    log.info(f"Saved metrics history to {save_path}")
+
+
 def main() -> None:
     GAMMA = float(cfg("gamma"))
     USE_CDQ = bool(cfg("use_cdq"))
@@ -160,6 +180,10 @@ def main() -> None:
         else:
             raise ValueError("No GPU available")
     log.info(f"Using device: {device}")
+
+    model_dir = cfg("model_dir", "models")
+    run_name = cfg("run_name", cfg("task"))
+    metrics_path = os.path.join(model_dir, f"{run_name}_metrics.csv")
 
     task_cls = get_task_class(cfg("task"))
     # Get default scenario from task class and update with specific parameters
@@ -437,8 +461,9 @@ def main() -> None:
     start_time = None
     desc = ""
 
-    # Initialize episode tracker
+    # Initialize episode tracker and in-memory metrics buffer
     episode_tracker = EpisodeTracker(cfg("num_envs"), device)
+    metrics_history: list[dict[str, Any]] = []
 
     while global_step < cfg("total_timesteps"):
         logs_dict = TensorDict()
@@ -504,45 +529,45 @@ def main() -> None:
                     episode_count = episode_tracker.get_episode_count()
 
                     logs = {
-                        "actor_loss": logs_dict["actor_loss"].mean(),
-                        "qf_loss": logs_dict["qf_loss"].mean(),
-                        "qf_max": logs_dict["qf_max"].mean(),
-                        "qf_min": logs_dict["qf_min"].mean(),
-                        "actor_grad_norm": logs_dict["actor_grad_norm"].mean(),
-                        "critic_grad_norm": logs_dict["critic_grad_norm"].mean(),
-                        "buffer_rewards": logs_dict["buffer_rewards"].mean(),
-                        "env_rewards": rewards.mean(),
+                        "actor_loss": logs_dict["actor_loss"].mean().item(),
+                        "qf_loss": logs_dict["qf_loss"].mean().item(),
+                        "qf_max": logs_dict["qf_max"].mean().item(),
+                        "qf_min": logs_dict["qf_min"].mean().item(),
+                        "actor_grad_norm": logs_dict["actor_grad_norm"].mean().item(),
+                        "critic_grad_norm": logs_dict["critic_grad_norm"].mean().item(),
+                        "buffer_rewards": logs_dict["buffer_rewards"].mean().item(),
+                        "env_rewards": rewards.mean().item(),
                     }
 
                     # Add episode statistics to logs
                     if episode_count > 0:
-                        logs["avg_episodic_return"] = avg_return
-                        logs["avg_episodic_length"] = avg_length
-                        logs["episode_count"] = episode_count
+                        logs["avg_episodic_return"] = float(avg_return)
+                        logs["avg_episodic_length"] = float(avg_length)
+                        logs["episode_count"] = int(episode_count)
                         log.info(f"avg_return={avg_return:.4f}, avg_length={avg_length:.4f}")
 
                     if cfg("eval_interval") > 0 and global_step % cfg("eval_interval") == 0:
                         log.info(f"Evaluating at global step {global_step}")
                         eval_avg_return, eval_avg_length = evaluate()
                         obs, info = envs.reset()
-                        logs["eval_avg_return"] = eval_avg_return
-                        logs["eval_avg_length"] = eval_avg_length
+                        logs["eval_avg_return"] = float(eval_avg_return)
+                        logs["eval_avg_length"] = float(eval_avg_length)
                         log.info(f"avg_return={eval_avg_return:.4f}, avg_length={eval_avg_length:.4f}")
 
+                wandb_payload = {
+                    "speed": float(speed),
+                    "frame": int(global_step * cfg("num_envs")),
+                    **logs,
+                }
                 if cfg("use_wandb"):
                     wandb.log(
-                        {
-                            "speed": speed,
-                            "frame": global_step * cfg("num_envs"),
-                            **logs,
-                        },
+                        wandb_payload,
                         step=global_step,
                     )
+                metrics_history.append({"global_step": global_step, **wandb_payload})
 
             if cfg("save_interval") > 0 and global_step > 0 and global_step % cfg("save_interval") == 0:
                 log.info(f"Saving model at global step {global_step}")
-                model_dir = cfg("model_dir", "models")
-                run_name = cfg("run_name", cfg("task"))
                 save_path = os.path.join(model_dir, f"{run_name}_{global_step}.pt")
                 save_params(
                     global_step,
@@ -554,10 +579,12 @@ def main() -> None:
                     CONFIG,
                     save_path,
                 )
+                save_metrics_history(metrics_path, metrics_history)
 
         global_step += 1
         pbar.update(1)
         # Close environment and wandb
+    save_metrics_history(metrics_path, metrics_history)
     envs.close()
     render_with_rollout()
 

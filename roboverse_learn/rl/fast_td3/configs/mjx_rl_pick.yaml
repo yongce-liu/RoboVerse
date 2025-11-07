@@ -81,7 +81,7 @@ wandb_project: "get_started_fttd3"
 exp_name: "get_started_fttd3"
 use_wandb: false
 checkpoint_path: null
-eval_interval: 700
-save_interval: 700
+eval_interval: 100
+save_interval: 100
 video_width: 1024
 video_height: 1024
