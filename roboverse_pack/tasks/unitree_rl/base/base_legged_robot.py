@@ -134,12 +134,14 @@ class LeggedRobotTask(AgentTask):
         self.default_dof_vel = torch.tensor(sorted_joint_vel, device=self.device)  # (n_dof,)
 
     def _pre_physics_step(self, actions: torch.Tensor):
-        """Apply action smoothing and wrap actions as dict before physics step."""
+        """Apply action smoothing and apply pre-physics callbacks."""
         # # low frequency action smoothing
         # delay = torch.rand((self.num_envs, 1), device=self.device)
-        # actions = (1 - delay) * actions.to(self.device) + delay * self.actions
-        # clip actions
-        actions = torch.clip(actions, -self.action_clip, self.action_clip).to(self.device)
+        # actions = (1 - delay) * actions = torch.clip(actions, -self.action_clip, self.action_clip)
+
+        for pre_fn, _params in self.pre_physics_step_callback.values():
+            pre_fn(self, **_params)
+        actions = torch.clip(actions, -self.action_clip, self.action_clip)
 
         # TODO: add the support of multi-embodiments
         # should return actions_list, [List, Action:[str, RobotAction:[...]]]
@@ -233,7 +235,7 @@ class LeggedRobotTask(AgentTask):
         # for logs
         self.episode_not_terminations = {
             _key: torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
-            for _key in self._terminate_callbacks.keys()
+            for _key in self.terminate_callback.keys()
         }
 
     def _compute_effort(self, actions: torch.Tensor, env_states: TensorState) -> torch.Tensor:
@@ -260,7 +262,7 @@ class LeggedRobotTask(AgentTask):
                 _return_val = _func(self, env_ids)
                 self.extras["episode"]["Curriculum/" + _name] = _return_val
 
-        for _reset_fn, _params in self._reset_callbacks.values():
+        for _reset_fn, _params in self.reset_callback.values():
             _ = _reset_fn(self, env_ids, **_params)
 
         self.set_states(states=self.setup_initial_env_states, env_ids=env_ids)
@@ -300,7 +302,7 @@ class LeggedRobotTask(AgentTask):
         if actions.ndim == 1:
             actions = actions.unsqueeze(0)
 
-        # actions = self._pre_physics_step(actions)
+        actions = self._pre_physics_step(actions)
         self.actions[:] = actions  # .clip(-self.action_clip, self.action_clip).clone()
         processed_actions = (
             (self.actions * self.action_scale + self.actions_offset).clip(-self.action_clip, self.action_clip).clone()
@@ -357,7 +359,7 @@ class LeggedRobotTask(AgentTask):
             else:
                 raise ValueError(f"History buffer key {key} not found in task or robot states.")
 
-        for _step_fn, _params in self._step_callbacks.values():
+        for _step_fn, _params in self.post_physics_step_callback.values():
             _step_fn(self, env_states, **_params)
 
     def _reward(self, env_states):
@@ -375,8 +377,8 @@ class LeggedRobotTask(AgentTask):
 
     def _terminated(self, env_states: TensorState | None) -> torch.BoolTensor:
         reset_buf = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
-        for _key in self._terminate_callbacks.keys():
-            _terminate_fn, _params = self._terminate_callbacks[_key]
+        for _key in self.terminate_callback.keys():
+            _terminate_fn, _params = self.terminate_callback[_key]
             _terminate_flag = (_terminate_fn(self, env_states, **_params)).detach().clone().to(torch.bool)
             reset_buf = torch.logical_or(reset_buf, _terminate_flag)
             self.episode_not_terminations[_key] += _terminate_flag.to(torch.float)
