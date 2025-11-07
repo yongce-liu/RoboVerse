@@ -55,12 +55,14 @@ class AgentTask(RLTaskEnv):
         _setup_callbacks = callbacks.pop("setup", {})
         for _setup_fn, _params in _setup_callbacks.values():
             _setup_fn(**_params)  ## call itself
-        self._reset_callbacks = callbacks.pop("reset", {})
-        assert isinstance(self._reset_callbacks, dict)
-        self._step_callbacks = callbacks.pop("step", {})
-        assert isinstance(self._step_callbacks, dict)
-        self._terminate_callbacks = callbacks.pop("terminate", {})
-        assert isinstance(self._terminate_callbacks, dict)
+        self.reset_callback = callbacks.pop("reset", {})
+        assert isinstance(self.reset_callback, dict)
+        self.pre_physics_step_callback = callbacks.pop("pre_step", {})
+        assert isinstance(self.pre_physics_step_callback, dict)
+        self.post_physics_step_callback = callbacks.pop("post_step", {})
+        assert isinstance(self.post_physics_step_callback, dict)
+        self.terminate_callback = callbacks.pop("terminate", {})
+        assert isinstance(self.terminate_callback, dict)
 
     # ------------------------------------------------------------------ #
     # RLTaskEnv hooks

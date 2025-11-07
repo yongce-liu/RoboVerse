@@ -130,7 +130,7 @@ class WalkG1Dof12EnvCfg(BaseEnvCfg):
             {"position_range": (0.5, 1.5), "velocity_range": (1.0, 1.0)},
         ),
     }
-    callbacks_step = {
+    callbacks_post_step = {
         "push_robot": (
             step_funcs.push_by_setting_velocity,
             {

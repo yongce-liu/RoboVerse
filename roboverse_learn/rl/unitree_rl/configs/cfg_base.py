@@ -10,7 +10,8 @@ from roboverse_learn.rl.unitree_rl.configs.cfg_queries import ContactForces
 class CallbacksCfg:
     setup: dict = {}
     reset: dict = {}  # func_name: (func(env, env_ids,**kwargs), kwargs)
-    step: dict = {}  # func_name: (func(env, env_states, **kwargs), kwargs)
+    pre_step: dict = {}  # func_name: (func(env, actions, **kwargs), kwargs)
+    post_step: dict = {}  # func_name: (func(env, env_states, **kwargs), kwargs)
     terminate: dict = {}  # func_name: (func(env, env_states, **kwargs), kwargs)
     query: dict = {}
 
@@ -102,24 +103,29 @@ class BaseEnvCfg:
     # func_name: (func(env, env_ids,**kwargs), kwargs)
     callbacks_reset: dict[str, tuple[Callable, dict] | Callable] = MISSING
     # func_name: (func(env, env_states, **kwargs), kwargs)
-    callbacks_step: dict[str, tuple[Callable, dict] | Callable] = MISSING
+    callbacks_pre_step: dict[str, tuple[Callable, dict] | Callable] = {}
+    # func_name: (func(env, actions, **kwargs), kwargs)
+    callbacks_post_step: dict[str, tuple[Callable, dict] | Callable] = MISSING
     # func_name: (func(env, env_states, **kwargs), kwargs)
     callbacks_terminate: dict[str, tuple[Callable, dict] | Callable] = MISSING
     callbacks_query: dict[str, tuple[Callable, dict] | Callable] = MISSING
 
     def __post_init__(self):
         self.callbacks = CallbacksCfg()
-        self.callbacks.query = self.callbacks_query
-        self.callbacks.terminate = self.callbacks_terminate
-        self.callbacks.setup = self.callbacks_setup
-        self.callbacks.reset = self.callbacks_reset
-        self.callbacks.step = self.callbacks_step
+        _normalize = lambda value: {} if value is MISSING else value
+        self.callbacks.query = _normalize(self.callbacks_query)
+        self.callbacks.terminate = _normalize(self.callbacks_terminate)
+        self.callbacks.setup = _normalize(self.callbacks_setup)
+        self.callbacks.reset = _normalize(self.callbacks_reset)
+        self.callbacks.pre_step = _normalize(self.callbacks_pre_step)
+        self.callbacks.post_step = _normalize(self.callbacks_post_step)
 
         # Type check for callbacks
         for cb_attr in [
             "setup",
             "reset",
-            "step",
+            "pre_step",
+            "post_step",
             "terminate",
             "query",
         ]:
