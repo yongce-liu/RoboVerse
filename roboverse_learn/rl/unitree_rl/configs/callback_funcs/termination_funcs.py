@@ -49,9 +49,7 @@ def undesired_contact(
 ) -> torch.Tensor:
     """Terminate when undesired contacts are detected."""
     if not hasattr(env, "termination_contact_indices"):
-        env.termination_contact_indices = get_indices_from_substring(
-            contact_names, env.sorted_body_names, fullmatch=False
-        ).to(env.device)
+        env.termination_contact_indices = get_indices_from_substring(contact_names, env.sorted_body_names).to(env.device)
 
     contact_forces = env_states.extras["contact_forces"][env.name]
     return torch.any(contact_forces.contact_forces_history[:, :, env.termination_contact_indices, :].norm(dim=-1).max(dim=1)[0] > limit_range, dim=1)

@@ -145,12 +145,11 @@ class WalkG1Dof12EnvCfg(BaseEnvCfg):
             termination_funcs.undesired_contact,
             {
                 "contact_names": [
+                    ".*_elbow_.*",
+                    ".*_shoulder_.*",
+                    ".*_wrist_.*",
                     "pelvis",
-                    "torso",
-                    "waist",
-                    "shoulder",
-                    "elbow",
-                    "wrist",
+                    "torso_link",
                 ],
                 "limit_range": 1.0,
             },
