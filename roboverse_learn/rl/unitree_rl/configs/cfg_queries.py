@@ -64,7 +64,6 @@ class ContactForces(BaseQueryType):
         Returns:
             torch.Tensor: shape (nbody, 3), contact forces for each body
         """
-        import mujoco
         nbody = self.handler.physics.model.nbody
         contact_forces = torch.zeros((nbody, 3), device=self.handler.device)
 
