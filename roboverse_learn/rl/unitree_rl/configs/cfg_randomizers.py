@@ -408,7 +408,19 @@ class MassRandomizer(BaseQueryType):
         return masses
 
     def _get_masses_mujoco(self):
-        pass
+        """Get masses for MuJoCo simulator."""
+        assert (
+            self.handler.num_envs == 1
+        ), "MuJoCo handler only supports single environment."
+        model = self.handler.physics.model
+        body_masses = model.body_mass
+        return torch.tensor(
+            body_masses,
+            dtype=torch.float32,
+            device=self.handler.device,
+        ).unsqueeze(
+            0
+        )  # shape: (1, num_bodies)
 
     def _set_masses(self, masses: torch.Tensor, env_ids: torch.Tensor):
         if self.simulator_name == "isaacsim":
@@ -455,7 +467,8 @@ class MassRandomizer(BaseQueryType):
             )
 
     def _set_masses_mujoco(self, masses: torch.Tensor, env_ids: torch.Tensor):
-        pass
+        model = self.handler.physics.model
+        model.body_mass[self.set_body_ids] = masses[env_ids, self.set_body_ids].cpu()
 
     def _recompute_inertias(self, ratios: torch.Tensor, env_ids: torch.Tensor):
         # scale the inertia tensors by the the ratios
@@ -482,10 +495,11 @@ class MassRandomizer(BaseQueryType):
             # a little delay refresh in isaacym handler
             # self.gym.refresh_mass_matrix_tensors(self.sim)
             pass
-        else:
-            raise NotImplementedError(
-                f"Inertia recomputation not implemented for simulator: {self.simulator_name}."
-            )
+        elif self.simulator_name == "mujoco":
+            model = self.handler.physics.model
+            model.body_inertia[self.set_body_ids] = (
+                model.body_inertia[self.set_body_ids] * ratios.squeeze(0).numpy()
+            )  # only single env
 
     def randomize(self, env_ids: torch.Tensor):
         if self.simulator_name not in ("isaacsim", "isaacgym", "mujoco"):
