@@ -8,8 +8,10 @@ from typing import Any
 import torch
 
 from metasim.scenario.scenario import ScenarioCfg
+from metasim.task.base import BaseTaskEnv
 from metasim.task.rl_task import RLTaskEnv
 from metasim.types import Action, Reward, TensorState
+from metasim.utils.state import list_state_to_tensor
 from roboverse_learn.rl.unitree_rl.configs.cfg_base import BaseEnvCfg, CallbacksCfg
 
 
@@ -25,8 +27,9 @@ class AgentTask(RLTaskEnv):
         self.cfg = config
         _callbacks_cfg = asdict(getattr(self.cfg, "callbacks", CallbacksCfg()))
         self._query: dict = _callbacks_cfg.pop("query", {})
-        super().__init__(scenario=scenario, device=device)
-
+        self.robot = scenario.robots[0]
+        BaseTaskEnv.__init__(self, scenario=scenario, device=device)
+        self._initial_states = list_state_to_tensor(self.handler, self._get_initial_states(), self.device)
         # buffers will be allocated lazily once handler is available
         self.obs_buf_queue: deque[torch.Tensor] | None = None
         self.priv_obs_buf_queue: deque[torch.Tensor] | None = None
