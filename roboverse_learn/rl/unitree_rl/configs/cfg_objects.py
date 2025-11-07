@@ -1,5 +1,5 @@
 from metasim.constants import PhysicStateType
-from metasim.scenario.objects import PrimitiveSphereCfg
+from metasim.scenario.objects import RigidObjCfg, PrimitiveSphereCfg
 
 
 class BallCfg(PrimitiveSphereCfg):
@@ -20,3 +20,19 @@ class BallCfg(PrimitiveSphereCfg):
         self.angular_velocity = [0.0, 0.0, 0.0]  # wx, wy, wz
 
         self.root_state = [*self.init_position, *self.init_rotation, *self.init_velocity, *self.angular_velocity]  # pos(3), rot(4), vel(3), ang_vel(3)
+
+
+class Shuttlecock(RigidObjCfg):
+    def __init__(self):
+        super().__init__(
+            name="shuttlecock",
+            usd_path="roboverse_data/assets/badminton/shuttlecock.usd",
+        )
+        self.enabled_gravity = True
+        self.collision_enabled = True
+        self.default_position = [1.0, 0.0, 1.0]
+        self.default_rotation = [1.0, 0.0, 0.0, 0.0]  # w, x, y, z
+        self.default_velocity = [0.0, 0.0, 0.0]  # vx, vy, vz
+        self.default_angular_velocity = [0.0, 0.0, 0.0]  # wx, wy, wz
+
+        self.default_root_state = [*self.default_position, *self.default_rotation, *self.default_velocity, *self.default_angular_velocity]  # pos(3), rot(4), vel(3), ang_vel(3)

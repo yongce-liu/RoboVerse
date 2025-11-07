@@ -392,10 +392,13 @@ class LeggedRobotTask(AgentTask):
     def _get_initial_states(self):
         """Return list of per-env initial states derived from config."""
         sorted_joint_names = self.handler.get_joint_names(self.robot.name, sort=True)
-
-        robot_state = self.cfg.initial_states.robots[self.robot.name]
-        pos = robot_state.get("pos", [0.0, 0.0, 0.5])
-        rot = robot_state.get("rot", [1.0, 0.0, 0.0, 0.0])
+        if self.robot.name in self.cfg.initial_states.robots:
+            robot_state = self.cfg.initial_states.robots[self.robot.name]
+            pos = robot_state.get("pos", self.robot.default_position)
+            rot = robot_state.get("rot", self.robot.default_orientation)
+        else:
+            pos = self.robot.default_position
+            rot = self.robot.default_orientation
 
         # joint_pos = self.robot.default_joint_positions
         joint_pos = robot_state.get(
@@ -421,6 +424,24 @@ class LeggedRobotTask(AgentTask):
                 }
             },
         }
+        # obtain the initial states for objects
+        for obj in self.scenario.objects:
+            obj_name = obj.name
+            if obj_name in self.cfg.initial_states.objects:
+                obj_state = self.cfg.initial_states.objects[obj_name]
+                obj_pos = obj_state.get("pos", obj.default_position)
+                obj_rot = obj_state.get("rot", obj.default_orientation)
+            else:
+                obj_pos = obj.default_position
+                obj_rot = obj.default_orientation
+            obj_vel = obj_state.get("vel", obj.default_velocity)
+            obj_ang_vel = obj_state.get("ang_vel", obj.default_angular_velocity)
+            template["objects"][obj_name] = {
+                "pos": torch.tensor(obj_pos, dtype=torch.float32),
+                "rot": torch.tensor(obj_rot, dtype=torch.float32),
+                "vel": torch.tensor(obj_vel, dtype=torch.float32),
+                "ang_vel": torch.tensor(obj_ang_vel, dtype=torch.float32),
+            }
         return [deepcopy(template) for _ in range(self.scenario.num_envs)]
 
     @property

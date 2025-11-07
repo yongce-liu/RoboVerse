@@ -1,7 +1,32 @@
+from __future__ import annotations
+
 from typing import Callable
 from metasim.utils import configclass
 from roboverse_learn.rl.unitree_rl.configs.cfg_base import BaseEnvCfg
 from roboverse_learn.rl.unitree_rl.configs.algorithm.rsl_rl.rl_cfg import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, RslRlPpoAlgorithmCfg
+import math
+
+from metasim.utils import configclass
+
+from roboverse_learn.rl.unitree_rl.configs.cfg_base import BaseEnvCfg
+from roboverse_learn.rl.unitree_rl.configs.algorithm import (
+    RslRlOnPolicyRunnerCfg,
+    RslRlPpoActorCriticCfg,
+    RslRlPpoAlgorithmCfg,
+)
+from roboverse_learn.rl.unitree_rl.configs.cfg_queries import ContactForces
+import roboverse_learn.rl.unitree_rl.helper.curriculum_utils as curr_funs
+from roboverse_learn.rl.unitree_rl.configs.cfg_randomizers import (
+    MaterialRandomizer,
+    MassRandomizer,
+)
+
+from roboverse_learn.rl.unitree_rl.configs.callback_funcs import (
+    termination_funcs,
+    reset_funcs,
+    step_funcs,
+    reward_funcs,
+)
 
 @configclass
 class CatchHumanoidTaskCfg(BaseEnvCfg):
@@ -11,42 +36,139 @@ class CatchHumanoidTaskCfg(BaseEnvCfg):
     obs_len_history = 5
     priv_obs_len_history = 5
     control = BaseEnvCfg.Control(action_scale = 0.25)
-    noise = BaseEnvCfg.Noise(add_noise=True)  # disable noise by default
-    normalization = BaseEnvCfg.Normalization(
-        obs_scales=BaseEnvCfg.Normalization.ObsScales(
-            lin_vel = 1.0,
-            ang_vel = 0.20,
-            dof_pos = 1.0,
-            dof_vel = 0.05,
-            # height_measurements = 5.0
+
+    @configclass
+    class RewardsScales:
+        track_lin_vel_xy = (1.0, {"std": math.sqrt(0.25)})
+        track_ang_vel_z = (0.5, {"std": math.sqrt(0.25)})
+        is_alive = 0.15
+        lin_vel_z = -2.0
+        ang_vel_xy = -0.05
+        joint_vel = -0.001
+        joint_acc = -2.5e-7
+        action_rate = -0.05
+        joint_pos_limits = -5.0
+        energy = -2e-5
+        joint_deviation_arms = (
+            -0.1,
+            {"joint_names": (".*_shoulder_.*_joint", ".*_elbow_joint", ".*_wrist_.*")},
+            reward_funcs.joint_deviation_l1,
         )
+        joint_deviation_waists = (
+            -1.0,
+            {"joint_names": "waist.*"},
+            reward_funcs.joint_deviation_l1,
+        )
+        joint_deviation_legs = (
+            -1.0,
+            {"joint_names": (".*_hip_roll_joint", ".*_hip_yaw_joint")},
+            reward_funcs.joint_deviation_l1,
+        )
+        flat_orientation = -5.0
+        base_height = (-10.0, {"target_height": 0.78})
+        feet_gait = (
+            0.5,
+            {
+                "period": 0.8,
+                "offset": [0.0, 0.5],
+                "threshold": 0.55,
+                "body_names": (".*ankle_roll.*"),
+            },
+        )
+        feet_slide = (-0.2, {"body_names": (".*ankle_roll.*")})
+        feet_clearance = (
+            1.0,
+            {
+                "std": math.sqrt(0.05),
+                "tanh_mult": 2.0,
+                "target_height": 0.1,
+                "body_names": (".*ankle_roll.*"),
+            },
+        )
+        undesired_contacts = (-1.0, {"threshold": 1, "body_names": ("(?!.*ankle.*).*")})
+
+    rewards = BaseEnvCfg.Rewards(
+        only_positive_rewards=False,
+        scales=RewardsScales(),
     )
-    class rewards:
-        send_timeouts = True
-        only_positive_rewards = True # if true negative total rewards are clipped at zero (avoids early termination problems)
-        functions = "roboverse_learn.rl.unitree_rl.configs.cfg_reward_funcs"
-        class scales:
-            termination = -0.0
-            tracking_lin_vel = 1.0
-            tracking_ang_vel = 0.5
-            lin_vel_z = -2.0
-            ang_vel_xy = -0.05
-            orientation = -0.
-            torques = -0.00001
-            dof_vel = -0.
-            dof_acc = -2.5e-7
-            base_height = -0.
-            feet_air_time =  1.0
-            collision = -1.
-            feet_stumble = -0.0
-            action_rate = -0.01
-            stand_still = -0.
     class InitialStates:
-        objects = {"ball": {"pos": [0.0, 0.0, 0.8]}}
+        objects = {"shuttlecock": {"pos": [1.0, 0.0, 1.0]}}
         robots = {
-            "g1_dof29_dex3": {"pos": [0.0, 0.0, 0.8]},
+            "g1_dof29": {"pos": [0.0, 0.0, 0.8]},
                 }
     initial_states = InitialStates()
+
+    commands = BaseEnvCfg.Commands(
+        value=None,
+        resample=step_funcs.resample_commands,
+        heading_command=False,
+        rel_standing_envs=0.02,
+        ranges=BaseEnvCfg.Commands.Ranges(
+            lin_vel_x=(-0.1, 0.1), lin_vel_y=(-0.1, 0.1), ang_vel_yaw=(-0.1, 0.1)
+        ),
+        limit_ranges=BaseEnvCfg.Commands.Ranges(
+            lin_vel_x=(-0.5, 1.0), lin_vel_y=(-0.3, 0.3), ang_vel_yaw=(-0.2, 0.2)
+        ),
+    )
+
+    curriculum = BaseEnvCfg.Curriculum(
+        enabled=True,
+        funcs={
+            "lin_vel_cmd_levels": curr_funs.lin_vel_cmd_levels,
+            #  "terrain_levels": curr_funs.terrain_levels_vel
+        },
+    )
+
+
+    callbacks_query = {"contact_forces": ContactForces(history_length=3)}
+    callbacks_setup = {
+        "material_randomizer": MaterialRandomizer(
+            obj_name="g1_dof29",
+            static_friction_range=(0.3, 1.0),
+            dynamic_friction_range=(0.3, 1.0),
+            restitution_range=(0.0, 0.0),
+            num_buckets=64,
+        ),
+        "mass_randomizer": MassRandomizer(
+            obj_name="g1_dof29",
+            body_names="torso_link",
+            mass_distribution_params=(-1.0, 3.0),
+            operation="add",
+        ),
+    }
+    callbacks_reset = {
+        "random_root_state": (
+            reset_funcs.random_root_state,
+            {
+                "pose_range": [
+                    [-0.5, -0.5, 0.0, 0, 0, -3.14],  # x,y,z roll,pitch,yaw
+                    [0.5, 0.5, 0.0, 0, 0, 3.14],
+                ],
+                "velocity_range": [[0] * 6, [0] * 6],
+            },
+        ),
+        "reset_joints_by_scale": (
+            reset_funcs.reset_joints_by_scale,
+            {"position_range": (1.0, 1.0), "velocity_range": (-1.0, 1.0)},
+        ),
+    }
+    callbacks_step = {
+        "push_robot": (
+            step_funcs.push_by_setting_velocity,
+            {
+                "interval_range_s": (5.0, 5.0),
+                "velocity_range": [[-0.5, -0.5, 0.0], [0.5, 0.5, 0.0]],
+            },
+        )
+    }
+    callbacks_terminate = {
+        "time_out": termination_funcs.time_out,
+        "base_height": (
+            termination_funcs.root_height_below_minimum,
+            {"minimum_height": 0.2},
+        ),
+        "bad_orientation": (termination_funcs.bad_orientation, {"limit_angle": 0.8}),
+    }
 
 @configclass
 class CatchHumanoidRslRlTrainCfg(RslRlOnPolicyRunnerCfg):
