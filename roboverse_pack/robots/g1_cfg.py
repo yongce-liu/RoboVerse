@@ -12,8 +12,8 @@ from metasim.utils import configclass
 class G1Dof12Cfg(RobotCfg):
     name: str = "g1_dof12"
     num_joints: int = 12
-    usd_path: str = MISSING
-    xml_path: str = "roboverse_data/robots/g1/xml/g1_12dof.xml"
+    usd_path: str = "roboverse_data/robots/g1/usd/g1_12dof.usd"
+    xml_path: str = "roboverse_data/robots/g1/mjcf/g1_12dof.xml"
     urdf_path: str = "roboverse_data/robots/g1/urdf/g1_12dof.urdf"
     mjcf_path = xml_path
     enabled_gravity: bool = True
@@ -21,7 +21,7 @@ class G1Dof12Cfg(RobotCfg):
     enabled_self_collisions: bool = True
     isaacgym_read_mjcf = False
     isaacgym_flip_visual_attachments: bool = False
-    collapse_fixed_joints: bool = True
+    collapse_fixed_joints: bool = False  # True
 
     actuators: dict[str, BaseActuatorCfg] = {
         # N7520-14.3: hip_pitch, hip_yaw (stiffness 100, damping 2, torque 88, vel 32)
@@ -127,9 +127,9 @@ class G1Dof12Cfg(RobotCfg):
 class G1Dof23Cfg(G1Dof12Cfg):
     name: str = "g1_dof23"
     num_joints: int = 23
-    usd_path: str = "roboverse_data/robots/g1/usd/g1_23dof/g1_23dof_rev_1_0.usd"
-    xml_path: str = "roboverse_data/robots/g1/xml/g1_23dof.xml"
-    urdf_path: str = "roboverse_data/robots/g1/urdf/g1_23dof.urdf"
+    usd_path: str = MISSING
+    xml_path: str = MISSING
+    urdf_path: str = MISSING
     mjcf_path = xml_path
 
     actuators = {
@@ -223,8 +223,8 @@ class G1Dof27Cfg(G1Dof23Cfg):
     name: str = "g1_dof27"
     num_joints: int = 27
     usd_path: str = MISSING
-    xml_path: str = "roboverse_data/robots/g1/xml/g1_27dof.xml"
-    urdf_path: str = "roboverse_data/robots/g1/urdf/g1_27dof.urdf"
+    xml_path: str = MISSING
+    urdf_path: str = MISSING
     mjcf_path = xml_path
 
     actuators = {
@@ -273,8 +273,8 @@ class G1Dof27Cfg(G1Dof23Cfg):
 class G1Dof29Cfg(G1Dof27Cfg):
     name: str = "g1_dof29"
     num_joints: int = 29
-    usd_path: str = "roboverse_data/robots/g1/usd/g1_29dof_rev_1_0/g1_29dof_rev_1_0.usd"
-    xml_path: str = "roboverse_data/robots/g1/xml/g1_29dof_rev_1_0.xml"
+    usd_path: str = "roboverse_data/robots/g1/usd/g1_29dof_rev_1_0.usd"
+    xml_path: str = "roboverse_data/robots/g1/mjcf/g1_29dof_rev_1_0.xml"
     urdf_path: str = "roboverse_data/robots/g1/urdf/g1_29dof_rev_1_0.urdf"
     mjcf_path = xml_path
 
@@ -335,9 +335,9 @@ class G1Dof29Cfg(G1Dof27Cfg):
 class G1Dof29Dex3Cfg(G1Dof29Cfg):
     name: str = "g1_dof29_dex3"
     num_joints: int = 43
-    usd_path: str = "roboverse_data/robots/g1/usd/g1_29dof_dex3/g1_29dof_with_dex3_rev_1_0.usd"
-    xml_path: str = "roboverse_data/robots/g1/xml/g1_29dof_dex3.xml"
-    urdf_path: str = "roboverse_data/robots/g1/urdf/g1_29dof_dex3.urdf"
+    usd_path: str = MISSING
+    xml_path: str = MISSING
+    urdf_path: str = MISSING
     mjcf_path = xml_path
 
     actuators = {
