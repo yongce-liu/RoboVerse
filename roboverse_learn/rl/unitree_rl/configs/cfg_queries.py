@@ -100,7 +100,7 @@ class ContactForces(BaseQueryType):
 
     @property
     def contact_forces(self) -> torch.Tensor:
-        return self._contact_forces_queue[-1].view(self.num_envs, -1, 3)[:, self.body_ids_reindex, :]
+        return self._contact_forces_queue[-1]
 
 class LidarPointCloud(BaseQueryType):
     """Optional query that produces a LiDAR point cloud using LidarSensor + Warp.
