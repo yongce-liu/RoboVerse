@@ -19,7 +19,7 @@ class G1Dof12Cfg(RobotCfg):
     enabled_gravity: bool = True
     fix_base_link: bool = False
     enabled_self_collisions: bool = True
-    isaacgym_read_mjcf = False
+    # isaacgym_read_mjcf = False
     isaacgym_flip_visual_attachments: bool = False
     collapse_fixed_joints: bool = False  # True
 
