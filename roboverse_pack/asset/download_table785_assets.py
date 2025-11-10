@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Download all assets for table785 config."""
 
+import logging
 import subprocess
 import sys
 from pathlib import Path
@@ -14,16 +15,20 @@ UUIDS = [
     "848396479c0b5da3bc05d0ef74d4dcfb",
 ]
 
+logger = logging.getLogger(__name__)
+
 
 def main():
+    """Download the configured table assets via the asset downloader script."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     script = project_root / "generation" / "download_asset.py"
     target = "dataset/basic_furniture/table"
 
-    print(f"Downloading {len(UUIDS)} table assets...\n")
+    logger.info("Downloading %s table assets...", len(UUIDS))
 
     failed = []
     for i, uuid in enumerate(UUIDS, 1):
-        print(f"[{i}/{len(UUIDS)}] {uuid}")
+        logger.info("[%s/%s] %s", i, len(UUIDS), uuid)
         cmd = [sys.executable, str(script), "--target_type", target, "--uuid", uuid]
 
         try:
@@ -31,14 +36,14 @@ def main():
         except subprocess.CalledProcessError:
             failed.append(uuid)
 
-    print("\n" + "=" * 50)
+    logger.info("=" * 50)
     if failed:
-        print(f"Failed: {len(failed)}/{len(UUIDS)}")
+        logger.error("Failed: %s/%s", len(failed), len(UUIDS))
         for uuid in failed:
-            print(f"  - {uuid}")
+            logger.error("  - %s", uuid)
         sys.exit(1)
     else:
-        print(f"Success: All {len(UUIDS)} assets downloaded")
+        logger.info("Success: All %s assets downloaded", len(UUIDS))
 
 
 if __name__ == "__main__":

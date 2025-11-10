@@ -1,4 +1,4 @@
-"""Keyboard object control - Real-time object manipulation with keyboard"""
+"""Keyboard object control - Real-time object manipulation with keyboard."""
 
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ from huggingface_hub import snapshot_download
 rootutils.setup_root(__file__, pythonpath=True)
 
 from loguru import logger as log
+from roboverse_pack.tasks.embodiedgen.tables.table785_config import ALL_TABLE750_CONFIGS
 
 from metasim.constants import PhysicStateType
 from metasim.scenario.cameras import PinholeCameraCfg
@@ -28,11 +29,9 @@ from metasim.utils import configclass
 from metasim.utils.math import matrix_from_euler, quat_from_matrix, quat_mul
 from metasim.utils.setup_util import get_handler
 
-from roboverse_pack.tasks.embodiedgen.tables.table785_config import ALL_TABLE750_CONFIGS
-
 
 def save_poses_to_file(states, objects, robots, filename="saved_poses.py"):
-    """Save current poses of all objects and robots to a Python file"""
+    """Save current poses of all objects and robots to a Python file."""
     import datetime
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -85,7 +84,7 @@ def save_poses_to_file(states, objects, robots, filename="saved_poses.py"):
 
 
 class ObjectKeyboardClient:
-    """Keyboard client for object and robot control"""
+    """Keyboard client for object and robot control."""
 
     def __init__(
         self,
@@ -146,17 +145,18 @@ class ObjectKeyboardClient:
         ]
 
     def update(self) -> bool:
+        """Process pending events and return whether the window remains open."""
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return False
         return True
 
     def get_selected_entity(self) -> tuple[str, str]:
-        """Returns (entity_name, entity_type)"""
+        """Return a tuple of the selected entity name and entity type."""
         return self.entity_names[self.selected_idx], self.entity_types[self.selected_idx]
 
     def switch_entity(self):
-        """Switch to next entity (TAB key)"""
+        """Switch to the next entity (TAB key)."""
         self.selected_idx = (self.selected_idx + 1) % len(self.entity_names)
         name, etype = self.get_selected_entity()
         self.selected_joint_idx = 0  # Reset joint selection
@@ -181,7 +181,7 @@ class ObjectKeyboardClient:
             )
 
     def toggle_joint_mode(self):
-        """Toggle joint control mode (J key)"""
+        """Toggle the joint control mode (J key)."""
         name, _ = self.get_selected_entity()
         joints = self.entity_joints.get(name, [])
 
@@ -198,7 +198,7 @@ class ObjectKeyboardClient:
             log.info("Joint mode DISABLED")
 
     def get_selected_joint(self) -> str | None:
-        """Get currently selected joint name"""
+        """Return the currently selected joint name, if any."""
         name, _ = self.get_selected_entity()
         joints = self.entity_joints.get(name, [])
         if joints and 0 <= self.selected_joint_idx < len(joints):
@@ -206,7 +206,7 @@ class ObjectKeyboardClient:
         return None
 
     def next_joint(self):
-        """Select next joint"""
+        """Select the next joint."""
         name, _ = self.get_selected_entity()
         joints = self.entity_joints.get(name, [])
         if joints:
@@ -214,7 +214,7 @@ class ObjectKeyboardClient:
             log.info(f"Selected joint: {joints[self.selected_joint_idx]} ({self.selected_joint_idx + 1}/{len(joints)})")
 
     def prev_joint(self):
-        """Select previous joint"""
+        """Select the previous joint."""
         name, _ = self.get_selected_entity()
         joints = self.entity_joints.get(name, [])
         if joints:
@@ -222,6 +222,7 @@ class ObjectKeyboardClient:
             log.info(f"Selected joint: {joints[self.selected_joint_idx]} ({self.selected_joint_idx + 1}/{len(joints)})")
 
     def draw_instructions(self):
+        """Render instructions and joint selection status."""
         self.screen.fill((30, 30, 30))
         y = 25
 
@@ -256,11 +257,12 @@ class ObjectKeyboardClient:
         self.clock.tick(60)
 
     def close(self):
+        """Shut down the pygame subsystem."""
         pygame.quit()
 
 
 def process_input(dpos: float = 0.01, drot: float = 0.05, dangle: float = 0.02, joint_mode: bool = False):
-    """Process keyboard input - returns delta position, delta rotation, joint angle delta, and control flags"""
+    """Process keyboard input and return motion deltas plus control flags."""
     keys = pygame.key.get_pressed()
 
     # Initialize persistent state
@@ -311,7 +313,7 @@ def process_input(dpos: float = 0.01, drot: float = 0.05, dangle: float = 0.02, 
 
 
 def process_common_input():
-    """Process common input (TAB, J, C, ESC) - separate function"""
+    """Process shared keyboard input (TAB, J, C, ESC) for mode toggles."""
     keys = pygame.key.get_pressed()
 
     if not hasattr(process_common_input, "tab_pressed"):
@@ -347,6 +349,8 @@ if __name__ == "__main__":
 
     @configclass
     class Args:
+        """Command-line arguments for launching the keyboard control demo."""
+
         robot: str = "franka"
         sim: Literal["isaacsim", "isaacgym", "genesis", "pybullet", "sapien2", "sapien3", "mujoco", "mjx"] = "mujoco"
         num_envs: int = 1

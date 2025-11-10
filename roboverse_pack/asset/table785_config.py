@@ -9,7 +9,6 @@ from __future__ import annotations
 from metasim.constants import PhysicStateType
 from metasim.scenario.objects import RigidObjCfg
 
-
 # Base directory for table750 assets
 TABLE750_BASE_DIR = "roboverse_data/assets/EmbodiedGenData/dataset/basic_furniture/table"
 
