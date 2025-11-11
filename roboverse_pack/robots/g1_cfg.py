@@ -477,7 +477,7 @@ class G1Dof29SensorsCfg(G1Dof29Cfg):
                 horizontal_aperture=20.0,
                 clipping_range=(0.1, 1.0e5),
                 mount_to=self.name,
-                mount_link="d435_link",
+                mount_link="torso_link/d435_link",
                 mount_pos=(0, 0.0, 0),
                 # mount_quat=(0.5, -0.5, 0.5, -0.5), # ros convention
                 mount_quat=(1, 0, 0, 0),  # world convention

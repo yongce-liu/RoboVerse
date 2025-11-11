@@ -190,8 +190,8 @@ class IsaacsimHandler(BaseSimHandler):
 
         # Initialize GS background if enabled
         self._build_gs_background()
-
-        return super().launch()
+        super().launch()
+        self.sim.reset()  # crucial for calling _initialize_callbacks in binded sensors
 
     def close(self) -> None:
         log.info("close Isaacsim Handler")
