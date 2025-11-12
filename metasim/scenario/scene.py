@@ -20,6 +20,7 @@ class SceneCfg:
 
 
 @configclass
+@configclass
 class GSSceneCfg:
     """Base config class for GS scenes."""
 

@@ -56,7 +56,7 @@ from metasim.types import Action
 from metasim.utils.state import CameraState, ObjectState, RobotState, TensorState, state_tensor_to_nested
 
 # TODO: add it to the randomization of metasim
-from roboverse_learn.rl.unitree_rl.helper import TerrainGenerator
+from metasim.utils.terrain_utils import TerrainGenerator
 
 try:
     import mujoco.viewer
@@ -314,12 +314,7 @@ class MujocoHandler(BaseSimHandler):
     def _init_mujoco(self) -> mjcf.RootElement:
         """Initialize MuJoCo model with optional scene support."""
 
-        if self.scenario.scene is not None:
-            mjcf_model = mjcf.from_path(self.scenario.scene.mjcf_path)
-            log.info(f"Loaded scene from: {self.scenario.scene.mjcf_path}")
-        else:
-            mjcf_model = mjcf.RootElement()
-            self.hfield_name, self.hfield_measure = self._add_ground(mjcf_model=mjcf_model, if_random=False)
+        mjcf_model = self._init_scene()
 
         if self.scenario.sim_params.dt is not None:
             mjcf_model.option.timestep = self.scenario.sim_params.dt
@@ -330,6 +325,20 @@ class MujocoHandler(BaseSimHandler):
 
         if self.scenario.sim_params.dt is not None:
             mjcf_model.option.timestep = self.scenario.sim_params.dt
+        return mjcf_model
+
+    def _init_scene(self) -> mjcf.RootElement:
+        """Initialize scene elements."""
+        if self.scenario.scene is not None:
+            if "Ground" in self.scenario.scene.whoami():  # Terrain scene
+                mjcf_model = mjcf.RootElement()
+                self.hfield_name, self.hfield_measure = self._add_custom_ground(mjcf_model)
+            else:
+                mjcf_model = mjcf.from_path(self.scenario.scene.mjcf_path)
+                log.info(f"Loaded scene from: {self.scenario.scene.mjcf_path}")
+        else:
+            mjcf_model = mjcf.RootElement()
+            self._add_default_ground(mjcf_model)
         return mjcf_model
 
     def _add_default_ground(self, mjcf_model: mjcf.RootElement) -> None:
@@ -356,6 +365,32 @@ class MujocoHandler(BaseSimHandler):
             condim="3",
             conaffinity="15",
             material="matplane",
+        )
+
+        # Expose a simple quad mesh centered at origin, similar to IsaacGym handler.
+        step = float(self.scenario.env_spacing)
+        num_per_row = 1  # MujocoHandler supports single env
+        num_rows = 1
+        width = max(1, num_per_row) * step
+        height = max(1, num_rows) * step
+        border_offset = 20.0
+        hw, hh = width * 0.5 + border_offset, height * 0.5 + border_offset
+
+        self._ground_mesh_vertices = np.array(
+            [
+                [-hw, -hh, 0.0],
+                [hw, -hh, 0.0],
+                [-hw, hh, 0.0],
+                [hw, hh, 0.0],
+            ],
+            dtype=np.float32,
+        )
+        self._ground_mesh_triangles = np.array(
+            [
+                [0, 2, 1],
+                [1, 2, 3],
+            ],
+            dtype=np.int32,
         )
 
     def _add_cameras_to_model(self, mjcf_model: mjcf.RootElement) -> None:
@@ -1011,101 +1046,43 @@ class MujocoHandler(BaseSimHandler):
 
         return self._body_ids_reindex_cache[obj_name]
 
-    def _add_ground(self, mjcf_model, if_random: bool = False):
-        if if_random:
-            tg = TerrainGenerator(self.scenario.random.terrain_cfg)
-            static_friction = getattr(self.scenario.random.terrain_cfg, "static_friction", 1.0)
-            dynamic_friction = getattr(self.scenario.random.terrain_cfg, "dynamic_friction", 1.0)
-            restitution = getattr(self.scenario.random.terrain_cfg, "restitution", 0.0)
+    def _add_custom_ground(self, mjcf_model):
+        tg = TerrainGenerator(self.scenario.scene)
+        static_friction = getattr(self.scenario.scene, "static_friction", 1.0)
+        dynamic_friction = getattr(self.scenario.scene, "dynamic_friction", 1.0)
+        restitution = getattr(self.scenario.scene, "restitution", 0.0)
 
-            height_mat = tg.generate_terrain(self.scenario.random.terrain_cfg, type="heightfield")
-            # Also create a triangular mesh representation for queries (e.g., LiDAR warp raycasts),
-            # consistent with IsaacGym handler's ground mesh exposure.
-            vertices, triangles = tg.generate_terrain(self.scenario.random.terrain_cfg, type="trimesh")
-            # Store mesh for external consumers (e.g., LidarPointCloud)
-            self._ground_mesh_vertices = vertices
-            self._ground_mesh_triangles = triangles.astype(np.int32)
-            hfield_name = "terrain"
-            mjcf_model.asset.add(
-                "hfield",
-                name=hfield_name,
-                nrow=height_mat.shape[0],
-                ncol=height_mat.shape[1],
-                size=[
-                    height_mat.shape[0] * tg.horizontal_scale / 2,
-                    height_mat.shape[1] * tg.horizontal_scale / 2,
-                    1.0,
-                    0.1,
-                ],
-            )
+        height_mat = tg.generate_terrain(self.scenario.scene, type="heightfield")
+        # Also create a triangular mesh representation for queries (e.g., LiDAR warp raycasts),
+        # consistent with IsaacGym handler's ground mesh exposure.
+        vertices, triangles = tg.generate_terrain(self.scenario.scene, type="trimesh")
+        # Store mesh for external consumers (e.g., LidarPointCloud)
+        self._ground_mesh_vertices = vertices
+        self._ground_mesh_triangles = triangles.astype(np.int32)
+        hfield_name = "terrain"
+        mjcf_model.asset.add(
+            "hfield",
+            name=hfield_name,
+            nrow=height_mat.shape[0],
+            ncol=height_mat.shape[1],
+            size=[
+                height_mat.shape[0] * tg.horizontal_scale / 2,
+                height_mat.shape[1] * tg.horizontal_scale / 2,
+                1.0,
+                0.1,
+            ],
+        )
 
-            mjcf_model.worldbody.add(
-                "geom",
-                name="terrain_geom",
-                type="hfield",
-                hfield=hfield_name,
-                pos=f"{-tg.margin} {-tg.margin} 0",
-                rgba="0.8 0.8 0.8 1",
-                friction=[static_friction, dynamic_friction, 0.001],
-                solimp=[restitution, 0.01, 0.99],
-                # contype="0",
-                # conaffinity="1",
-                # condim="6",
-            )
-            hfield_measure = height_mat
-        else:
-            mjcf_model.asset.add(
-                "texture",
-                name="texplane",
-                type="2d",
-                builtin="checker",
-                width=512,
-                height=512,
-                rgb1=[0, 0, 0],
-                rgb2=[1.0, 1.0, 1.0],
-            )
-            mjcf_model.asset.add(
-                "material", name="matplane", reflectance="0.2", texture="texplane", texrepeat=[1, 1], texuniform=True
-            )
-            ground = mjcf_model.worldbody.add(
-                "geom",
-                type="plane",
-                pos="0 0 0",
-                size="100 100 0.001",
-                quat="1 0 0 0",
-                condim="3",
-                conaffinity="15",
-                material="matplane",
-            )
-            hfield_name = None
-            hfield_measure = None
-
-            # Expose a simple quad mesh centered at origin, similar to IsaacGym handler.
-            step = float(self.scenario.env_spacing)
-            num_per_row = 1  # MujocoHandler supports single env
-            num_rows = 1
-            width = max(1, num_per_row) * step
-            height = max(1, num_rows) * step
-            border_offset = 20.0
-            hw, hh = width * 0.5 + border_offset, height * 0.5 + border_offset
-
-            self._ground_mesh_vertices = np.array(
-                [
-                    [-hw, -hh, 0.0],
-                    [hw, -hh, 0.0],
-                    [-hw, hh, 0.0],
-                    [hw, hh, 0.0],
-                ],
-                dtype=np.float32,
-            )
-            self._ground_mesh_triangles = np.array(
-                [
-                    [0, 2, 1],
-                    [1, 2, 3],
-                ],
-                dtype=np.int32,
-            )
-        return hfield_name, hfield_measure
+        mjcf_model.worldbody.add(
+            "geom",
+            name="terrain_geom",
+            type="hfield",
+            hfield=hfield_name,
+            pos=f"{-tg.margin} {-tg.margin} 0",
+            rgba="0.8 0.8 0.8 1",
+            friction=[static_friction, dynamic_friction, 0.001],
+            solimp=[restitution, 0.01, 0.99],
+        )
 
     ############################################################
     ## Misc

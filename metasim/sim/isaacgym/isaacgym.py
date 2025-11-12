@@ -38,7 +38,7 @@ from metasim.types import Action, DictEnvState
 from metasim.utils.state import CameraState, ObjectState, RobotState, TensorState
 
 # TODO: add it to the randomization of metasim
-from roboverse_learn.rl.unitree_rl.helper import TerrainGenerator
+from metasim.utils.terrain_utils import TerrainGenerator
 
 
 class IsaacgymHandler(BaseSimHandler):
@@ -528,8 +528,7 @@ class IsaacgymHandler(BaseSimHandler):
         )  # x, y, z, w order for gymapi.Quat
 
         # add ground plane
-        # _height_measure, _horizontal_scale = self._add_ground(if_random=self.scenario.random.ground)
-        _height_measure, _horizontal_scale = self._add_ground(if_random=False)
+        self._add_ground()
 
         # get object and robot asset
         obj_assets_list = [self._load_object_asset(obj) for obj in self.objects]
@@ -1172,10 +1171,13 @@ class IsaacgymHandler(BaseSimHandler):
     def _get_joint_ids_reindex(self, obj_name: str) -> list[int]:
         return [self._joint_info[obj_name]["global_indices"][jn] for jn in self._get_joint_names(obj_name)]
 
-    def _add_ground(self, if_random: bool = False):
-        if if_random:
-            tg = TerrainGenerator(self.scenario.random.terrain_cfg)
-            vertices, triangles = tg.generate_terrain(self.scenario.random.terrain_cfg, type="trimesh")
+    def _add_ground(self):
+        if self.scenario.scene is not None:
+            assert "Ground" in self.scenario.scene.whoami(), (
+                "For IsaacGym, the scene must be a terrain scene. Other scenes are not supported yet."
+            )
+            tg = TerrainGenerator(self.scenario.scene)
+            vertices, triangles = tg.generate_terrain(self.scenario.scene, type="trimesh")
             tm_params = gymapi.TriangleMeshParams()
             tm_params.nb_vertices = vertices.shape[0]
             tm_params.nb_triangles = triangles.shape[0]
@@ -1183,27 +1185,21 @@ class IsaacgymHandler(BaseSimHandler):
             tm_params.transform.p.x = -tg.margin
             tm_params.transform.p.y = -tg.margin
             tm_params.transform.p.z = 0.0
-            tm_params.static_friction = getattr(self.scenario.random.terrain_cfg, "static_friction", 1.0)
-            tm_params.dynamic_friction = getattr(self.scenario.random.terrain_cfg, "dynamic_friction", 1.0)
-            tm_params.restitution = getattr(self.scenario.random.terrain_cfg, "restitution", 0.0)
+            tm_params.static_friction = getattr(self.scenario.scene, "static_friction", 1.0)
+            tm_params.dynamic_friction = getattr(self.scenario.scene, "dynamic_friction", 1.0)
+            tm_params.restitution = getattr(self.scenario.scene, "restitution", 0.0)
             self.gym.add_triangle_mesh(
                 self.sim, vertices.flatten(order="C"), triangles.flatten(order="C"), tm_params
             )  # add terrain to sim
-            height_measure = tg.height_measure  ## get the actual height of each grid
-            horizontal_scale = tg.horizontal_scale
             self._ground_mesh_vertices = vertices
             self._ground_mesh_triangles = triangles
         else:
             plane_params = gymapi.PlaneParams()
             plane_params.normal = gymapi.Vec3(0, 0, 1)
-            # plane_params.static_friction = getattr(self.scenario.random.terrain_cfg, "static_friction", 1.0)
-            # plane_params.dynamic_friction = getattr(self.scenario.random.terrain_cfg, "dynamic_friction", 1.0)
-            # plane_params.restitution = getattr(self.scenario.random.terrain_cfg, "restitution", 0.0)
             plane_params.static_friction = 1.0
             plane_params.dynamic_friction = 1.0
             plane_params.restitution = 0.0
             self.gym.add_ground(self.sim, plane_params)
-            height_measure, horizontal_scale = None, None
 
             # Generate a flat grid mesh for Warp registration based on env grid layout.
             step = float(self.scenario.env_spacing)
@@ -1233,7 +1229,6 @@ class IsaacgymHandler(BaseSimHandler):
                 ],
                 dtype=np.int32,
             )
-        return (height_measure, horizontal_scale)
 
     @property
     def num_envs(self) -> int:

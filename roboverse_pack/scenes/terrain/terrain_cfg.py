@@ -1,9 +1,12 @@
 from __future__ import annotations
+
 from typing import Literal
 
 import yaml
 
+from metasim.scenario.scene import SceneCfg
 from metasim.utils import configclass
+
 
 @configclass
 class BaseTerrainCfg:
@@ -71,7 +74,7 @@ class PitCfg(BaseTerrainCfg):
 
 
 @configclass
-class GroundCfg:
+class GroundCfg(SceneCfg):
     width: float = 20.0  # m
     length: float = 20.0  # m
     horizontal_scale: float = 0.1  # m
