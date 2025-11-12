@@ -46,7 +46,6 @@ def prepare(args):
     if args.objects:
         overrides["objects"] = make_objects(args.objects)
 
-
     scenario.update(**overrides)
 
     device = "cpu" if args.sim == "mujoco" else ("cuda" if torch.cuda.is_available() else "cpu")

@@ -61,9 +61,9 @@ class IsaacsimHandler(BaseSimHandler):
 
         self.scenario_cfg = scenario_cfg
         self.dt = self.scenario.sim_params.dt if self.scenario.sim_params.dt is not None else 0.01
-        self._step_counter = 0
+        self._physics_step_counter = 0
         self._is_closed = False
-        self.render_interval = 4  # TODO: fix hardcode
+        self.render_interval = self.scenario.decimation  # TODO: fix hardcode
         self._manual_pd_on = []
 
         if self.headless:
@@ -71,19 +71,23 @@ class IsaacsimHandler(BaseSimHandler):
         else:
             self._render_viewport = True
 
-    def _init_scene(self) -> None:
+    def _init_scene(self, simulation_app=None, args=None) -> None:
         """
         Initializes the isaacsim simulation environment.
         """
-        from isaaclab.app import AppLauncher
+        if simulation_app is None:
+            from isaaclab.app import AppLauncher
 
-        parser = argparse.ArgumentParser()
-        AppLauncher.add_app_launcher_args(parser)
-        args = parser.parse_args([])
-        args.enable_cameras = True
-        args.headless = self.headless
-        app_launcher = AppLauncher(args)
-        self.simulation_app = app_launcher.app
+            parser = argparse.ArgumentParser()
+            AppLauncher.add_app_launcher_args(parser)
+            args = parser.parse_args([])
+            args.enable_cameras = True
+            args.headless = self.headless
+            app_launcher = AppLauncher(args)
+            self.simulation_app = app_launcher.app
+        else:
+            assert args is not None, "args must be provided when simulation_app is given."
+            self.simulation_app = simulation_app
 
         # physics context
         from isaaclab.scene import InteractiveScene, InteractiveSceneCfg
@@ -158,8 +162,8 @@ class IsaacsimHandler(BaseSimHandler):
             else:
                 raise ValueError(f"Unsupported camera type: {type(camera)}")
 
-    def launch(self) -> None:
-        self._init_scene()
+    def launch(self, simulation_app=None, simulation_args=None) -> None:
+        self._init_scene(simulation_app, simulation_args)
         self._load_robots()
         self._load_sensors()
         self._load_cameras()
@@ -312,7 +316,7 @@ class IsaacsimHandler(BaseSimHandler):
             env_ids = list(range(self.num_envs))
 
         # Special handling for the first frame to ensure camera is properly positioned
-        if self._step_counter == 0:
+        if self._physics_step_counter == 0:
             self._update_camera_pose()
             # Force render and sensor update for first frame
             if self.sim.has_gui() or self.sim.has_rtx_sensors():
@@ -508,11 +512,11 @@ class IsaacsimHandler(BaseSimHandler):
 
         # Decimation: run physics multiple times per control step for better stability
         for _ in range(self.decimation):
+            self._physics_step_counter += 1
             self.sim.step(render=False)
-
-        if self._step_counter % self.render_interval == 0 and is_rendering:
-            self.sim.render()
-        self.scene.update(dt=self.dt)
+            self.scene.update(dt=self.dt)
+            if self._physics_step_counter % self.render_interval == 0 and is_rendering:
+                self.sim.render()
 
         # Force update kinematic objects to ensure visual mesh stays in sync
         for obj in self.objects:
@@ -524,10 +528,10 @@ class IsaacsimHandler(BaseSimHandler):
                 obj_inst.update(dt=0.0)
 
         # Ensure camera pose is correct, especially for the first few frames
-        if self._step_counter < 5:
+        if self._physics_step_counter < 5:
             self._update_camera_pose()
 
-        self._step_counter += 1
+        self._physics_step_counter += 1
 
     def _add_robot(self, robot: ArticulationObjCfg) -> None:
         import isaaclab.sim as sim_utils
@@ -695,7 +699,13 @@ class IsaacsimHandler(BaseSimHandler):
             )
             if isinstance(obj, RigidObjCfg):
                 self.scene.rigid_objects[obj.name] = RigidObject(
-                    RigidObjectCfg(prim_path=prim_path, spawn=usd_file_cfg)
+                    RigidObjectCfg(
+                        prim_path=prim_path,
+                        spawn=usd_file_cfg,
+                        init_state=RigidObjectCfg.InitialStateCfg(
+                            pos=obj.default_position, rot=obj.default_orientation
+                        ),
+                    )
                 )
                 return
 
@@ -1200,9 +1210,102 @@ class IsaacsimHandler(BaseSimHandler):
         log.debug(f"Added camera {camera.name} to scene with prim_path: {prim_path}")
 
     def refresh_render(self) -> None:
-        for sensor in self.scene.sensors.values():
-            sensor.update(dt=0)
-        self.sim.render()
+        self.flush_visual_updates(settle_passes=1)
+
+    def flush_visual_updates(self, *, wait_for_materials: bool = False, settle_passes: int = 2) -> None:
+        """Drive SimulationApp/scene/sensors for a few frames to settle visual state."""
+        passes = max(1, settle_passes)
+        sim_app = getattr(self, "simulation_app", None)
+        reason = "material refresh" if wait_for_materials else "visual flush"
+
+        for _ in range(passes):
+            if sim_app is not None:
+                try:
+                    sim_app.update()
+                except Exception as err:
+                    log.debug(f"SimulationApp update failed during {reason}: {err}")
+
+            if self.scene is not None:
+                try:
+                    self.scene.update(dt=0)
+                except Exception as err:
+                    log.debug(f"Scene update failed during {reason}: {err}")
+
+            if self.sim is not None:
+                try:
+                    if self.sim.has_gui() or self.sim.has_rtx_sensors():
+                        self.sim.render()
+                except Exception as err:
+                    log.debug(f"Sim render failed during {reason}: {err}")
+
+            sensors = getattr(self.scene, "sensors", {}) if self.scene is not None else {}
+            for name, sensor in sensors.items():
+                try:
+                    sensor.update(dt=0)
+                except Exception as err:
+                    log.debug(f"Sensor {name} update failed during {reason}: {err}")
+
+        if wait_for_materials:
+            self._refresh_raytracing_acceleration()
+
+    def _refresh_raytracing_acceleration(self) -> None:
+        """Work around Isaac Sim 4.5 RTX BVH getting stale after material edits."""
+        render_cfg = getattr(self.scenario, "render", None)
+        if render_cfg is None or getattr(render_cfg, "mode", None) != "raytracing":
+            return
+
+        try:
+            import carb
+            import omni.kit.app
+        except ImportError:
+            return
+
+        settings = carb.settings.get_settings()
+        app = omni.kit.app.get_app()
+        if settings is None or app is None:
+            return
+
+        enabled_path = "/rtx/raytracing/enabled"
+        try:
+            current_state = settings.get(enabled_path)
+        except Exception as err:
+            log.debug(f"Unable to read RTX setting {enabled_path}: {err}")
+            current_state = None
+
+        if current_state is None:
+            current_state = True
+            try:
+                settings.set(enabled_path, current_state)
+                app.update()
+            except Exception as err:
+                log.debug(f"Failed to initialize RTX setting {enabled_path}: {err}")
+                return
+
+        log.debug("Refreshing RTX acceleration structure after material update")
+        try:
+            settings.set(enabled_path, False)
+            app.update()
+            settings.set(enabled_path, current_state)
+            app.update()
+
+            gc_path = "/rtx/hydra/triggerGarbageCollection"
+            settings.set(gc_path, True)
+            app.update()
+            settings.set(gc_path, False)
+            app.update()
+
+            if self.sim is not None:
+                try:
+                    self.sim.render()
+                except Exception as err:
+                    log.debug(f"Sim render during RTX refresh failed: {err}")
+            if self.scene is not None:
+                try:
+                    self.scene.update(dt=0)
+                except Exception as err:
+                    log.debug(f"Scene update during RTX refresh failed: {err}")
+        except Exception as err:
+            log.debug(f"Failed to refresh RTX acceleration structure: {err}")
 
     def _get_camera_params(self, camera, camera_inst):
         """Get camera intrinsics and extrinsics for GS rendering.
