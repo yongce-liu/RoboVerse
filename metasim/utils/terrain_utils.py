@@ -570,6 +570,14 @@ class TerrainGenerator:
             return vertices, triangles
         elif type == "heightfield":
             return self.height_mat_pad * self.vertical_scale
+        elif type == "both":
+            vertices, triangles = convert_heightfield_to_trimesh(
+                height_field_raw=self.height_mat_pad,
+                horizontal_scale=self.horizontal_scale,
+                vertical_scale=self.vertical_scale,
+                slope_threshold=0.1,
+            )
+            return vertices, triangles, self.height_mat_pad * self.vertical_scale
 
     @property
     def height_measure(self):

@@ -150,6 +150,10 @@ class MujocoHandler(BaseSimHandler):
         self.physics = mjcf.Physics.from_mjcf_model(model)
         self.data = self.physics.data
 
+        # load the ground
+        if self._height_mat is not None:
+            self.physics.model.hfield_data[:] = self._height_mat.flatten(order="C")
+
         # === Export MJCF + assets to a temp dir. Handle filename variability (dm_control 1.0.34). ===
         with tempfile.TemporaryDirectory() as tmpdir:
             # Write assets + XML to disk (this version returns None and writes files)
@@ -175,6 +179,9 @@ class MujocoHandler(BaseSimHandler):
             # so hashed filenames resolve correctly.
             self._mj_model = mujoco.MjModel.from_xml_path(xml_path)
             self._mj_data = mujoco.MjData(self._mj_model)
+
+            if self._height_mat is not None:
+                self.physics.model.hfield_data[:] = self._height_mat.flatten(order="C")
 
         # Create a default-sized renderer (camera sizes can be applied on demand)
         self.renderer = mujoco.Renderer(self._mj_model, width=640, height=480)
@@ -318,7 +325,7 @@ class MujocoHandler(BaseSimHandler):
 
         if self.scenario.sim_params.dt is not None:
             mjcf_model.option.timestep = self.scenario.sim_params.dt
-
+        self._add_ground(mjcf_model)
         self._add_objects_to_model(mjcf_model)
         self._add_robots_to_model(mjcf_model)
         self._add_cameras_to_model(mjcf_model)
@@ -330,16 +337,17 @@ class MujocoHandler(BaseSimHandler):
     def _init_scene(self) -> mjcf.RootElement:
         """Initialize scene elements."""
         if self.scenario.scene is not None:
-            if "Ground" in self.scenario.scene.whoami():  # Terrain scene
-                mjcf_model = mjcf.RootElement()
-                self.hfield_name, self.hfield_measure = self._add_custom_ground(mjcf_model)
-            else:
-                mjcf_model = mjcf.from_path(self.scenario.scene.mjcf_path)
-                log.info(f"Loaded scene from: {self.scenario.scene.mjcf_path}")
+            mjcf_model = mjcf.from_path(self.scenario.scene.mjcf_path)
+            log.info(f"Loaded scene from: {self.scenario.scene.mjcf_path}")
         else:
             mjcf_model = mjcf.RootElement()
-            self._add_default_ground(mjcf_model)
         return mjcf_model
+
+    def _add_ground(self, mjcf_model: mjcf.RootElement) -> None:
+        if self.scenario.ground is not None:
+            self._add_custom_ground(mjcf_model)
+        else:
+            self._add_default_ground(mjcf_model)
 
     def _add_default_ground(self, mjcf_model: mjcf.RootElement) -> None:
         """Add default ground plane."""
@@ -1047,19 +1055,19 @@ class MujocoHandler(BaseSimHandler):
         return self._body_ids_reindex_cache[obj_name]
 
     def _add_custom_ground(self, mjcf_model):
-        tg = TerrainGenerator(self.scenario.scene)
-        static_friction = getattr(self.scenario.scene, "static_friction", 1.0)
-        dynamic_friction = getattr(self.scenario.scene, "dynamic_friction", 1.0)
-        restitution = getattr(self.scenario.scene, "restitution", 0.0)
+        tg = TerrainGenerator(self.scenario.ground)
+        static_friction = getattr(self.scenario.ground, "static_friction", 1.0)
+        dynamic_friction = getattr(self.scenario.ground, "dynamic_friction", 1.0)
+        restitution = getattr(self.scenario.ground, "restitution", 0.0)
 
-        height_mat = tg.generate_terrain(self.scenario.scene, type="heightfield")
+        vertices, triangles, height_mat = tg.generate_terrain(self.scenario.ground, type="both")
         # Also create a triangular mesh representation for queries (e.g., LiDAR warp raycasts),
         # consistent with IsaacGym handler's ground mesh exposure.
-        vertices, triangles = tg.generate_terrain(self.scenario.scene, type="trimesh")
         # Store mesh for external consumers (e.g., LidarPointCloud)
         self._ground_mesh_vertices = vertices
         self._ground_mesh_triangles = triangles.astype(np.int32)
         hfield_name = "terrain"
+
         mjcf_model.asset.add(
             "hfield",
             name=hfield_name,
@@ -1069,20 +1077,22 @@ class MujocoHandler(BaseSimHandler):
                 height_mat.shape[0] * tg.horizontal_scale / 2,
                 height_mat.shape[1] * tg.horizontal_scale / 2,
                 1.0,
-                0.1,
+                0.001,
             ],
         )
-
         mjcf_model.worldbody.add(
             "geom",
             name="terrain_geom",
             type="hfield",
             hfield=hfield_name,
-            pos=f"{-tg.margin} {-tg.margin} 0",
+            pos="0 0 0",
             rgba="0.8 0.8 0.8 1",
             friction=[static_friction, dynamic_friction, 0.001],
-            solimp=[restitution, 0.01, 0.99],
+            solimp=[0.9, 0.95, 0.001, 0.5, 2.0],
+            contype="1",
+            conaffinity="15",
         )
+        self._height_mat = height_mat
 
     ############################################################
     ## Misc

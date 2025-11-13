@@ -1172,12 +1172,9 @@ class IsaacgymHandler(BaseSimHandler):
         return [self._joint_info[obj_name]["global_indices"][jn] for jn in self._get_joint_names(obj_name)]
 
     def _add_ground(self):
-        if self.scenario.scene is not None:
-            assert "Ground" in self.scenario.scene.whoami(), (
-                "For IsaacGym, the scene must be a terrain scene. Other scenes are not supported yet."
-            )
-            tg = TerrainGenerator(self.scenario.scene)
-            vertices, triangles = tg.generate_terrain(self.scenario.scene, type="trimesh")
+        if self.scenario.ground is not None:
+            tg = TerrainGenerator(self.scenario.ground)
+            vertices, triangles = tg.generate_terrain(self.scenario.ground, type="trimesh")
             tm_params = gymapi.TriangleMeshParams()
             tm_params.nb_vertices = vertices.shape[0]
             tm_params.nb_triangles = triangles.shape[0]
@@ -1185,9 +1182,9 @@ class IsaacgymHandler(BaseSimHandler):
             tm_params.transform.p.x = -tg.margin
             tm_params.transform.p.y = -tg.margin
             tm_params.transform.p.z = 0.0
-            tm_params.static_friction = getattr(self.scenario.scene, "static_friction", 1.0)
-            tm_params.dynamic_friction = getattr(self.scenario.scene, "dynamic_friction", 1.0)
-            tm_params.restitution = getattr(self.scenario.scene, "restitution", 0.0)
+            tm_params.static_friction = getattr(self.scenario.ground, "static_friction", 1.0)
+            tm_params.dynamic_friction = getattr(self.scenario.ground, "dynamic_friction", 1.0)
+            tm_params.restitution = getattr(self.scenario.ground, "restitution", 0.0)
             self.gym.add_triangle_mesh(
                 self.sim, vertices.flatten(order="C"), triangles.flatten(order="C"), tm_params
             )  # add terrain to sim
