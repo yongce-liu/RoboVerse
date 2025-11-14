@@ -1,4 +1,4 @@
-from metasim.scenario.ground import GroundCfg, SlopeCfg
+from metasim.scenario.grounds import GroundCfg, SlopeCfg
 from metasim.utils import configclass
 
 

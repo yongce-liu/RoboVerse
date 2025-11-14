@@ -14,6 +14,7 @@ class GroundCfg:
     horizontal_scale: float = 0.1  # m
     vertical_scale: float = 0.1  # m
     margin: float = 10  # m
+    max_mesh_triangles: int = 2000  # cap IsaacSim mesh complexity to avoid GPU OOM
     elements: dict[str, list[BaseTerrainCfg]] = None
     repeat_direction_gap: list[int, Literal["row", "column"], float] = (0, "row", 0.1)  # (repeat, repeat_direction)
     difficulty: list[float, float, Literal["linear"]] = [1.0, 4.0, "linear"]  # (difficulty, type)

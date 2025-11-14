@@ -9,7 +9,7 @@ import sys
 from loguru import logger as log
 
 from metasim.constants import SimType
-from metasim.scenario.ground import GroundCfg
+from metasim.scenario.grounds import GroundCfg
 from metasim.scenario.robot import RobotCfg
 from metasim.scenario.scene import SceneCfg
 from metasim.sim.parallel import ParallelSimWrapper

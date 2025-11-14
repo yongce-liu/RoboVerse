@@ -9,7 +9,7 @@ from metasim.utils.hf_util import FileDownloader
 from metasim.utils.setup_util import get_ground, get_robot, get_scene
 
 from .cameras import BaseCameraCfg
-from .ground import GroundCfg
+from .grounds import GroundCfg
 from .lights import BaseLightCfg, DistantLightCfg
 from .objects import BaseObjCfg
 from .render import RenderCfg
