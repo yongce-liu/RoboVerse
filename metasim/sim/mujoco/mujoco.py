@@ -150,11 +150,6 @@ class MujocoHandler(BaseSimHandler):
         self.physics = mjcf.Physics.from_mjcf_model(model)
         self.data = self.physics.data
 
-        # load the ground
-        if hasattr(self, "_height_mat"):
-            if self._height_mat is not None:
-                self.physics.model.hfield_data[:] = self._height_mat.flatten(order="C")
-
         # === Export MJCF + assets to a temp dir. Handle filename variability (dm_control 1.0.34). ===
         with tempfile.TemporaryDirectory() as tmpdir:
             # Write assets + XML to disk (this version returns None and writes files)
@@ -181,9 +176,10 @@ class MujocoHandler(BaseSimHandler):
             self._mj_model = mujoco.MjModel.from_xml_path(xml_path)
             self._mj_data = mujoco.MjData(self._mj_model)
 
-            if hasattr(self, "_height_mat"):
-                if self._height_mat is not None:
-                    self.physics.model.hfield_data[:] = self._height_mat.flatten(order="C")
+        # load the ground
+        if hasattr(self, "_height_mat"):
+            if self._height_mat is not None:
+                self.physics.model.hfield_data[:] = self._height_mat.flatten(order="C")
 
         # Create a default-sized renderer (camera sizes can be applied on demand)
         self.renderer = mujoco.Renderer(self._mj_model, width=640, height=480)

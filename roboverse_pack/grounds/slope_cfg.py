@@ -8,6 +8,7 @@ class SingleSlopeCfg(GroundCfg):
 
     width: float = 10.0
     length: float = 10.0
+    repeat_direction_gap = (1, "row", 5.0)
 
     def __post_init__(self):
         super().__post_init__()
