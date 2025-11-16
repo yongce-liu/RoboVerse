@@ -179,7 +179,13 @@ class MujocoHandler(BaseSimHandler):
         # load the ground
         if hasattr(self, "_height_mat"):
             if self._height_mat is not None:
-                self.physics.model.hfield_data[:] = self._height_mat.flatten(order="C")
+                # normalize height field to [0, 1] range for mujoco hfield
+                height_mat = self._height_mat
+                z_min = float(height_mat.min())
+                z_max = float(height_mat.max())
+                z_span = max(z_max - z_min, 1e-6)
+                normalized_height_mat = (height_mat - z_min) / z_span
+                self.physics.model.hfield_data[:] = normalized_height_mat.flatten(order="C")
 
         # Create a default-sized renderer (camera sizes can be applied on demand)
         self.renderer = mujoco.Renderer(self._mj_model, width=640, height=480)
@@ -1064,7 +1070,12 @@ class MujocoHandler(BaseSimHandler):
         # Store mesh for external consumers (e.g., LidarPointCloud)
         self._ground_mesh_vertices = vertices
         self._ground_mesh_triangles = triangles.astype(np.int32)
+        z_min = float(height_mat.min())
+        z_max = float(height_mat.max())
+        z_span = max(z_max - z_min, 1e-6)
         hfield_name = "terrain"
+
+        self._terrain_hfield_name = hfield_name
 
         mjcf_model.asset.add(
             "hfield",
@@ -1074,7 +1085,7 @@ class MujocoHandler(BaseSimHandler):
             size=[
                 height_mat.shape[0] * tg.horizontal_scale / 2,
                 height_mat.shape[1] * tg.horizontal_scale / 2,
-                1.0,
+                z_span,
                 0.001,
             ],
         )
@@ -1083,7 +1094,7 @@ class MujocoHandler(BaseSimHandler):
             name="terrain_geom",
             type="hfield",
             hfield=hfield_name,
-            pos="0 0 0",
+            pos=[0.0, 0.0, z_min],
             rgba="0.8 0.8 0.8 1",
             friction=[static_friction, dynamic_friction, 0.001],
             solimp=[0.9, 0.95, 0.001, 0.5, 2.0],

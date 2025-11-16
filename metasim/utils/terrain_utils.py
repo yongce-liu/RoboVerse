@@ -476,7 +476,7 @@ class TerrainGenerator:
                 height_field_raw=self.height_mat_pad,
                 horizontal_scale=self.horizontal_scale,
                 vertical_scale=self.vertical_scale,
-                slope_threshold=0.1,
+                slope_threshold=None,
             )
             return vertices, triangles
         if type == "heightfield":
@@ -486,7 +486,7 @@ class TerrainGenerator:
                 height_field_raw=self.height_mat_pad,
                 horizontal_scale=self.horizontal_scale,
                 vertical_scale=self.vertical_scale,
-                slope_threshold=0.1,
+                slope_threshold=None,
             )
             return vertices, triangles, self.height_mat_pad * self.vertical_scale
         raise ValueError(f"Unknown terrain export type '{type}'.")
