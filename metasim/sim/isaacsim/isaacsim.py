@@ -474,7 +474,6 @@ class IsaacsimHandler(BaseSimHandler):
                 self.sim.set_render_mode(SimulationContext.RenderMode.FULL_RENDERING)
 
     def set_dof_targets(self, actions: torch.Tensor) -> None:
-        # TODO: support set torque
         if isinstance(actions, torch.Tensor):
             actions_tensor = actions
         else:
@@ -485,12 +484,15 @@ class IsaacsimHandler(BaseSimHandler):
                 for env_id in range(self.num_envs):
                     joint_targets = actions[env_id][robot.name]["dof_pos_target"]
                     for j, joint_name in enumerate(sorted_joint_names):
-                        robot_tensor[env_id, j] = torch.tensor(joint_targets[joint_name], device=self.device)
+                        robot_tensor[env_id, j] = torch.tensor(
+                            joint_targets[joint_name],
+                            device=self.device,
+                        )
                 per_robot_tensors.append(robot_tensor)
             actions_tensor = torch.cat(per_robot_tensors, dim=-1)
 
         offset = 0
-        for robot in self.robots:
+        for i, robot in enumerate(self.robots):
             robot_inst = self.scene.articulations[robot.name]
             sorted_joint_names = self.get_joint_names(robot.name, sort=True)
             joint_count = len(sorted_joint_names)
@@ -514,7 +516,14 @@ class IsaacsimHandler(BaseSimHandler):
                 continue
 
             joint_targets = robot_actions_sorted[:, action_indices]
-            robot_inst.set_joint_position_target(joint_targets, joint_ids=joint_ids)
+
+            if self._manual_pd_on[i]:
+                # torque / effort control
+                robot_inst.set_joint_effort_target(joint_targets, joint_ids=joint_ids)
+            else:
+                # position control
+                robot_inst.set_joint_position_target(joint_targets, joint_ids=joint_ids)
+
             robot_inst.write_data_to_sim()
 
     def _simulate(self):
