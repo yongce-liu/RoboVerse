@@ -48,7 +48,7 @@ def load_config(config_path: str, base_config_path: str | None = None) -> dict[s
 def get_config():
     """Get configuration with command line argument support."""
     parser = argparse.ArgumentParser(description='FastTD3 Training')
-    parser.add_argument('--config', type=str, default='pick_place.yaml',
+    parser.add_argument('--config', type=str, default='track.yaml',
                        help='YAML configuration file name (will be loaded from configs/ directory)')
     args = parser.parse_args()
 
@@ -221,6 +221,8 @@ def main() -> None:
         robots=cfg("robots"), simulator=cfg("sim"), num_envs=cfg("num_envs"), headless=cfg("headless"), cameras=[]
     )
     envs = task_cls(scenario, device=device)
+    from metasim.utils.viser.viser_env_wrapper import TaskViserWrapper
+    envs = TaskViserWrapper(envs)
     eval_envs = envs
 
     # ---------------- derive shapes ------------------------------------
