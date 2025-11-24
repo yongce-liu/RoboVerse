@@ -10,6 +10,7 @@ from roboverse_learn.rl.unitree_rl.configs.algorithm import (
 )
 import roboverse_learn.rl.unitree_rl.helper.curriculum_utils as curr_funs
 from metasim.queries import ContactForces
+from roboverse_learn.rl.unitree_rl.configs.cfg_queries import LidarPointCloud
 from roboverse_learn.rl.unitree_rl.configs.cfg_randomizers import (
     MaterialRandomizer,
     MassRandomizer,
