@@ -23,6 +23,7 @@ Guidelines for modifications:
 * Bangjun Wang
 * Chaoyi Xu
 * Chengyang Zhao
+* Dechen Gao
 * Di Fan
 * Dylan Goetting
 * Haoran Lu
@@ -30,19 +31,22 @@ Guidelines for modifications:
 * Haozhe Lou
 * Jiangran Lyu
 * Krishnan Srinivasan
+* Liu Liu
+* Mingyuan Sun
 * Peihao Li
 * Ran Gong
 * Siheng Zhao
 * Songlin Wei
+* Xinjie Wang
 * Xinying Guo
 * Yikai Tang
+* Yongce Liu
+* Yu Hong
 * Yuchen Huang
 * Yuran Wang
 * Yutong Liang
 * Yuyang Li
 * Zhigen Zhao
-* Xinjie Wang
-* Liu Liu
 
 ## Acknowledgements
 

@@ -110,8 +110,8 @@ class DomainRandomizationManager:
             # )
             ## Box
             box_mat_rand = MaterialRandomizer(
-                MaterialPresets.metal_object("box_base", use_mdl=True, randomization_mode="combined"),
-                seed=self.cfg.seed
+                MaterialPresets.mdl_family_object("box_base", family="metal"),
+                seed=self.cfg.seed,
             )
 
             # for rand in [cube_mat_rand, sphere_mat_rand, box_mat_rand]:
@@ -148,10 +148,7 @@ class DomainRandomizationManager:
         # 4. Initialize camera randomizer
         if self.cfg.enable:
             camera_rand = CameraRandomizer(
-                CameraPresets.surveillance_camera(
-                    self.cfg.camera_name,
-                    randomization_mode=self.cfg.camera_scenario
-                ),
+                CameraPresets.surveillance_camera(self.cfg.camera_name),
                 seed=self.cfg.seed
             )
             camera_rand.bind_handler(self.sim_handler)
@@ -501,9 +498,23 @@ class DPRunner(BaseRunner):
         log.info(f"Using GPU device: {args.gpu_id}")
         task_cls = get_task_class(args.task)
 
+        if args.task == 'stack_cube':
+            dp_camera = True
+        elif args.task == 'close_box':
+            dp_camera = False
+        else:
+            dp_camera = True
+
+        if dp_camera:
+            # import warnings
+            # warnings.warn("Using dp camera position!")
+            dp_pos = (1.0, 0.0, 0.75)
+        else:
+            dp_pos = (1.5, 0.0, 1.5)
+
         camera = PinholeCameraCfg(
             name="camera0",
-            pos=(1.5, 0, 1.5),
+            pos=dp_pos,
             look_at=(0.0, 0.0, 0.0)
         )
 
@@ -536,13 +547,14 @@ class DPRunner(BaseRunner):
 
         time_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         checkpoint = self.get_checkpoint_path()
-        checkpoint = ckpt_path if checkpoint is None else checkpoint
+        # checkpoint = ckpt_path if checkpoint is None else checkpoint
+        checkpoint = ckpt_path if ckpt_path is None else checkpoint
         if checkpoint is None:
             raise ValueError(
                 "No checkpoint found, please provide a valid checkpoint path."
             )
         args.checkpoint_path = checkpoint
-        ckpt_name = args.checkpoint_path.split("/")[-1] + "_" + time_str
+        ckpt_name = args.checkpoint_path.name + "_" + time_str
         ckpt_name = f"{args.task}/{args.algo}/{args.robot}/{ckpt_name}"
         runnerCls = get_runner(args.algo)
         policyRunner: BaseEvalRunner = runnerCls(
@@ -601,6 +613,7 @@ class DPRunner(BaseRunner):
             TimeOut = [False] * num_envs
             images_list = []
             print(policyRunner.policy_cfg)
+            # env.handler.refresh_render()
 
             dynamic_dr_interval = 20
             while step < MaxStep:
