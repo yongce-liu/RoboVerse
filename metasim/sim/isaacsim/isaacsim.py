@@ -63,7 +63,12 @@ class IsaacsimHandler(BaseSimHandler):
         self._episode_length_buf = [0 for _ in range(self.num_envs)]
 
         self.scenario_cfg = scenario_cfg
-        self.physics_dt = self.scenario.sim_params.dt if self.scenario.sim_params.dt is not None else 0.01
+        # Calculate physics_dt to ensure dt * decimation = constant (0.015)
+        if self.scenario.sim_params.dt is not None:
+            self.physics_dt = self.scenario.sim_params.dt
+        else:
+            # Default: dt * decimation = 0.015
+            self.physics_dt = 0.015 / self.scenario.decimation
         self._physics_step_counter = 0
         self._is_closed = False
         self.render_interval = self.scenario.decimation  # TODO: fix hardcode
@@ -169,7 +174,8 @@ class IsaacsimHandler(BaseSimHandler):
         self._load_robots()
         self._load_sensors()
         self._load_cameras()
-        self._load_terrain()
+        if self.scenario.scene is None:
+            self._load_terrain()
         self._load_scene()
         self._load_objects()
         self._load_lights()
@@ -220,7 +226,21 @@ class IsaacsimHandler(BaseSimHandler):
         if isinstance(states, list):
             if env_ids is None:
                 env_ids = list(range(self.num_envs))
-            states_flat = [states[i]["objects"] | states[i]["robots"] for i in range(self.num_envs)]
+
+            # Handle different state list lengths:
+            # 1. Single state -> replicate across all envs (most common for initial setup)
+            # 2. States matching num_envs -> use corresponding state per env
+            if len(states) == 1:
+                # Replicate single state across all environments
+                states_flat = [states[0]["objects"] | states[0]["robots"] for _ in range(self.num_envs)]
+            elif len(states) == self.num_envs:
+                # Use provided states for each environment
+                states_flat = [states[i]["objects"] | states[i]["robots"] for i in range(self.num_envs)]
+            else:
+                raise ValueError(
+                    f"States list length ({len(states)}) must be either 1 (replicate to all envs) "
+                    f"or match num_envs ({self.num_envs}). Got {len(states)} states."
+                )
             for obj in self.objects + self.robots:
                 if obj.name not in states_flat[0]:
                     log.warning(f"Missing {obj.name} in states, setting its velocity to zero")
@@ -474,6 +494,7 @@ class IsaacsimHandler(BaseSimHandler):
                 self.sim.set_render_mode(SimulationContext.RenderMode.FULL_RENDERING)
 
     def set_dof_targets(self, actions: torch.Tensor) -> None:
+        # TODO: support set torque
         if isinstance(actions, torch.Tensor):
             actions_tensor = actions
         else:
@@ -656,6 +677,10 @@ class IsaacsimHandler(BaseSimHandler):
                         rigid_props=rigid_props,
                         collision_props=collision_props,
                     ),
+                    init_state=RigidObjectCfg.InitialStateCfg(
+                        pos=obj.default_position,
+                        rot=obj.default_orientation,
+                    ),
                 )
             )
             return
@@ -732,9 +757,45 @@ class IsaacsimHandler(BaseSimHandler):
         raise ValueError(f"Unsupported object type: {type(obj)}")
 
     def _load_terrain(self) -> None:
-        # TODO support multiple terrains cfg
         import isaaclab.sim as sim_utils
-        from isaaclab.terrains import TerrainImporterCfg
+        from isaaclab.terrains import TerrainGeneratorCfg, TerrainImporterCfg
+        from isaaclab.terrains.trimesh import mesh_terrains_cfg as mesh_cfg
+
+        # Auto-download terrain material if missing (same as DR)
+        mdl_path = "roboverse_data/materials/arnold/Wood/Ash.mdl"
+        if not os.path.exists(mdl_path):
+            try:
+                from metasim.utils.hf_util import check_and_download_single, extract_texture_paths_from_mdl
+
+                log.info(f"Downloading terrain material: {mdl_path}")
+                check_and_download_single(mdl_path)
+
+                # Download textures (same as DR's apply_mdl_material)
+                if os.path.exists(mdl_path):
+                    try:
+                        texture_paths = extract_texture_paths_from_mdl(mdl_path)
+                        for tex_path in texture_paths:
+                            if not os.path.exists(tex_path):
+                                log.debug(f"Downloading texture: {tex_path}")
+                                check_and_download_single(tex_path)
+                    except Exception as e:
+                        log.debug(f"Failed to download textures: {e}")
+            except Exception as e:
+                log.warning(f"Failed to download terrain material {mdl_path}: {e}")
+
+        plane_gen_cfg = TerrainGeneratorCfg(
+            size=(100.0, 100.0),  # ground size (in total)
+            horizontal_scale=0.1,
+            vertical_scale=0.0,
+            slope_threshold=None,
+            use_cache=False,
+            sub_terrains={
+                "flat": mesh_cfg.MeshPlaneTerrainCfg(
+                    proportion=1.0,
+                    size=(10.0, 10.0),
+                ),
+            },
+        )
 
         ground_cfg = getattr(self.scenario, "ground", None)
         static_friction = getattr(ground_cfg, "static_friction", 1.0) if ground_cfg is not None else 1.0
@@ -743,7 +804,8 @@ class IsaacsimHandler(BaseSimHandler):
 
         terrain_config = TerrainImporterCfg(
             prim_path="/World/ground",
-            terrain_type="plane",
+            terrain_type="generator",
+            terrain_generator=plane_gen_cfg,
             collision_group=-1,
             physics_material=sim_utils.RigidBodyMaterialCfg(
                 friction_combine_mode="multiply",
@@ -753,6 +815,12 @@ class IsaacsimHandler(BaseSimHandler):
                 restitution=restitution,
             ),
             debug_vis=False,
+            visual_material=sim_utils.MdlFileCfg(
+                mdl_path=mdl_path,
+                project_uvw=True,
+                texture_scale=(1.0, 1.0),
+                albedo_brightness=1.2,
+            ),
         )
         terrain_config.num_envs = self.scene.cfg.num_envs
         terrain_config.env_spacing = self.scene.cfg.env_spacing
@@ -1369,7 +1437,15 @@ class IsaacsimHandler(BaseSimHandler):
         self.flush_visual_updates(settle_passes=1)
 
     def flush_visual_updates(self, *, wait_for_materials: bool = False, settle_passes: int = 2) -> None:
-        """Drive SimulationApp/scene/sensors for a few frames to settle visual state."""
+        """Drive SimulationApp/scene/sensors for a few frames to settle visual state.
+
+        Global defer mechanism: If _defer_all_visual_flushes is True, skip flush entirely.
+        This enables atomic batch randomization without intermediate rendering overhead.
+        """
+        # Check global defer flag (for batch randomization)
+        if getattr(self, "_defer_all_visual_flushes", False):
+            return  # Skip flush, will be done by batch controller
+
         passes = max(1, settle_passes)
         sim_app = getattr(self, "simulation_app", None)
         reason = "material refresh" if wait_for_materials else "visual flush"
