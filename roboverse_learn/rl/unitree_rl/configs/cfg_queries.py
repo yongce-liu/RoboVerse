@@ -262,11 +262,13 @@ class LidarPointCloud(BaseQueryType):
 
         # Configure a Livox/MID-360-like sensor, aligned in world with point cloud in local frame
         # Keep params conservative for performance; adjust as needed by caller
+        # Fix: Rotate -90° around X to point sensor forward (was pointing up, causing inf values)
+        # Quaternion (0.707107, -0.707107, 0.0, 0.0) in wxyz format rotates sensor Z-axis from UP to FORWARD
         lidar_cfg = LidarSensorCfg(
             prim_path=prim_path,
-            offset=LidarSensorCfg.OffsetCfg(pos=(0.0, 0.0, 0.0), rot=(1.0, 0.0, 0.0, 0.0)),
+            offset=LidarSensorCfg.OffsetCfg(pos=(0.0, 0.0, 0.0), rot=(0.707107, -0.707107, 0.0, 0.0)),
             attach_yaw_only=False,
-            ray_alignment="world",
+            ray_alignment="base",  # Changed from "world" to "base" so rays rotate with robot
             pattern_cfg=LivoxPatternCfg(sensor_type=self.sensor_type, samples=24000),
             mesh_prim_paths=["/World/ground", "/World/static"],
             # optionally include dynamic scene meshes: robot and default scene under each env
