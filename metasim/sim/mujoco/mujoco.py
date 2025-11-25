@@ -1089,14 +1089,17 @@ class MujocoHandler(BaseSimHandler):
 
         self._terrain_hfield_name = hfield_name
 
+        ## Position hfield centered at origin
+        half_width = (vertices[:, 0].max() - vertices[:, 0].min()) / 2.0
+        half_height = (vertices[:, 1].max() - vertices[:, 1].min()) / 2.0
         mjcf_model.asset.add(
             "hfield",
             name=hfield_name,
             nrow=height_mat.shape[0],
             ncol=height_mat.shape[1],
             size=[
-                height_mat.shape[0] * tg.horizontal_scale / 2,
-                height_mat.shape[1] * tg.horizontal_scale / 2,
+                half_height,
+                half_width,
                 z_span,
                 0.001,
             ],

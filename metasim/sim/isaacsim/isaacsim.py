@@ -855,10 +855,12 @@ class IsaacsimHandler(BaseSimHandler):
         self._ground_mesh_triangles = stage_triangles.astype(np.int32)
         self._height_mat = stage_height_mat
 
-        # Shift mesh so that (0,0) aligns with the world origin by subtracting the configured margin.
+        # Center the terrain at the origin
         terrain_vertices = self._ground_mesh_vertices.copy()
-        terrain_vertices[:, 0] -= tg.margin
-        terrain_vertices[:, 1] -= tg.margin
+        half_width = (terrain_vertices[:, 0].max() - terrain_vertices[:, 0].min()) / 2.0
+        half_height = (terrain_vertices[:, 1].max() - terrain_vertices[:, 1].min()) / 2.0
+        terrain_vertices[:, 0] -= half_width
+        terrain_vertices[:, 1] -= half_height
 
         from pxr import Gf, PhysxSchema, UsdGeom, UsdPhysics, UsdShade
 
@@ -916,6 +918,7 @@ class IsaacsimHandler(BaseSimHandler):
         mat_binding.Bind(usd_material, materialPurpose="physics")
 
         self._ground_mesh_vertices = terrain_vertices
+        self._terrain_margin = tg.margin
 
         log.info(
             "Generated IsaacSim terrain mesh with %d vertices and %d triangles.",

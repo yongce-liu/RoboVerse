@@ -130,13 +130,14 @@ class WalkG1Dof29EnvCfg(BaseEnvCfg):
     }
     callbacks_reset = {
         "random_root_state": (
-            reset_funcs.random_root_state,
+            reset_funcs.random_root_state_terrain_aware,
             {
                 "pose_range": [
-                    [-0.5, -0.5, 0.0, 0, 0, -3.14],  # x,y,z roll,pitch,yaw
-                    [0.5, 0.5, 0.0, 0, 0, 3.14],
+                    [-0.5, -0.5, 0.0, 0, 0, -3.14],  # x, y, z_offset, roll, pitch, yaw
+                    [0.5, 0.5, 0.05, 0, 0, 3.14],     # z_offset can vary slightly
                 ],
                 "velocity_range": [[0] * 6, [0] * 6],
+                # base_height_offset is None by default, uses robot's default z position (0.8m from cfg_base.py)
             },
         ),
         "reset_joints_by_scale": (
