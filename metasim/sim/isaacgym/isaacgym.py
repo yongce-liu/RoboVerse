@@ -1174,13 +1174,16 @@ class IsaacgymHandler(BaseSimHandler):
     def _add_ground(self):
         if self.scenario.ground is not None:
             tg = TerrainGenerator(self.scenario.ground)
-            vertices, triangles = tg.generate_terrain(self.scenario.ground, type="trimesh")
+            vertices, triangles, height_mat = tg.generate_terrain(self.scenario.ground, type="both")
             tm_params = gymapi.TriangleMeshParams()
             tm_params.nb_vertices = vertices.shape[0]
             tm_params.nb_triangles = triangles.shape[0]
 
-            tm_params.transform.p.x = -tg.margin
-            tm_params.transform.p.y = -tg.margin
+            # Center the terrain at the origin
+            half_width = (vertices[:, 0].max() - vertices[:, 0].min()) / 2.0
+            half_height = (vertices[:, 1].max() - vertices[:, 1].min()) / 2.0
+            tm_params.transform.p.x = -half_width
+            tm_params.transform.p.y = -half_height
             tm_params.transform.p.z = 0.0
             tm_params.static_friction = getattr(self.scenario.ground, "static_friction", 1.0)
             tm_params.dynamic_friction = getattr(self.scenario.ground, "dynamic_friction", 1.0)
@@ -1190,6 +1193,7 @@ class IsaacgymHandler(BaseSimHandler):
             )  # add terrain to sim
             self._ground_mesh_vertices = vertices
             self._ground_mesh_triangles = triangles
+            self._height_mat = height_mat
         else:
             plane_params = gymapi.PlaneParams()
             plane_params.normal = gymapi.Vec3(0, 0, 1)
