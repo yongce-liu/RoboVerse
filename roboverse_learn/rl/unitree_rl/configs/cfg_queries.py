@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import torch
 import numpy as np
 import warnings
@@ -7,6 +8,14 @@ from collections import deque
 
 from metasim.sim.base import BaseSimHandler, BaseQueryType
 from metasim.utils.math import quat_apply, convert_quat
+from metasim.scenario.objects import (
+    BaseObjCfg,
+    PrimitiveCubeCfg,
+    PrimitiveSphereCfg,
+    PrimitiveCylinderCfg,
+    RigidObjCfg,
+    ArticulationObjCfg,
+)
 
 try:
     import isaacgym  # noqa: F401
@@ -18,14 +27,20 @@ try:
 except ImportError:
     pass
 
+
 class LidarPointCloud(BaseQueryType):
     """Optional query that produces a LiDAR point cloud using LidarSensor + Warp.
 
     Notes
-    - Supports IsaacGym and MuJoCo via common state interface; raycasting is done against a generated terrain mesh.
-    - Robot self-geometry is not included in the mesh to keep this query generic and lightweight.
-    - Requires packages: LidarSensor, warp, trimesh. If unavailable, returns None payload when enabled.
-    - Quaternions: handler states use (w,x,y,z). LidarSensor expects (x,y,z,w). Conversion is handled internally.
+    - Supports IsaacGym and MuJoCo via common state interface; raycasting is done
+      against a generated mesh that includes the terrain and static scenario
+      objects (primitives) replicated across environments.
+    - Robot self-geometry is not included in the mesh to keep this query generic
+      and lightweight.
+    - Requires packages: LidarSensor, warp, trimesh. If unavailable, returns
+      None payload when enabled.
+    - Quaternions: handler states use (w,x,y,z). LidarSensor expects (x,y,z,w).
+      Conversion is handled internally.
     """
 
     def __init__(
@@ -49,7 +64,7 @@ class LidarPointCloud(BaseQueryType):
         self.handler = handler
         self.num_envs = handler.scenario.num_envs
         self.robots = handler.robots
-        self.device = str(handler.device) # warp only accepts str device
+        self.device = str(handler.device)  # warp only accepts str device
         self._init_backend()
 
     def _init_backend(self):
@@ -59,6 +74,17 @@ class LidarPointCloud(BaseQueryType):
             self._init_backend_isaacsim()
 
     def _init_backend_mujoco_isaacgym(self):
+        """Initialize Warp-based LiDAR backend for IsaacGym / MuJoCo.
+
+        Builds a static triangle mesh that includes:
+        - Ground/terrain (from handler._ground_mesh_vertices/_ground_mesh_triangles)
+        - Scenario objects:
+            * Primitive cubes / spheres / cylinders.
+            * RigidObjCfg / ArticulationObjCfg approximated from their mesh files
+              when available.
+          Objects are replicated across envs for IsaacGym, or instantiated once
+          for MuJoCo.
+        """
         import warp as wp
         import trimesh
         from LidarSensor.lidar_sensor import LidarSensor
@@ -69,11 +95,132 @@ class LidarPointCloud(BaseQueryType):
         self.LidarSensor = LidarSensor
         self.LidarConfig = LidarConfig
         self.wp.init()
-        vertices = self.handler._ground_mesh_vertices
-        triangles = self.handler._ground_mesh_triangles
 
-        import torch
+        # ------------------------------------------------------------------ #
+        # Build combined static scene mesh: terrain + scenario primitives
+        # ------------------------------------------------------------------ #
+        scene_vertices = getattr(self.handler, "_ground_mesh_vertices", None)
+        scene_triangles = getattr(self.handler, "_ground_mesh_triangles", None)
+        if scene_vertices is None or scene_triangles is None:
+            warnings.warn(
+                "LidarPointCloud: ground mesh not available on handler; "
+                "LiDAR will not include terrain/objects."
+            )
+            self._backend_ready = False
+            return
 
+        base_mesh = self.trimesh.Trimesh(vertices=scene_vertices, faces=scene_triangles, process=False)
+        meshes = [base_mesh]
+
+        # Helper to convert quaternion (w,x,y,z) -> 3x3 rotation matrix
+        def _quat_wxyz_to_matrix(quat_wxyz: tuple[float, float, float, float]) -> np.ndarray:
+            w, x, y, z = quat_wxyz
+            ww, xx, yy, zz = w * w, x * x, y * y, z * z
+            xy, xz, yz = x * y, x * z, y * z
+            wx, wy, wz = w * x, w * y, w * z
+            return np.array(
+                [
+                    [ww + xx - yy - zz, 2 * (xy - wz), 2 * (xz + wy)],
+                    [2 * (xy + wz), ww - xx + yy - zz, 2 * (yz - wx)],
+                    [2 * (xz - wy), 2 * (yz + wx), ww - xx - yy + zz],
+                ],
+                dtype=np.float32,
+            )
+
+        # Helper: build a unit mesh in local object frame for supported objects
+        def _object_to_trimesh(obj: BaseObjCfg):
+            try:
+                # Primitive objects
+                if isinstance(obj, PrimitiveCubeCfg):
+                    size = np.asarray(obj.size, dtype=np.float32)
+                    return self.trimesh.creation.box(extents=size)
+                if isinstance(obj, PrimitiveSphereCfg):
+                    return self.trimesh.creation.icosphere(radius=float(obj.radius), subdivisions=2)
+                if isinstance(obj, PrimitiveCylinderCfg):
+                    return self.trimesh.creation.cylinder(radius=float(obj.radius), height=float(obj.height))
+
+                # File-based rigid / articulated objects: approximate via mesh file when possible.
+                if isinstance(obj, (RigidObjCfg, ArticulationObjCfg)):
+                    candidates = []
+                    for attr in ("mesh_path", "usd_path", "urdf_path", "mjcf_path", "mjx_mjcf_path"):
+                        path = getattr(obj, attr, None)
+                        if path:
+                            candidates.append(path)
+                    mesh_path = None
+                    for path in candidates:
+                        ext = os.path.splitext(path)[1].lower()
+                        if ext in (".stl", ".obj", ".ply", ".off", ".gltf", ".glb"):
+                            mesh_path = path
+                            break
+                    if mesh_path is None:
+                        return None
+                    try:
+                        loaded = self.trimesh.load(mesh_path)
+                        # Handle both single meshes and scene graphs
+                        if isinstance(loaded, self.trimesh.Scene):
+                            # Concatenate all meshes in the scene
+                            meshes_in_scene = list(loaded.geometry.values())
+                            if meshes_in_scene:
+                                return self.trimesh.util.concatenate(meshes_in_scene)
+                            return None
+                        return loaded
+                    except Exception as e:
+                        warnings.warn(
+                            f"LidarPointCloud: failed to load mesh for object '{obj.name}' "
+                            f"from '{mesh_path}': {e}"
+                        )
+                        return None
+            except Exception as e:  # pragma: no cover - defensive
+                warnings.warn(f"LidarPointCloud: failed to build mesh for object '{obj.name}': {e}")
+                return None
+            return None
+
+        # Environment origins (IsaacGym has a grid of envs; MuJoCo uses a single env)
+        if self.simulator == "isaacgym" and hasattr(self.handler, "_env_origin"):
+            env_origins = [np.asarray(o, dtype=np.float32) for o in self.handler._env_origin]
+        else:
+            env_origins = [np.zeros(3, dtype=np.float32)]
+
+        # Add scenario objects replicated across envs (IsaacGym) or once (MuJoCo)
+        for obj in getattr(self.handler, "objects", []):
+            obj_mesh_local = _object_to_trimesh(obj)
+            if obj_mesh_local is None:
+                continue
+
+            # Default pose in local env frame
+            default_pos = np.asarray(getattr(obj, "default_position", (0.0, 0.0, 0.0)), dtype=np.float32)
+            default_quat = getattr(obj, "default_orientation", (1.0, 0.0, 0.0, 0.0))
+            # Validate quaternion format
+            if not (isinstance(default_quat, (tuple, list, np.ndarray)) and len(default_quat) == 4):
+                warnings.warn(f"Invalid orientation for object '{obj.name}', using identity quaternion")
+                default_quat = (1.0, 0.0, 0.0, 0.0)
+            rot = _quat_wxyz_to_matrix(default_quat)
+
+            base_T = np.eye(4, dtype=np.float32)
+            # Apply per-object scale for file-based objects if provided
+            if isinstance(obj, (RigidObjCfg, ArticulationObjCfg)):
+                scale = getattr(obj, "scale", (1.0, 1.0, 1.0))
+                if isinstance(scale, (float, int)):
+                    scale = (scale, scale, scale)
+                scale = np.asarray(scale, dtype=np.float32)
+                base_T[:3, :3] = rot @ np.diag(scale)
+            else:
+                base_T[:3, :3] = rot
+
+            for origin in env_origins:
+                T = base_T.copy()
+                T[:3, 3] = default_pos + origin
+                obj_mesh = obj_mesh_local.copy()
+                obj_mesh.apply_transform(T)
+                meshes.append(obj_mesh)
+
+        combined_mesh = self.trimesh.util.concatenate(meshes) if len(meshes) > 1 else meshes[0]
+        vertices = combined_mesh.vertices.astype(np.float32)
+        triangles = combined_mesh.faces.astype(np.int32)
+
+        # ------------------------------------------------------------------ #
+        # Warp mesh + sensor buffers
+        # ------------------------------------------------------------------ #
         vertex_tensor = torch.tensor(vertices, device=self.device, dtype=torch.float32)
         faces_wp_int32_array = self.wp.from_numpy(triangles.reshape(-1), dtype=self.wp.int32, device=self.device)
         vertex_vec3_array = self.wp.from_torch(vertex_tensor, dtype=self.wp.vec3)
@@ -114,6 +261,10 @@ class LidarPointCloud(BaseQueryType):
         This attaches a LiDAR sensor (Livox/MID-360 pattern by default) to the specified
         robot link across all environments using the env-regex prim path. Point cloud is
         requested in the sensor (local) frame to allow consistent downstream transforms.
+        The raycaster is configured to hit:
+        - Ground mesh.
+        - Static scene geometry under /World/static.
+        - Robot bodies and all scenario objects under /World/envs/env_*/<name>.
         """
         # Isaac Lab LiDAR imports (as in the user-provided code snippet)
         from isaaclab.sensors import LidarSensor, LidarSensorCfg
@@ -177,6 +328,15 @@ class LidarPointCloud(BaseQueryType):
         # Attach LiDAR to the resolved link across envs via env-regex path
         prim_path = f"/World/envs/env_.*/{robot_name}/{self._resolved_link_name}"
 
+        # Collect dynamic mesh prim paths for robot + scenario objects
+        dynamic_env_mesh_paths = [
+            f"/World/envs/env_.*/{robot_name}/.*",
+            "/World/envs/env_.*/.*/geometry/mesh",
+        ]
+        for obj in getattr(self.handler, "objects", []):
+            if isinstance(obj, BaseObjCfg):
+                dynamic_env_mesh_paths.append(f"/World/envs/env_.*/{obj.name}/.*")
+
         # Configure a Livox/MID-360-like sensor, aligned in world with point cloud in local frame
         # Keep params conservative for performance; adjust as needed by caller
         # Fix: Rotate -90° around X to point sensor forward (was pointing up, causing inf values)
@@ -188,8 +348,8 @@ class LidarPointCloud(BaseQueryType):
             ray_alignment="base",  # rays rotate with robot
             pattern_cfg=LivoxPatternCfg(sensor_type=self.sensor_type, samples=24000),
             mesh_prim_paths=["/World/ground", "/World/static"],
-            # optionally include dynamic scene meshes: robot and default scene under each env
-            dynamic_env_mesh_prim_paths=[f"/World/envs/env_.*/{robot_name}/.*", "/World/envs/env_.*/.*/geometry/mesh"],
+            # include dynamic scene meshes: robot + per-env objects
+            dynamic_env_mesh_prim_paths=dynamic_env_mesh_paths,
             max_distance=20.0,
             min_range=0.2,
             return_pointcloud=True,            # request point cloud output
@@ -444,7 +604,7 @@ class LidarPointCloud(BaseQueryType):
         }
 
     def __call__(self):
-        if not self.enabled:
+        if not self.enabled or not getattr(self, "_backend_ready", False):
             return {self.robots[0].name: None}
 
         robot_name = self.robots[0].name
