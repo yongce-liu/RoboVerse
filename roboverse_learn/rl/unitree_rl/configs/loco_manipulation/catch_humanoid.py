@@ -14,7 +14,8 @@ from roboverse_learn.rl.unitree_rl.configs.algorithm import (
     RslRlPpoActorCriticCfg,
     RslRlPpoAlgorithmCfg,
 )
-from roboverse_learn.rl.unitree_rl.configs.cfg_queries import ContactForces
+from metasim.queries import ContactForces
+from roboverse_learn.rl.unitree_rl.configs.cfg_queries import LidarPointCloud
 import roboverse_learn.rl.unitree_rl.helper.curriculum_utils as curr_funs
 from roboverse_learn.rl.unitree_rl.configs.cfg_randomizers import (
     MaterialRandomizer,
@@ -120,7 +121,7 @@ class CatchHumanoidTaskCfg(BaseEnvCfg):
     )
 
 
-    callbacks_query = {"contact_forces": ContactForces(history_length=3)}
+    callbacks_query = {"contact_forces": ContactForces(history_length=3), "lidar_point_cloud": LidarPointCloud(enabled=True)}
     callbacks_setup = {
         "material_randomizer": MaterialRandomizer(
             obj_name="g1_dof29",
@@ -152,7 +153,7 @@ class CatchHumanoidTaskCfg(BaseEnvCfg):
             {"position_range": (1.0, 1.0), "velocity_range": (-1.0, 1.0)},
         ),
     }
-    callbacks_step = {
+    callbacks_post_step = {
         "push_robot": (
             step_funcs.push_by_setting_velocity,
             {
