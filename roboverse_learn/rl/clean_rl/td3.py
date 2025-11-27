@@ -3,11 +3,12 @@
 # This file is based on CleanRL's TD3 implementation and has been adapted for RoboVerse.
 # Original CleanRL code is licensed under MIT License.
 
+import csv
 import os
 import random
 import time
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 import gymnasium as gym
 import numpy as np
@@ -112,6 +113,25 @@ def make_roboverse_env(args):
         device=args.device,
     )
     return env
+
+
+def save_metrics_history(save_path: str, metrics_history: list[dict[str, Any]]) -> None:
+    """Write aggregated metrics to a CSV file for readability."""
+    if not metrics_history:
+        return
+
+    fieldnames: list[str] = []
+    for entry in metrics_history:
+        for key in entry.keys():
+            if key not in fieldnames:
+                fieldnames.append(key)
+
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    with open(save_path, "w", newline="", encoding="utf-8") as csv_file:
+        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(metrics_history)
+    print(f"Saved metrics history to {save_path}")
 
 
 # ALGO LOGIC: initialize agent here:
@@ -227,6 +247,11 @@ if __name__ == "__main__":
     # Initialize episode tracker
     episode_tracker = EpisodeTracker(args.num_envs, device)
 
+    # Initialize metrics tracking
+    model_dir = f"runs/{run_name}"
+    metrics_path = os.path.join(model_dir, "metrics.csv")
+    metrics_history: list[dict[str, Any]] = []
+
     while global_step < args.total_timesteps:
         # ALGO LOGIC: put action logic here
         if global_step < args.learning_starts:
@@ -302,17 +327,35 @@ if __name__ == "__main__":
 
                 # Log episode statistics
                 avg_return, avg_length = episode_tracker.get_stats()
+                sps = int(global_step / (time.time() - start_time))
                 if episode_tracker.get_episode_count() > 0:
                     writer.add_scalar("charts/avg_episodic_return", avg_return, global_step)
                     writer.add_scalar("charts/avg_episodic_length", avg_length, global_step)
-                    print(f"SPS: {int(global_step / (time.time() - start_time))}, avg_return: {avg_return:.2f}, avg_length: {avg_length:.1f}, timesteps: {global_step}")
+                    print(f"SPS: {sps}, avg_return: {avg_return:.2f}, avg_length: {avg_length:.1f}, timesteps: {global_step}")
                 else:
-                    print(f"SPS: {int(global_step / (time.time() - start_time))}, timesteps: {global_step}")
-                writer.add_scalar(
-                    "charts/SPS",
-                    int(global_step / (time.time() - start_time)),
-                    global_step,
-                )
+                    print(f"SPS: {sps}, timesteps: {global_step}")
+                writer.add_scalar("charts/SPS", sps, global_step)
+
+                # Accumulate metrics for CSV logging
+                metrics_entry = {
+                    "global_step": global_step,
+                    "speed": float(sps),
+                    "frame": int(global_step),
+                    "qf1_values": float(qf1_a_values.mean().item()),
+                    "qf2_values": float(qf2_a_values.mean().item()),
+                    "qf1_loss": float(qf1_loss.item()),
+                    "qf2_loss": float(qf2_loss.item()),
+                    "qf_loss": float(qf_loss.item() / 2.0),
+                    "actor_loss": float(actor_loss.item()),
+                }
+                if episode_tracker.get_episode_count() > 0:
+                    metrics_entry["avg_episodic_return"] = float(avg_return)
+                    metrics_entry["avg_episodic_length"] = float(avg_length)
+                    metrics_entry["episode_count"] = int(episode_tracker.get_episode_count())
+                metrics_history.append(metrics_entry)
+
+    # Save metrics history
+    save_metrics_history(metrics_path, metrics_history)
 
     if args.save_model:
         model_path = f"runs/{run_name}/{args.exp_name}.cleanrl_model"
