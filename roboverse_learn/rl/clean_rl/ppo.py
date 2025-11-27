@@ -10,6 +10,12 @@ import time
 from dataclasses import dataclass
 from typing import Any, Literal
 
+# RoboVerse imports
+try:
+    import isaacgym  # noqa: F401
+except ImportError:
+    pass
+    
 import gymnasium as gym
 import numpy as np
 import rootutils
@@ -19,12 +25,6 @@ import torch.optim as optim
 import tyro
 from torch.distributions.normal import Normal
 from torch.utils.tensorboard import SummaryWriter
-
-# RoboVerse imports
-try:
-    import isaacgym  # noqa: F401
-except ImportError:
-    pass
 
 rootutils.setup_root(__file__, pythonpath=True)
 from gymnasium import make_vec
@@ -63,7 +63,7 @@ class Args:
     """the RoboVerse task name"""
     robot: str = "h1"
     """the robot type"""
-    sim: Literal["isaaclab", "isaacgym", "mujoco", "genesis", "mjx"] = "mjx"
+    sim: Literal["isaacsim", "isaacgym", "mujoco", "genesis", "mjx"] = "mjx"
     """the simulator backend"""
     headless: bool = False
     """whether to run in headless mode"""
