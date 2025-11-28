@@ -422,6 +422,12 @@ def main() -> None:
             qf2_loss = -torch.sum(qf2_next_target_dist * F.log_softmax(qf2, dim=1), dim=1).mean()
             qf_loss = qf1_loss + qf2_loss
 
+            # Compute TD error statistics from distributional critic
+            qf1_value = qnet.get_value(F.softmax(qf1, dim=1))
+            td_error = qf1_next_target_value - qf1_value
+            td_error_mean = td_error.mean()
+            td_error_std = td_error.std()
+
         q_optimizer.zero_grad(set_to_none=True)
         scaler.scale(qf_loss).backward()
         scaler.unscale_(q_optimizer)
@@ -438,6 +444,8 @@ def main() -> None:
         logs_dict["qf_loss"] = qf_loss.detach()
         logs_dict["qf_max"] = qf1_next_target_value.max().detach()
         logs_dict["qf_min"] = qf1_next_target_value.min().detach()
+        logs_dict["td_error_mean"] = td_error_mean.detach()
+        logs_dict["td_error_std"] = td_error_std.detach()
         return logs_dict
 
     def update_pol(data, logs_dict):
@@ -488,6 +496,7 @@ def main() -> None:
     else:
         global_step = 0
 
+    update_step = 0  # Track number of gradient updates
     dones = None
     pbar = tqdm.tqdm(total=cfg("total_timesteps"), initial=global_step)
     start_time = None
@@ -539,6 +548,7 @@ def main() -> None:
                 data["observations"] = normalize_obs(data["observations"])
                 data["next"]["observations"] = normalize_obs(data["next"]["observations"])
                 logs_dict = update_main(data, logs_dict)
+                update_step += 1
                 if cfg("num_updates") > 1:
                     if i % cfg("policy_frequency") == 1:
                         logs_dict = update_pol(data, logs_dict)
@@ -554,11 +564,20 @@ def main() -> None:
 
             if start_time is not None:
                 speed = (global_step - measure_burnin) / (time.time() - start_time)
+                wall_clock_time = time.time() - start_time
                 pbar.set_description(f"{speed: 4.4f} sps, " + desc)
                 with torch.no_grad():
-                    # Get episode statistics
-                    avg_return, avg_length = episode_tracker.get_stats()
+                    # Get enhanced episode statistics
+                    episode_stats = episode_tracker.get_detailed_stats()
                     episode_count = episode_tracker.get_episode_count()
+
+                    # Compute action statistics
+                    current_actions = actor(normalize_obs(obs))
+                    action_mean = current_actions.mean(dim=0).cpu().numpy()
+                    action_std = current_actions.std(dim=0).cpu().numpy()
+
+                    # Compute buffer usage
+                    buffer_usage = min(rb.ptr, rb.buffer_size) / rb.buffer_size
 
                     logs = {
                         "actor_loss": logs_dict["actor_loss"].mean().item(),
@@ -567,16 +586,28 @@ def main() -> None:
                         "qf_min": logs_dict["qf_min"].mean().item(),
                         "actor_grad_norm": logs_dict["actor_grad_norm"].mean().item(),
                         "critic_grad_norm": logs_dict["critic_grad_norm"].mean().item(),
+                        "td_error_mean": logs_dict["td_error_mean"].mean().item(),
+                        "td_error_std": logs_dict["td_error_std"].mean().item(),
                         "buffer_rewards": logs_dict["buffer_rewards"].mean().item(),
                         "env_rewards": rewards.mean().item(),
+                        "action_mean": float(action_mean.mean()),
+                        "action_std": float(action_std.mean()),
+                        "reward_mean": float(rewards.mean().item()),
+                        "reward_std": float(rewards.std().item()),
+                        "buffer_usage": float(buffer_usage),
+                        "updates": int(update_step),
                     }
 
-                    # Add episode statistics to logs
+                    # Add enhanced episode statistics to logs
                     if episode_count > 0:
-                        logs["avg_episodic_return"] = float(avg_return)
-                        logs["avg_episodic_length"] = float(avg_length)
-                        logs["episode_count"] = int(episode_count)
-                        log.info(f"avg_return={avg_return:.4f}, avg_length={avg_length:.4f}")
+                        logs.update({
+                            "episodic_return_mean": float(episode_stats['return_mean']),
+                            "episodic_return_std": float(episode_stats['return_std']),
+                            "episodic_length_mean": float(episode_stats['length_mean']),
+                            "episodic_length_std": float(episode_stats['length_std']),
+                            "episode_count": int(episode_count),
+                        })
+                        log.info(f"return={episode_stats['return_mean']:.4f}±{episode_stats['return_std']:.4f}, length={episode_stats['length_mean']:.4f}")
 
                     if cfg("eval_interval") > 0 and global_step % cfg("eval_interval") == 0:
                         log.info(f"Evaluating at global step {global_step}")
@@ -584,11 +615,12 @@ def main() -> None:
                         obs, info = envs.reset()
                         logs["eval_avg_return"] = float(eval_avg_return)
                         logs["eval_avg_length"] = float(eval_avg_length)
-                        log.info(f"avg_return={eval_avg_return:.4f}, avg_length={eval_avg_length:.4f}")
+                        log.info(f"eval_return={eval_avg_return:.4f}, eval_length={eval_avg_length:.4f}")
 
                 wandb_payload = {
                     "speed": float(speed),
-                    "frame": int(global_step * cfg("num_envs")),
+                    "frame": int(global_step),
+                    "wall_clock_time": float(wall_clock_time),
                     **logs,
                 }
                 if cfg("use_wandb"):
@@ -613,8 +645,8 @@ def main() -> None:
                 )
                 save_metrics_history(metrics_path, metrics_history)
 
-        global_step += 1
-        pbar.update(1)
+        global_step += cfg("num_envs")
+        pbar.update(cfg("num_envs"))
         # Close environment and wandb
     save_metrics_history(metrics_path, metrics_history)
     envs.close()

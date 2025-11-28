@@ -16,7 +16,7 @@ try:
     import isaacgym  # noqa: F401
 except ImportError:
     pass
-    
+
 import gymnasium as gym
 import numpy as np
 import rootutils
@@ -26,6 +26,7 @@ import torch.optim as optim
 import tyro
 from torch.distributions.normal import Normal
 from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
 
 rootutils.setup_root(__file__, pythonpath=True)
 from gymnasium import make_vec
@@ -72,13 +73,13 @@ class Args:
     """device to run on"""
 
     # Algorithm specific arguments
-    total_timesteps: int = 10000000
+    total_timesteps: int = 1000000
     """total timesteps of the experiments"""
     learning_rate: float = 3e-4
     """the learning rate of the optimizer"""
-    num_envs: int = 2048
+    num_envs: int = 1024
     """the number of parallel game environments"""
-    num_steps: int = 64
+    num_steps: int = 1
     """the number of steps to run in each environment per policy rollout"""
     anneal_lr: bool = True
     """Toggle learning rate annealing for policy and value networks"""
@@ -194,7 +195,7 @@ if __name__ == "__main__":
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     args.num_iterations = args.total_timesteps // args.batch_size
-    run_name = f"{args.exp_name}__{args.seed}__{int(time.time())}"
+    model_dir = os.path.join("models", args.exp_name)
     if args.track:
         import wandb
 
@@ -203,11 +204,11 @@ if __name__ == "__main__":
             entity=args.wandb_entity,
             sync_tensorboard=True,
             config=vars(args),
-            name=run_name,
+            name=args.exp_name,
             monitor_gym=True,
             save_code=True,
         )
-    writer = SummaryWriter(f"runs/{run_name}")
+    writer = SummaryWriter(model_dir)
     writer.add_text(
         "hyperparameters",
         "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
@@ -238,6 +239,7 @@ if __name__ == "__main__":
 
     # TRY NOT TO MODIFY: start the game
     global_step = 0
+    update_step = 0  # Track number of gradient updates
     next_obs, _ = envs.reset(seed=args.seed)
     next_obs = next_obs.to(device)
     next_done = torch.zeros(args.num_envs, dtype=torch.bool, device=device)
@@ -246,11 +248,11 @@ if __name__ == "__main__":
     episode_tracker = EpisodeTracker(args.num_envs, device)
 
     # Initialize metrics tracking
-    model_dir = f"runs/{run_name}"
     metrics_path = os.path.join(model_dir, "metrics.csv")
     metrics_history: list[dict[str, Any]] = []
 
     start_time = time.time()
+    pbar = tqdm(total=args.num_iterations, desc="PPO Training")
     for iteration in range(1, args.num_iterations + 1):
         # Annealing the rate if instructed to do so.
         if args.anneal_lr:
@@ -306,6 +308,7 @@ if __name__ == "__main__":
         # Optimizing the policy and value network
         b_inds = np.arange(args.batch_size)
         clipfracs = []
+        grad_norms = []
         for epoch in range(args.update_epochs):
             np.random.shuffle(b_inds)
             for start in range(0, args.batch_size, args.minibatch_size):
@@ -351,8 +354,10 @@ if __name__ == "__main__":
 
                 optimizer.zero_grad()
                 loss.backward()
-                nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
+                grad_norm = nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
+                grad_norms.append(grad_norm.item())
                 optimizer.step()
+                update_step += 1
 
             if args.target_kl is not None and approx_kl > args.target_kl:
                 break
@@ -360,6 +365,20 @@ if __name__ == "__main__":
         y_pred, y_true = b_values.cpu().numpy(), b_returns.cpu().numpy()
         var_y = np.var(y_true)
         explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
+
+        # Compute TD error statistics
+        td_error = b_returns.cpu().numpy() - b_values.cpu().numpy()
+        td_error_mean = np.mean(td_error)
+        td_error_std = np.std(td_error)
+        td_error_abs_mean = np.mean(np.abs(td_error))
+
+        # Compute action statistics
+        action_mean = actions.mean(dim=(0, 1)).cpu().numpy()
+        action_std = actions.std(dim=(0, 1)).cpu().numpy()
+
+        # Compute reward statistics (per-step rewards)
+        reward_mean = rewards.mean().cpu().item()
+        reward_std = rewards.std().cpu().item()
 
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         writer.add_scalar("charts/learning_rate", optimizer.param_groups[0]["lr"], global_step)
@@ -370,24 +389,38 @@ if __name__ == "__main__":
         writer.add_scalar("losses/approx_kl", approx_kl.item(), global_step)
         writer.add_scalar("losses/clipfrac", np.mean(clipfracs), global_step)
         writer.add_scalar("losses/explained_variance", explained_var, global_step)
+        writer.add_scalar("losses/grad_norm", np.mean(grad_norms), global_step)
+        writer.add_scalar("losses/td_error_mean", td_error_mean, global_step)
+        writer.add_scalar("losses/td_error_std", td_error_std, global_step)
+        writer.add_scalar("actions/action_mean", np.mean(action_mean), global_step)
+        writer.add_scalar("actions/action_std", np.mean(action_std), global_step)
+        writer.add_scalar("rewards/reward_mean", reward_mean, global_step)
+        writer.add_scalar("rewards/reward_std", reward_std, global_step)
 
         # Log episode statistics
-        avg_return, avg_length = episode_tracker.get_stats()
+        episode_stats = episode_tracker.get_detailed_stats()
         sps = int(global_step / (time.time() - start_time))
+        wall_clock_time = time.time() - start_time
         if episode_tracker.get_episode_count() > 0:
-            writer.add_scalar("charts/avg_episodic_return", avg_return, global_step)
-            writer.add_scalar("charts/avg_episodic_length", avg_length, global_step)
-            print(f"SPS: {sps}, avg_return: {avg_return:.2f}, avg_length: {avg_length:.1f}, timesteps: {global_step}")
+            writer.add_scalar("charts/episodic_return_mean", episode_stats['return_mean'], global_step)
+            writer.add_scalar("charts/episodic_return_std", episode_stats['return_std'], global_step)
+            writer.add_scalar("charts/episodic_length_mean", episode_stats['length_mean'], global_step)
+            writer.add_scalar("charts/episodic_length_std", episode_stats['length_std'], global_step)
+            print(f"SPS: {sps}, return: {episode_stats['return_mean']:.2f}±{episode_stats['return_std']:.2f}, length: {episode_stats['length_mean']:.1f}, timesteps: {global_step}")
         else:
             print(f"SPS: {sps}, timesteps: {global_step}")
         writer.add_scalar("charts/SPS", sps, global_step)
+        writer.add_scalar("charts/updates", update_step, global_step)
+        writer.add_scalar("charts/wall_clock_time", wall_clock_time, global_step)
 
         # Accumulate metrics for CSV logging
         metrics_entry = {
             "global_step": global_step,
             "iteration": iteration,
+            "updates": update_step,
             "speed": float(sps),
             "frame": int(global_step),
+            "wall_clock_time": float(wall_clock_time),
             "learning_rate": float(optimizer.param_groups[0]["lr"]),
             "value_loss": float(v_loss.item()),
             "policy_loss": float(pg_loss.item()),
@@ -396,18 +429,31 @@ if __name__ == "__main__":
             "approx_kl": float(approx_kl.item()),
             "clipfrac": float(np.mean(clipfracs)),
             "explained_variance": float(explained_var),
+            "grad_norm": float(np.mean(grad_norms)),
+            "td_error_mean": float(td_error_mean),
+            "td_error_std": float(td_error_std),
+            "action_mean": float(np.mean(action_mean)),
+            "action_std": float(np.mean(action_std)),
+            "reward_mean": float(reward_mean),
+            "reward_std": float(reward_std),
         }
         if episode_tracker.get_episode_count() > 0:
-            metrics_entry["avg_episodic_return"] = float(avg_return)
-            metrics_entry["avg_episodic_length"] = float(avg_length)
-            metrics_entry["episode_count"] = int(episode_tracker.get_episode_count())
+            metrics_entry.update({
+                "episodic_return_mean": float(episode_stats['return_mean']),
+                "episodic_return_std": float(episode_stats['return_std']),
+                "episodic_length_mean": float(episode_stats['length_mean']),
+                "episodic_length_std": float(episode_stats['length_std']),
+                "episode_count": int(episode_tracker.get_episode_count()),
+            })
         metrics_history.append(metrics_entry)
+        pbar.update(1)
 
+    pbar.close()
     # Save metrics history
     save_metrics_history(metrics_path, metrics_history)
 
     if args.save_model:
-        model_path = f"runs/{run_name}/{args.exp_name}.cleanrl_model"
+        model_path = os.path.join(model_dir, f"{args.exp_name}.cleanrl_model")
         torch.save(agent.state_dict(), model_path)
         print(f"model saved to {model_path}")
 

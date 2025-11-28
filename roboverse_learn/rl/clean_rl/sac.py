@@ -26,6 +26,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 import tyro
 from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
 
 rootutils.setup_root(__file__, pythonpath=True)
 from gymnasium import make_vec
@@ -69,7 +70,7 @@ class Args:
     """the environment id of the task (for non-RoboVerse environments)"""
     total_timesteps: int = 1000000
     """total timesteps of the experiments"""
-    num_envs: int = 128
+    num_envs: int = 1024
     """the number of parallel game environments"""
     buffer_size: int = int(1e6)
     """the replay memory buffer size"""
@@ -203,7 +204,7 @@ class Actor(nn.Module):
 if __name__ == "__main__":
 
     args = tyro.cli(Args)
-    run_name = f"{args.exp_name}__{args.seed}__{int(time.time())}"
+    model_dir = os.path.join("models", args.exp_name)
     if args.track:
         import wandb
 
@@ -212,11 +213,11 @@ if __name__ == "__main__":
             entity=args.wandb_entity,
             sync_tensorboard=True,
             config=vars(args),
-            name=run_name,
+            name=args.exp_name,
             monitor_gym=True,
             save_code=True,
         )
-    writer = SummaryWriter(f"runs/{run_name}")
+    writer = SummaryWriter(model_dir)
     writer.add_text(
         "hyperparameters",
         "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
@@ -270,15 +271,16 @@ if __name__ == "__main__":
     obs, _ = envs.reset(seed=args.seed)
     obs = obs.to(device)
     global_step = 0
+    update_step = 0  # Track number of gradient updates
 
     # Initialize episode tracker
     episode_tracker = EpisodeTracker(args.num_envs, device)
 
     # Initialize metrics tracking
-    model_dir = f"runs/{run_name}"
     metrics_path = os.path.join(model_dir, "metrics.csv")
     metrics_history: list[dict[str, Any]] = []
 
+    pbar = tqdm(total=args.total_timesteps, desc="SAC Training")
     while global_step < args.total_timesteps:
         # ALGO LOGIC: put action logic here
         if global_step < args.learning_starts:
@@ -301,7 +303,9 @@ if __name__ == "__main__":
 
         # TRY NOT TO MODIFY: CRUCIAL step easy to overlook
         obs = next_obs
+        prev_global_step = global_step
         global_step += args.num_envs
+        pbar.update(min(global_step, args.total_timesteps) - prev_global_step)
 
         # ALGO LOGIC: training.
         if global_step > args.learning_starts:
@@ -319,10 +323,21 @@ if __name__ == "__main__":
             qf2_loss = F.mse_loss(qf2_a_values, next_q_value)
             qf_loss = qf1_loss + qf2_loss
 
+            # Compute TD error statistics
+            td_error = (next_q_value - qf1_a_values).detach()
+            td_error_mean = td_error.mean()
+            td_error_std = td_error.std()
+            td_error_abs_mean = td_error.abs().mean()
+
             # optimize the model
             q_optimizer.zero_grad()
             qf_loss.backward()
+            critic_grad_norm = torch.nn.utils.clip_grad_norm_(
+                list(qf1.parameters()) + list(qf2.parameters()),
+                max_norm=float('inf')
+            )
             q_optimizer.step()
+            update_step += 1
 
             if global_step % args.policy_frequency == 0:  # TD 3 Delayed update support
                 for _ in range(
@@ -336,6 +351,10 @@ if __name__ == "__main__":
 
                     actor_optimizer.zero_grad()
                     actor_loss.backward()
+                    actor_grad_norm = torch.nn.utils.clip_grad_norm_(
+                        actor.parameters(),
+                        max_norm=float('inf')
+                    )
                     actor_optimizer.step()
 
                     if args.autotune:
@@ -355,49 +374,92 @@ if __name__ == "__main__":
                 for param, target_param in zip(qf2.parameters(), qf2_target.parameters()):
                     target_param.data.copy_(args.tau * param.data + (1 - args.tau) * target_param.data)
 
-            if global_step % 100 == 0:
-                writer.add_scalar("losses/qf1_values", qf1_a_values.mean().item(), global_step)
-                writer.add_scalar("losses/qf2_values", qf2_a_values.mean().item(), global_step)
-                writer.add_scalar("losses/qf1_loss", qf1_loss.item(), global_step)
-                writer.add_scalar("losses/qf2_loss", qf2_loss.item(), global_step)
-                writer.add_scalar("losses/qf_loss", qf_loss.item() / 2.0, global_step)
-                writer.add_scalar("losses/actor_loss", actor_loss.item(), global_step)
-                writer.add_scalar("losses/alpha", alpha, global_step)
+            # Compute action statistics
+            with torch.no_grad():
+                current_actions, _, _ = actor.get_action(obs)
+                action_mean = current_actions.mean(dim=0).cpu().numpy()
+                action_std = current_actions.std(dim=0).cpu().numpy()
+                action_l2_norm = torch.norm(current_actions, p=2, dim=-1).mean().cpu().item()
 
-                # Log episode statistics
-                avg_return, avg_length = episode_tracker.get_stats()
-                sps = int(global_step / (time.time() - start_time))
-                if episode_tracker.get_episode_count() > 0:
-                    writer.add_scalar("charts/avg_episodic_return", avg_return, global_step)
-                    writer.add_scalar("charts/avg_episodic_length", avg_length, global_step)
-                    print(f"SPS: {sps}, avg_return: {avg_return:.2f}, avg_length: {avg_length:.1f}, timesteps: {global_step}")
-                else:
-                    print(f"SPS: {sps}, timesteps: {global_step}")
-                writer.add_scalar("charts/SPS", sps, global_step)
-                if args.autotune:
-                    writer.add_scalar("losses/alpha_loss", alpha_loss.item(), global_step)
+            # Compute buffer usage
+            buffer_usage = rb.pos / args.buffer_size
 
-                # Accumulate metrics for CSV logging
-                metrics_entry = {
-                    "global_step": global_step,
-                    "speed": float(sps),
-                    "frame": int(global_step),
-                    "qf1_values": float(qf1_a_values.mean().item()),
-                    "qf2_values": float(qf2_a_values.mean().item()),
-                    "qf1_loss": float(qf1_loss.item()),
-                    "qf2_loss": float(qf2_loss.item()),
-                    "qf_loss": float(qf_loss.item() / 2.0),
-                    "actor_loss": float(actor_loss.item()),
-                    "alpha": float(alpha),
-                }
-                if args.autotune:
-                    metrics_entry["alpha_loss"] = float(alpha_loss.item())
-                if episode_tracker.get_episode_count() > 0:
-                    metrics_entry["avg_episodic_return"] = float(avg_return)
-                    metrics_entry["avg_episodic_length"] = float(avg_length)
-                    metrics_entry["episode_count"] = int(episode_tracker.get_episode_count())
-                metrics_history.append(metrics_entry)
+            # Compute reward statistics
+            reward_mean = rewards.mean().cpu().item()
+            reward_std = rewards.std().cpu().item()
 
+            writer.add_scalar("losses/qf1_values", qf1_a_values.mean().item(), global_step)
+            writer.add_scalar("losses/qf2_values", qf2_a_values.mean().item(), global_step)
+            writer.add_scalar("losses/qf1_loss", qf1_loss.item(), global_step)
+            writer.add_scalar("losses/qf2_loss", qf2_loss.item(), global_step)
+            writer.add_scalar("losses/qf_loss", qf_loss.item() / 2.0, global_step)
+            writer.add_scalar("losses/actor_loss", actor_loss.item(), global_step)
+            writer.add_scalar("losses/alpha", alpha, global_step)
+            writer.add_scalar("losses/critic_grad_norm", critic_grad_norm.item(), global_step)
+            writer.add_scalar("losses/actor_grad_norm", actor_grad_norm.item(), global_step)
+            writer.add_scalar("losses/td_error_mean", td_error_mean.item(), global_step)
+            writer.add_scalar("losses/td_error_std", td_error_std.item(), global_step)
+            writer.add_scalar("actions/action_mean", np.mean(action_mean), global_step)
+            writer.add_scalar("actions/action_std", np.mean(action_std), global_step)
+            writer.add_scalar("rewards/reward_mean", reward_mean, global_step)
+            writer.add_scalar("rewards/reward_std", reward_std, global_step)
+            writer.add_scalar("buffer/usage", buffer_usage, global_step)
+
+            # Log episode statistics with detailed metrics
+            episode_stats = episode_tracker.get_detailed_stats()
+            sps = int(global_step / (time.time() - start_time))
+            wall_clock_time = time.time() - start_time
+            if episode_tracker.get_episode_count() > 0:
+                writer.add_scalar("charts/episodic_return_mean", episode_stats['return_mean'], global_step)
+                writer.add_scalar("charts/episodic_return_std", episode_stats['return_std'], global_step)
+                writer.add_scalar("charts/episodic_length_mean", episode_stats['length_mean'], global_step)
+                writer.add_scalar("charts/episodic_length_std", episode_stats['length_std'], global_step)
+                print(f"SPS: {sps}, return: {episode_stats['return_mean']:.2f}±{episode_stats['return_std']:.2f}, length: {episode_stats['length_mean']:.1f}, timesteps: {global_step}")
+            else:
+                print(f"SPS: {sps}, timesteps: {global_step}")
+            writer.add_scalar("charts/SPS", sps, global_step)
+            writer.add_scalar("charts/updates", update_step, global_step)
+            writer.add_scalar("charts/wall_clock_time", wall_clock_time, global_step)
+            if args.autotune:
+                writer.add_scalar("losses/alpha_loss", alpha_loss.item(), global_step)
+
+            # Accumulate metrics for CSV logging
+            metrics_entry = {
+                "global_step": global_step,
+                "updates": update_step,
+                "speed": float(sps),
+                "frame": int(global_step),
+                "wall_clock_time": float(wall_clock_time),
+                "qf1_values": float(qf1_a_values.mean().item()),
+                "qf2_values": float(qf2_a_values.mean().item()),
+                "qf1_loss": float(qf1_loss.item()),
+                "qf2_loss": float(qf2_loss.item()),
+                "qf_loss": float(qf_loss.item() / 2.0),
+                "actor_loss": float(actor_loss.item()),
+                "alpha": float(alpha),
+                "critic_grad_norm": float(critic_grad_norm.item()),
+                "actor_grad_norm": float(actor_grad_norm.item()),
+                "td_error_mean": float(td_error_mean.item()),
+                "td_error_std": float(td_error_std.item()),
+                "action_mean": float(np.mean(action_mean)),
+                "action_std": float(np.mean(action_std)),
+                "reward_mean": float(reward_mean),
+                "reward_std": float(reward_std),
+                "buffer_usage": float(buffer_usage),
+            }
+            if args.autotune:
+                metrics_entry["alpha_loss"] = float(alpha_loss.item())
+            if episode_tracker.get_episode_count() > 0:
+                metrics_entry.update({
+                    "episodic_return_mean": float(episode_stats['return_mean']),
+                    "episodic_return_std": float(episode_stats['return_std']),
+                    "episodic_length_mean": float(episode_stats['length_mean']),
+                    "episodic_length_std": float(episode_stats['length_std']),
+                    "episode_count": int(episode_tracker.get_episode_count()),
+                })
+            metrics_history.append(metrics_entry)
+
+    pbar.close()
     # Save metrics history
     save_metrics_history(metrics_path, metrics_history)
 
