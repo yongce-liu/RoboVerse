@@ -195,7 +195,7 @@ if __name__ == "__main__":
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     args.num_iterations = args.total_timesteps // args.batch_size
-    model_dir = os.path.join("models", args.exp_name)
+    model_dir = os.path.join("models", args.exp_name, args.task)
     if args.track:
         import wandb
 

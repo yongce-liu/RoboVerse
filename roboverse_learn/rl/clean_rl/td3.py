@@ -188,7 +188,7 @@ class Actor(nn.Module):
 if __name__ == "__main__":
 
     args = tyro.cli(Args)
-    model_dir = os.path.join("models", args.exp_name)
+    model_dir = os.path.join("models", args.exp_name, args.task)
     if args.track:
         import wandb
 
