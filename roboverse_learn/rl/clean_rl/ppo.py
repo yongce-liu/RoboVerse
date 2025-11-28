@@ -73,13 +73,13 @@ class Args:
     """device to run on"""
 
     # Algorithm specific arguments
-    total_timesteps: int = 1000000
+    total_timesteps: int = 100000000
     """total timesteps of the experiments"""
     learning_rate: float = 3e-4
     """the learning rate of the optimizer"""
     num_envs: int = 1024
     """the number of parallel game environments"""
-    num_steps: int = 1
+    num_steps: int = 64
     """the number of steps to run in each environment per policy rollout"""
     anneal_lr: bool = True
     """Toggle learning rate annealing for policy and value networks"""
@@ -414,10 +414,12 @@ if __name__ == "__main__":
         writer.add_scalar("charts/wall_clock_time", wall_clock_time, global_step)
 
         # Accumulate metrics for CSV logging
+        # Use iteration index as the logging step (for consistency with FastTD3),
+        # and store the true environment step count in the `frame` field.
         metrics_entry = {
-            "global_step": global_step,
-            "iteration": iteration,
-            "updates": update_step,
+            "global_step": int(iteration),
+            "iteration": int(iteration),
+            "updates": int(update_step),
             "speed": float(sps),
             "frame": int(global_step),
             "wall_clock_time": float(wall_clock_time),

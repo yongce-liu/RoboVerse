@@ -76,11 +76,11 @@ class Args:
 
     # Algorithm specific arguments
     """the id of the environment"""
-    total_timesteps: int = 1000000
+    total_timesteps: int = 100000000
     """total timesteps of the experiments"""
     learning_rate: float = 3e-4
     """the learning rate of the optimizer"""
-    num_envs: int = 1024
+    num_envs: int = 4096
     """the number of parallel game environments"""
     buffer_size: int = int(1e6)
     """the replay memory buffer size"""
@@ -255,7 +255,13 @@ if __name__ == "__main__":
     metrics_path = os.path.join(model_dir, "metrics.csv")
     metrics_history: list[dict[str, Any]] = []
 
-    pbar = tqdm(total=args.total_timesteps, desc="TD3 Training")
+    # Progress bar and logging iteration counter.
+    # We keep `global_step` as the true environment step count (frames),
+    # and use `iteration` as the logging/progress-step index
+    # to mirror the style of FastTD3.
+    total_iterations = (args.total_timesteps + args.num_envs - 1) // args.num_envs
+    iteration = 0
+    pbar = tqdm(total=total_iterations, desc="TD3 Training")
     while global_step < args.total_timesteps:
         # ALGO LOGIC: put action logic here
         if global_step < args.learning_starts:
@@ -278,9 +284,9 @@ if __name__ == "__main__":
 
         # TRY NOT TO MODIFY: CRUCIAL step easy to overlook
         obs = next_obs
-        prev_global_step = global_step
         global_step += args.num_envs
-        pbar.update(min(global_step, args.total_timesteps) - prev_global_step)
+        iteration += 1
+        pbar.update(1)
 
         # ALGO LOGIC: training.
         if global_step > args.learning_starts:
@@ -385,9 +391,11 @@ if __name__ == "__main__":
             writer.add_scalar("charts/wall_clock_time", wall_clock_time, global_step)
 
             # Accumulate metrics for CSV logging
+            # Use iteration index as the logging step (for consistency with FastTD3),
+            # and store the true environment step count in the `frame` field.
             metrics_entry = {
-                "global_step": global_step,
-                "updates": update_step,
+                "global_step": int(iteration),
+                "updates": int(update_step),
                 "speed": float(sps),
                 "frame": int(global_step),
                 "wall_clock_time": float(wall_clock_time),
