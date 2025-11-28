@@ -22,8 +22,8 @@ device_rank: 0
 # -------------------------------------------------------------------------------
 # Rollout & Timesteps
 # -------------------------------------------------------------------------------
-num_envs: 4096
-num_eval_envs: 4096
+num_envs: 1024
+num_eval_envs: 1024
 total_timesteps: 100000000
 learning_starts: 10
 num_steps: 1
