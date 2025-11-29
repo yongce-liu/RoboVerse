@@ -382,11 +382,9 @@ class DistributionalQNetwork(nn.Module):
         self.net = nn.Sequential(
             nn.Linear(n_obs + n_act, hidden_dim, device=device),
             nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim // 2, device=device),
+            nn.Linear(hidden_dim, hidden_dim, device=device),
             nn.ReLU(),
-            nn.Linear(hidden_dim // 2, hidden_dim // 4, device=device),
-            nn.ReLU(),
-            nn.Linear(hidden_dim // 4, num_atoms, device=device),
+            nn.Linear(hidden_dim, num_atoms, device=device),
         )
         self.v_min = v_min
         self.v_max = v_max
@@ -522,13 +520,11 @@ class Actor(nn.Module):
         self.net = nn.Sequential(
             nn.Linear(n_obs, hidden_dim, device=device),
             nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim // 2, device=device),
-            nn.ReLU(),
-            nn.Linear(hidden_dim // 2, hidden_dim // 4, device=device),
+            nn.Linear(hidden_dim, hidden_dim, device=device),
             nn.ReLU(),
         )
         self.fc_mu = nn.Sequential(
-            nn.Linear(hidden_dim // 4, n_act, device=device),
+            nn.Linear(hidden_dim, n_act, device=device),
             nn.Tanh(),
         )
         nn.init.normal_(self.fc_mu[0].weight, 0.0, init_scale)
