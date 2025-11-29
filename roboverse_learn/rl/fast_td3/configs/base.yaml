@@ -83,7 +83,7 @@ exp_name: "get_started_fttd3"
 use_wandb: true
 checkpoint_path: null
 log_interval: 256
-eval_interval: 100
+eval_interval: 2560
 save_interval: 25
 video_width: 1024
 video_height: 1024
