@@ -72,15 +72,15 @@ class Args:
     """total timesteps of the experiments"""
     num_envs: int = 4096
     """the number of parallel game environments"""
-    buffer_size: int = int(1e6)
+    buffer_size: int = int(1e7)
     """the replay memory buffer size"""
     gamma: float = 0.99
     """the discount factor gamma"""
     tau: float = 0.005
     """target smoothing coefficient (default: 0.005)"""
-    batch_size: int = 256
+    batch_size: int = 4096
     """the batch size of sample from the reply memory"""
-    learning_starts: int = 10
+    learning_starts: int = 25000
     """timestep to start learning"""
     policy_lr: float = 3e-4
     """the learning rate of the policy network optimizer"""

@@ -82,19 +82,19 @@ class Args:
     """the learning rate of the optimizer"""
     num_envs: int = 4096
     """the number of parallel game environments"""
-    buffer_size: int = int(1e6)
+    buffer_size: int = int(1e7)
     """the replay memory buffer size"""
     gamma: float = 0.99
     """the discount factor gamma"""
     tau: float = 0.005
     """target smoothing coefficient (default: 0.005)"""
-    batch_size: int = 256
+    batch_size: int = 4096
     """the batch size of sample from the reply memory"""
     policy_noise: float = 0.2
     """the scale of policy noise"""
     exploration_noise: float = 0.1
     """the scale of exploration noise"""
-    learning_starts: int = 10
+    learning_starts: int = 25000
     """timestep to start learning"""
     policy_frequency: int = 2
     """the frequency of training policy (delayed)"""

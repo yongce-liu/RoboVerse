@@ -497,8 +497,10 @@ def main() -> None:
         global_step = 0
 
     update_step = 0  # Track number of gradient updates
+    iteration = 0  # Track iteration count (similar to PPO)
     dones = None
-    pbar = tqdm.tqdm(total=cfg("total_timesteps"), initial=global_step)
+    total_iterations = (cfg("total_timesteps") + cfg("num_envs") - 1) // cfg("num_envs")
+    pbar = tqdm.tqdm(total=total_iterations, initial=0, desc="FastTD3 Training")
     start_time = None
     desc = ""
 
@@ -507,6 +509,7 @@ def main() -> None:
     metrics_history: list[dict[str, Any]] = []
 
     while global_step < cfg("total_timesteps"):
+        iteration += 1
         logs_dict = TensorDict()
         if start_time is None and global_step >= cfg("measure_burnin") + cfg("learning_starts"):
             start_time = time.time()
@@ -609,8 +612,8 @@ def main() -> None:
                         })
                         log.info(f"return={episode_stats['return_mean']:.4f}±{episode_stats['return_std']:.4f}, length={episode_stats['length_mean']:.4f}")
 
-                    if cfg("eval_interval") > 0 and global_step % cfg("eval_interval") == 0:
-                        log.info(f"Evaluating at global step {global_step}")
+                    if cfg("eval_interval") > 0 and iteration % cfg("eval_interval") == 0:
+                        log.info(f"Evaluating at iteration {iteration} (global step {global_step})")
                         eval_avg_return, eval_avg_length = evaluate()
                         obs, info = envs.reset()
                         logs["eval_avg_return"] = float(eval_avg_return)
@@ -628,11 +631,11 @@ def main() -> None:
                         wandb_payload,
                         step=global_step,
                     )
-                metrics_history.append({"global_step": global_step, **wandb_payload})
+                metrics_history.append({"global_step": int(iteration), "iteration": int(iteration), **wandb_payload})
 
-            if cfg("save_interval") > 0 and global_step > 0 and global_step % cfg("save_interval") == 0:
-                log.info(f"Saving model at global step {global_step}")
-                save_path = os.path.join(model_dir, f"checkpoint_{global_step}.pt")
+            if cfg("save_interval") > 0 and iteration > 0 and iteration % cfg("save_interval") == 0:
+                log.info(f"Saving model at iteration {iteration} (global step {global_step})")
+                save_path = os.path.join(model_dir, f"checkpoint_iter_{iteration}.pt")
                 save_params(
                     global_step,
                     actor,
@@ -646,7 +649,7 @@ def main() -> None:
                 save_metrics_history(metrics_path, metrics_history)
 
         global_step += cfg("num_envs")
-        pbar.update(cfg("num_envs"))
+        pbar.update(1)
         # Close environment and wandb
     save_metrics_history(metrics_path, metrics_history)
     envs.close()
