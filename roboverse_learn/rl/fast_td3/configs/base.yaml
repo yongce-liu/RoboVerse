@@ -25,8 +25,8 @@ device_rank: 0
 num_envs: 1024
 num_eval_envs: 1024
 total_timesteps: 100000000
-learning_starts: 10
-num_steps: 1
+learning_starts: 10000
+num_steps: 64
 
 # -------------------------------------------------------------------------------
 # Replay, Batching, Discounting
@@ -82,7 +82,8 @@ wandb_project: "get_started_fttd3"
 exp_name: "get_started_fttd3"
 use_wandb: true
 checkpoint_path: null
+log_interval: 256
 eval_interval: 100
-save_interval: 100
+save_interval: 25
 video_width: 1024
 video_height: 1024

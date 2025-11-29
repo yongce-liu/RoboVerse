@@ -59,6 +59,8 @@ class Args:
     """whether to upload the saved model to huggingface"""
     hf_entity: str = ""
     """the user or org name of the model repository from the Hugging Face Hub"""
+    save_interval: int = 25
+    """save checkpoint every N iterations"""
 
     # RoboVerse specific arguments
     task: str = "stand"
@@ -448,6 +450,15 @@ if __name__ == "__main__":
                 "episode_count": int(episode_tracker.get_episode_count()),
             })
         metrics_history.append(metrics_entry)
+
+        # Save checkpoint every save_interval iterations
+        if args.save_interval > 0 and iteration % args.save_interval == 0:
+            checkpoint_path = os.path.join(model_dir, f"checkpoint_iter_{iteration}.pt")
+            torch.save(agent.state_dict(), checkpoint_path)
+            print(f"Checkpoint saved at iteration {iteration}: {checkpoint_path}")
+            # Also save metrics at checkpoint
+            save_metrics_history(metrics_path, metrics_history)
+
         pbar.update(1)
 
     pbar.close()

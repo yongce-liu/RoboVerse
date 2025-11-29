@@ -497,10 +497,13 @@ def main() -> None:
         global_step = 0
 
     update_step = 0  # Track number of gradient updates
-    iteration = 0  # Track iteration count (similar to PPO)
+    iteration = 0  # Track iteration count (loop iterations)
+    csv_iteration = 0  # Track CSV logging iteration (only increments every log_interval)
     dones = None
-    total_iterations = (cfg("total_timesteps") + cfg("num_envs") - 1) // cfg("num_envs")
-    pbar = tqdm.tqdm(total=total_iterations, initial=0, desc="FastTD3 Training")
+    # Calculate total CSV iterations based on log_interval (for fair comparison with PPO)
+    samples_per_csv_row = cfg("num_envs") * cfg("log_interval")
+    total_csv_iterations = (cfg("total_timesteps") + samples_per_csv_row - 1) // samples_per_csv_row
+    pbar = tqdm.tqdm(total=total_csv_iterations, initial=0, desc="FastTD3 Training")
     start_time = None
     desc = ""
 
@@ -631,26 +634,32 @@ def main() -> None:
                         wandb_payload,
                         step=global_step,
                     )
-                metrics_history.append({"global_step": int(iteration), "iteration": int(iteration), **wandb_payload})
 
-            if cfg("save_interval") > 0 and iteration > 0 and iteration % cfg("save_interval") == 0:
-                log.info(f"Saving model at iteration {iteration} (global step {global_step})")
-                save_path = os.path.join(model_dir, f"checkpoint_iter_{iteration}.pt")
-                save_params(
-                    global_step,
-                    actor,
-                    qnet,
-                    qnet_target,
-                    obs_normalizer,
-                    critic_obs_normalizer,
-                    CONFIG,
-                    save_path,
-                )
-                save_metrics_history(metrics_path, metrics_history)
+                # Only log to CSV every log_interval iterations (for fair comparison with PPO)
+                if iteration % cfg("log_interval") == 0:
+                    csv_iteration += 1
+                    pbar.update(1)
+                    metrics_history.append({"global_step": int(csv_iteration), "iteration": int(csv_iteration), **wandb_payload})
+
+                    # Save checkpoint every save_interval CSV iterations
+                    if cfg("save_interval") > 0 and csv_iteration % cfg("save_interval") == 0:
+                        log.info(f"Saving model at CSV iteration {csv_iteration} (global step {global_step})")
+                        save_path = os.path.join(model_dir, f"checkpoint_iter_{csv_iteration}.pt")
+                        save_params(
+                            global_step,
+                            actor,
+                            qnet,
+                            qnet_target,
+                            obs_normalizer,
+                            critic_obs_normalizer,
+                            CONFIG,
+                            save_path,
+                        )
+                        save_metrics_history(metrics_path, metrics_history)
 
         global_step += cfg("num_envs")
-        pbar.update(1)
-        # Close environment and wandb
+
+    # Close environment and wandb
     save_metrics_history(metrics_path, metrics_history)
     envs.close()
     render_with_rollout()

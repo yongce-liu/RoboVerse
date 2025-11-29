@@ -61,6 +61,8 @@ class Args:
     """whether to upload the saved model to huggingface"""
     hf_entity: str = ""
     """the user or org name of the model repository from the Hugging Face Hub"""
+    save_interval: int = 25
+    """save checkpoint every N iterations"""
 
     # RoboVerse specific arguments
     task: str = "reach_origin"
@@ -100,6 +102,8 @@ class Args:
     """the frequency of training policy (delayed)"""
     noise_clip: float = 0.5
     """noise clip parameter of the Target Policy Smoothing Regularization"""
+    log_interval: int = 262144
+    """interval (in samples) for logging metrics to match PPO's iteration"""
 
 
 
@@ -258,9 +262,10 @@ if __name__ == "__main__":
     # Progress bar and logging iteration counter.
     # We keep `global_step` as the true environment step count (frames),
     # and use `iteration` as the logging/progress-step index
-    # to mirror the style of FastTD3.
-    total_iterations = (args.total_timesteps + args.num_envs - 1) // args.num_envs
+    # to mirror the style of PPO (logging every log_interval samples).
+    total_iterations = (args.total_timesteps + args.log_interval - 1) // args.log_interval
     iteration = 0
+    last_log_step = 0
     pbar = tqdm(total=total_iterations, desc="TD3 Training")
     while global_step < args.total_timesteps:
         # ALGO LOGIC: put action logic here
@@ -285,8 +290,6 @@ if __name__ == "__main__":
         # TRY NOT TO MODIFY: CRUCIAL step easy to overlook
         obs = next_obs
         global_step += args.num_envs
-        iteration += 1
-        pbar.update(1)
 
         # ALGO LOGIC: training.
         if global_step > args.learning_starts:
@@ -374,56 +377,70 @@ if __name__ == "__main__":
             writer.add_scalar("rewards/reward_std", reward_std, global_step)
             writer.add_scalar("buffer/usage", buffer_usage, global_step)
 
-            # Log episode statistics with detailed metrics
-            episode_stats = episode_tracker.get_detailed_stats()
-            sps = int(global_step / (time.time() - start_time))
-            wall_clock_time = time.time() - start_time
-            if episode_tracker.get_episode_count() > 0:
-                writer.add_scalar("charts/episodic_return_mean", episode_stats['return_mean'], global_step)
-                writer.add_scalar("charts/episodic_return_std", episode_stats['return_std'], global_step)
-                writer.add_scalar("charts/episodic_length_mean", episode_stats['length_mean'], global_step)
-                writer.add_scalar("charts/episodic_length_std", episode_stats['length_std'], global_step)
-                print(f"SPS: {sps}, return: {episode_stats['return_mean']:.2f}±{episode_stats['return_std']:.2f}, length: {episode_stats['length_mean']:.1f}, timesteps: {global_step}")
-            else:
-                print(f"SPS: {sps}, timesteps: {global_step}")
-            writer.add_scalar("charts/SPS", sps, global_step)
-            writer.add_scalar("charts/updates", update_step, global_step)
-            writer.add_scalar("charts/wall_clock_time", wall_clock_time, global_step)
+            # Log episode statistics and metrics at fixed intervals (matching PPO's iteration)
+            if global_step - last_log_step >= args.log_interval:
+                iteration += 1
+                last_log_step = global_step
+                pbar.update(1)
 
-            # Accumulate metrics for CSV logging
-            # Use iteration index as the logging step (for consistency with FastTD3),
-            # and store the true environment step count in the `frame` field.
-            metrics_entry = {
-                "global_step": int(iteration),
-                "updates": int(update_step),
-                "speed": float(sps),
-                "frame": int(global_step),
-                "wall_clock_time": float(wall_clock_time),
-                "qf1_values": float(qf1_a_values.mean().item()),
-                "qf2_values": float(qf2_a_values.mean().item()),
-                "qf1_loss": float(qf1_loss.item()),
-                "qf2_loss": float(qf2_loss.item()),
-                "qf_loss": float(qf_loss.item() / 2.0),
-                "actor_loss": float(actor_loss.item()),
-                "critic_grad_norm": float(critic_grad_norm.item()),
-                "actor_grad_norm": float(actor_grad_norm.item()),
-                "td_error_mean": float(td_error_mean.item()),
-                "td_error_std": float(td_error_std.item()),
-                "action_mean": float(np.mean(action_mean)),
-                "action_std": float(np.mean(action_std)),
-                "reward_mean": float(reward_mean),
-                "reward_std": float(reward_std),
-                "buffer_usage": float(buffer_usage),
-            }
-            if episode_tracker.get_episode_count() > 0:
-                metrics_entry.update({
-                    "episodic_return_mean": float(episode_stats['return_mean']),
-                    "episodic_return_std": float(episode_stats['return_std']),
-                    "episodic_length_mean": float(episode_stats['length_mean']),
-                    "episodic_length_std": float(episode_stats['length_std']),
-                    "episode_count": int(episode_tracker.get_episode_count()),
-                })
-            metrics_history.append(metrics_entry)
+                episode_stats = episode_tracker.get_detailed_stats()
+                sps = int(global_step / (time.time() - start_time))
+                wall_clock_time = time.time() - start_time
+                if episode_tracker.get_episode_count() > 0:
+                    writer.add_scalar("charts/episodic_return_mean", episode_stats['return_mean'], global_step)
+                    writer.add_scalar("charts/episodic_return_std", episode_stats['return_std'], global_step)
+                    writer.add_scalar("charts/episodic_length_mean", episode_stats['length_mean'], global_step)
+                    writer.add_scalar("charts/episodic_length_std", episode_stats['length_std'], global_step)
+                    print(f"SPS: {sps}, return: {episode_stats['return_mean']:.2f}±{episode_stats['return_std']:.2f}, length: {episode_stats['length_mean']:.1f}, timesteps: {global_step}")
+                else:
+                    print(f"SPS: {sps}, timesteps: {global_step}")
+                writer.add_scalar("charts/SPS", sps, global_step)
+                writer.add_scalar("charts/updates", update_step, global_step)
+                writer.add_scalar("charts/wall_clock_time", wall_clock_time, global_step)
+
+                # Accumulate metrics for CSV logging
+                # Use iteration index as the logging step (matching PPO),
+                # and store the true environment step count in the `frame` field.
+                metrics_entry = {
+                    "global_step": int(iteration),
+                    "iteration": int(iteration),
+                    "updates": int(update_step),
+                    "speed": float(sps),
+                    "frame": int(global_step),
+                    "wall_clock_time": float(wall_clock_time),
+                    "qf1_values": float(qf1_a_values.mean().item()),
+                    "qf2_values": float(qf2_a_values.mean().item()),
+                    "qf1_loss": float(qf1_loss.item()),
+                    "qf2_loss": float(qf2_loss.item()),
+                    "qf_loss": float(qf_loss.item() / 2.0),
+                    "actor_loss": float(actor_loss.item()),
+                    "critic_grad_norm": float(critic_grad_norm.item()),
+                    "actor_grad_norm": float(actor_grad_norm.item()),
+                    "td_error_mean": float(td_error_mean.item()),
+                    "td_error_std": float(td_error_std.item()),
+                    "action_mean": float(np.mean(action_mean)),
+                    "action_std": float(np.mean(action_std)),
+                    "reward_mean": float(reward_mean),
+                    "reward_std": float(reward_std),
+                    "buffer_usage": float(buffer_usage),
+                }
+                if episode_tracker.get_episode_count() > 0:
+                    metrics_entry.update({
+                        "episodic_return_mean": float(episode_stats['return_mean']),
+                        "episodic_return_std": float(episode_stats['return_std']),
+                        "episodic_length_mean": float(episode_stats['length_mean']),
+                        "episodic_length_std": float(episode_stats['length_std']),
+                        "episode_count": int(episode_tracker.get_episode_count()),
+                    })
+                metrics_history.append(metrics_entry)
+
+                # Save checkpoint every save_interval iterations
+                if args.save_interval > 0 and iteration % args.save_interval == 0:
+                    checkpoint_path = os.path.join(model_dir, f"checkpoint_iter_{iteration}.pt")
+                    torch.save((actor.state_dict(), qf1.state_dict(), qf2.state_dict()), checkpoint_path)
+                    print(f"Checkpoint saved at iteration {iteration}: {checkpoint_path}")
+                    # Also save metrics at checkpoint
+                    save_metrics_history(metrics_path, metrics_history)
 
     pbar.close()
     # Save metrics history
