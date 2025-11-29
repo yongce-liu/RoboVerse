@@ -94,7 +94,7 @@ class Args:
     """the batch size of sample from the reply memory"""
     policy_noise: float = 0.2
     """the scale of policy noise"""
-    exploration_noise: float = 0.1
+    exploration_noise: float = 0.05
     """the scale of exploration noise"""
     learning_starts: int = 25000
     """timestep to start learning"""
