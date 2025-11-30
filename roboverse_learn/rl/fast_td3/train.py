@@ -169,6 +169,16 @@ def save_metrics_history(save_path: str, metrics_history: list[dict[str, Any]]) 
     log.info(f"Saved metrics history to {save_path}")
 
 
+def load_checkpoint(checkpoint_path: str, device: torch.device):
+    """Load checkpoint from file."""
+    if not os.path.exists(checkpoint_path):
+        raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
+
+    log.info(f"Loading checkpoint from {checkpoint_path}")
+    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    return checkpoint
+
+
 def main() -> None:
     GAMMA = float(cfg("gamma"))
     USE_CDQ = bool(cfg("use_cdq"))
@@ -484,9 +494,14 @@ def main() -> None:
         normalize_obs = obs_normalizer.forward
     obs, info = envs.reset()
 
+    # Initialize episode tracker and in-memory metrics buffer
+    episode_tracker = EpisodeTracker(cfg("num_envs"), device)
+    episode_tracker.reset()
+    metrics_history: list[dict[str, Any]] = []
+
     if cfg("checkpoint_path"):
         # Load checkpoint if specified
-        torch_checkpoint = torch.load(f"{cfg('checkpoint_path')}", map_location=device, weights_only=False)
+        torch_checkpoint = load_checkpoint(cfg("checkpoint_path"), device)
         actor.load_state_dict(torch_checkpoint["actor_state_dict"])
         obs_normalizer.load_state_dict(torch_checkpoint["obs_normalizer_state"])
         critic_obs_normalizer.load_state_dict(torch_checkpoint["critic_obs_normalizer_state"])
@@ -507,10 +522,6 @@ def main() -> None:
     start_time = None
     desc = ""
 
-    # Initialize episode tracker and in-memory metrics buffer
-    episode_tracker = EpisodeTracker(cfg("num_envs"), device)
-    metrics_history: list[dict[str, Any]] = []
-
     # Track rewards over each iteration for proper averaging
     iteration_rewards = []
 
@@ -528,7 +539,7 @@ def main() -> None:
         dones = terminated | time_out
 
         # Update episode tracker
-        episode_tracker.update(rewards, terminated, time_out)
+        episode_tracker.update(rewards, dones)
 
         # Accumulate rewards for iteration averaging
         iteration_rewards.append(rewards.mean().cpu().item())
@@ -625,6 +636,7 @@ def main() -> None:
                         log.info(f"Evaluating at iteration {iteration} (global step {global_step})")
                         eval_avg_return, eval_avg_length = evaluate()
                         obs, info = envs.reset()
+                        episode_tracker.reset()
                         logs["eval_avg_return"] = float(eval_avg_return)
                         logs["eval_avg_length"] = float(eval_avg_length)
                         log.info(f"eval_return={eval_avg_return:.4f}, eval_length={eval_avg_length:.4f}")

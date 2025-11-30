@@ -15,10 +15,8 @@ class EpisodeTracker:
         self.total_returns = deque(maxlen=max_episodes)
         self.total_lengths = deque(maxlen=max_episodes)
 
-    def update(self, rewards, terminations, truncations):
+    def update(self, rewards, dones):
         """Update episode tracking with new rewards and done flags."""
-        dones = torch.logical_or(terminations, truncations)
-
         # Add rewards to running episode returns
         self.episode_returns += rewards
         self.episode_lengths += 1
@@ -35,6 +33,11 @@ class EpisodeTracker:
             # Reset completed episodes
             self.episode_returns[done_indices] = 0
             self.episode_lengths[done_indices] = 0
+
+    def reset(self):
+        """Reset episode tracking (call when environment is reset)."""
+        self.episode_returns.zero_()
+        self.episode_lengths.zero_()
 
     def get_stats(self, window_size=100):
         """Get average return and length over recent episodes."""

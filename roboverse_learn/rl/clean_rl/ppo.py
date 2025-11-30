@@ -281,7 +281,7 @@ if __name__ == "__main__":
             dones[step] = next_done
 
             # Update episode tracker
-            episode_tracker.update(reward.view(-1), terminations, truncations)
+            episode_tracker.update(reward.view(-1), next_done)
 
         # bootstrap value if not done
         with torch.no_grad():

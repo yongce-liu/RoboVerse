@@ -309,14 +309,14 @@ if __name__ == "__main__":
         # TRY NOT TO MODIFY: execute the game and log data.
         next_obs, rewards, terminations, truncations, infos = envs.step(actions)
         next_obs = next_obs.to(device)
-
+        dones = torch.logical_or(terminations, truncations)
 
         # Compute 'true' next_obs for saving (similar to fast_td3)
         true_next_obs = torch.where(truncations[:, None] > 0, infos["observations"]["raw"]["obs"], next_obs)
         rb.add(obs.cpu().numpy(), true_next_obs.cpu().numpy(), actions.cpu().numpy(), rewards.cpu().numpy(), terminations.cpu().numpy(), infos)
 
         # Update episode tracker
-        episode_tracker.update(rewards, terminations, truncations)
+        episode_tracker.update(rewards, dones)
 
         # Accumulate rewards for iteration averaging
         iteration_rewards.append(rewards.mean().cpu().item())
