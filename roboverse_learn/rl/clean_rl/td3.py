@@ -266,6 +266,10 @@ if __name__ == "__main__":
     total_iterations = (args.total_timesteps + args.log_interval - 1) // args.log_interval
     iteration = 0
     last_log_step = 0
+
+    # Track rewards over each iteration for proper averaging
+    iteration_rewards = []
+
     pbar = tqdm(total=total_iterations, desc="TD3 Training")
     while global_step < args.total_timesteps:
         # ALGO LOGIC: put action logic here
@@ -275,6 +279,11 @@ if __name__ == "__main__":
             with torch.no_grad():
                 actions = actor(torch.Tensor(obs).to(device))
                 actions += torch.normal(0, actor.action_scale * args.exploration_noise)
+                # Clamp actions to valid action space bounds
+                actions = actions.clamp(
+                    envs.single_action_space.low[0],
+                    envs.single_action_space.high[0]
+                )
         # TRY NOT TO MODIFY: execute the game and log data.
         next_obs, rewards, terminations, truncations, infos = envs.step(actions)
         next_obs = next_obs.to(device)
@@ -286,6 +295,9 @@ if __name__ == "__main__":
 
         # Update episode tracker
         episode_tracker.update(rewards, terminations, truncations)
+
+        # Accumulate rewards for iteration averaging
+        iteration_rewards.append(rewards.mean().cpu().item())
 
         # TRY NOT TO MODIFY: CRUCIAL step easy to overlook
         obs = next_obs
@@ -357,9 +369,9 @@ if __name__ == "__main__":
             # Compute buffer usage
             buffer_usage = rb.pos / args.buffer_size
 
-            # Compute reward statistics
-            reward_mean = rewards.mean().cpu().item()
-            reward_std = rewards.std().cpu().item()
+            # Compute reward statistics (averaged over iteration, not just current step)
+            reward_mean = np.mean(iteration_rewards) if iteration_rewards else 0.0
+            reward_std = np.std(iteration_rewards) if iteration_rewards else 0.0
 
             writer.add_scalar("losses/qf1_values", qf1_a_values.mean().item(), global_step)
             writer.add_scalar("losses/qf2_values", qf2_a_values.mean().item(), global_step)
@@ -433,6 +445,9 @@ if __name__ == "__main__":
                         "episode_count": int(episode_tracker.get_episode_count()),
                     })
                 metrics_history.append(metrics_entry)
+
+                # Reset iteration rewards for next logging period
+                iteration_rewards = []
 
                 # Save checkpoint every save_interval iterations
                 if args.save_interval > 0 and iteration % args.save_interval == 0:

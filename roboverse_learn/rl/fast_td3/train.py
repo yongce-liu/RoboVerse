@@ -511,6 +511,9 @@ def main() -> None:
     episode_tracker = EpisodeTracker(cfg("num_envs"), device)
     metrics_history: list[dict[str, Any]] = []
 
+    # Track rewards over each iteration for proper averaging
+    iteration_rewards = []
+
     while global_step < cfg("total_timesteps"):
         iteration += 1
         logs_dict = TensorDict()
@@ -526,6 +529,9 @@ def main() -> None:
 
         # Update episode tracker
         episode_tracker.update(rewards, terminated, time_out)
+
+        # Accumulate rewards for iteration averaging
+        iteration_rewards.append(rewards.mean().cpu().item())
 
         # Compute 'true' next_obs and next_critic_obs for saving
         true_next_obs = torch.where(dones[:, None] > 0, infos["observations"]["raw"]["obs"], next_obs)
@@ -598,8 +604,8 @@ def main() -> None:
                         "env_rewards": rewards.mean().item(),
                         "action_mean": float(action_mean.mean()),
                         "action_std": float(action_std.mean()),
-                        "reward_mean": float(rewards.mean().item()),
-                        "reward_std": float(rewards.std().item()),
+                        "reward_mean": float(np.mean(iteration_rewards)) if iteration_rewards else 0.0,
+                        "reward_std": float(np.std(iteration_rewards)) if iteration_rewards else 0.0,
                         "buffer_usage": float(buffer_usage),
                         "updates": int(update_step),
                     }
@@ -634,6 +640,9 @@ def main() -> None:
                         wandb_payload,
                         step=global_step,
                     )
+
+                # Reset iteration rewards for next logging period
+                iteration_rewards = []
 
                 # Only log to CSV every log_interval iterations (for fair comparison with PPO)
                 if iteration % cfg("log_interval") == 0:
