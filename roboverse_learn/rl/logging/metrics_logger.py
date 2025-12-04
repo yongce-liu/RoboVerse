@@ -6,10 +6,10 @@ including CSV export, TensorBoard integration, and WandB support.
 
 import csv
 import os
-from typing import Any
+from typing import Any, Dict, List
 
 
-def save_metrics_history(save_path: str, metrics_history: list[dict[str, Any]]) -> None:
+def save_metrics_history(save_path: str, metrics_history: List[Dict[str, Any]]) -> None:
     """Write aggregated metrics to a CSV file for readability.
 
     Args:
@@ -23,7 +23,7 @@ def save_metrics_history(save_path: str, metrics_history: list[dict[str, Any]]) 
         return
 
     # Collect all unique fieldnames across all entries
-    fieldnames: list[str] = []
+    fieldnames: List[str] = []
     for entry in metrics_history:
         for key in entry.keys():
             if key not in fieldnames:
