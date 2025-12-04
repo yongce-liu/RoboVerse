@@ -30,7 +30,7 @@ class RslRlPPOConfig(RslRlOnPolicyRunnerCfg):
     run_name: str = ""
     seed: int = 1
     num_steps_per_env: int = 64
-    max_iterations: int = 380
+    max_iterations: int = 400
     save_interval: int = 100
     empirical_normalization: bool = False
     obs_groups: Optional[Dict[str, List[str]]] = None
