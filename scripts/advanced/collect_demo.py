@@ -1,3 +1,20 @@
+"""Demo collection script with domain randomization support.
+
+Collects demonstration data by replaying trajectories with optional domain randomization.
+
+Randomization Levels:
+- Level 0: No randomization
+- Level 1: Scene + Material randomization
+- Level 2: Level 1 + Lighting randomization
+- Level 3: Level 2 + Camera randomization
+
+Scene Modes:
+- Mode 0: Manual geometry
+- Mode 1: USD Table + Manual environment
+- Mode 2: USD Scene (Kujiale) + USD Table
+- Mode 3: Full USD (Scene + Table + Desktop objects)
+"""
+
 from __future__ import annotations
 
 from copy import deepcopy
@@ -27,8 +44,6 @@ class Args:
     """Simulator backend"""
     demo_start_idx: int | None = None
     """The index of the first demo to collect, None for all demos"""
-    # max_demo_idx: int | None = None
-    # """Maximum number of demos to collect, None for all demos"""
     num_demo_success: int | None = None
     """Target number of successful demos to collect"""
     retry_num: int = 0
@@ -55,19 +70,11 @@ class Args:
     """Rollout unfinished and failed trajectories"""
     renderer: Literal["isaaclab", "mujoco", "isaacgym", "genesis", "pybullet", "sapien2", "sapien3"] = "mujoco"
 
-    ## Domain randomization options
-    enable_randomization: bool = False
-    """Enable domain randomization during demo collection"""
-    randomize_materials: bool = True
-    """Enable material randomization (when randomization is enabled)"""
-    randomize_lights: bool = False
-    """Enable light randomization (when randomization is enabled)"""
-    randomize_cameras: bool = True
-    """Enable camera randomization (when randomization is enabled)"""
-    randomize_physics: bool = True
-    """Enable physics (mass/friction/pose) randomization using ObjectRandomizer"""
-    randomization_frequency: Literal["per_demo", "per_episode"] = "per_demo"
-    """When to apply randomization: per_demo (once at start) or per_episode (every episode)"""
+    # Domain randomization options
+    level: Literal[0, 1, 2, 3] = 0
+    """Randomization level: 0=None, 1=Scene+Material, 2=+Light, 3=+Camera"""
+    scene_mode: Literal[0, 1, 2, 3] = 0
+    """Scene mode: 0=Manual, 1=USD Table, 2=USD Scene, 3=Full USD"""
     randomization_seed: int | None = None
     """Seed for reproducible randomization. If None, uses random seed"""
 
@@ -75,32 +82,24 @@ class Args:
         assert self.run_all or self.run_unfinished or self.run_failed, (
             "At least one of run_all, run_unfinished, or run_failed must be True"
         )
-        # if self.max_demo_idx is None:
-        #     self.max_demo_idx = math.inf
         if self.num_demo_success is None:
             self.num_demo_success = 100
         if self.demo_start_idx is None:
             self.demo_start_idx = 0
 
-        # Validate randomization settings
-        if self.enable_randomization:
-            if not (
-                self.randomize_materials or self.randomize_lights or self.randomize_cameras or self.randomize_physics
-            ):
-                log.warning("Randomization enabled but no randomization types selected, disabling randomization")
-                self.enable_randomization = False
-
         log.info(f"Args: {self}")
 
         # Log randomization settings
-        if self.enable_randomization:
+        if self.level > 0:
+            mode_names = {0: "Manual", 1: "USD Table", 2: "USD Scene", 3: "Full USD"}
             log.info("=" * 60)
             log.info("DOMAIN RANDOMIZATION CONFIGURATION")
-            log.info(f"  Materials: {'✓' if self.randomize_materials else '✗'}")
-            log.info(f"  Lights: {'✓' if self.randomize_lights else '✗'}")
-            log.info(f"  Cameras: {'✓' if self.randomize_cameras else '✗'}")
-            log.info(f"  Physics: {'✓' if self.randomize_physics else '✗'} (ObjectRandomizer)")
-            log.info(f"  Frequency: {self.randomization_frequency}")
+            log.info(f"  Level: {self.level}")
+            log.info(f"  Scene Mode: {self.scene_mode} ({mode_names[self.scene_mode]})")
+            log.info("  Randomization:")
+            log.info("    Level 1+: Scene + Material")
+            log.info("    Level 2+: + Lighting")
+            log.info("    Level 3+: + Camera")
             log.info(f"  Seed: {self.randomization_seed if self.randomization_seed else 'Random'}")
             log.info("=" * 60)
 
@@ -120,6 +119,7 @@ import torch
 from tqdm.rich import tqdm_rich as tqdm
 
 from metasim.scenario.cameras import PinholeCameraCfg
+from metasim.scenario.lights import DiskLightCfg, SphereLightCfg
 from metasim.scenario.robot import RobotCfg
 from metasim.sim import BaseSimHandler
 from metasim.task.registry import get_task_class
@@ -130,18 +130,31 @@ from metasim.utils.tensor_util import tensor_to_cpu
 
 rootutils.setup_root(__file__, pythonpath=True)
 
-# Import randomization components (after rootutils setup)
+# Import randomization components
 try:
-    from roboverse_pack.randomization import (
-        CameraPresets,
+    from metasim.randomization import (
+        # Randomizers
         CameraRandomizer,
-        LightPresets,
+        # Scene Configuration
+        EnvironmentLayerCfg,
+        # Light configuration
+        LightColorRandomCfg,
+        LightIntensityRandomCfg,
+        LightOrientationRandomCfg,
+        LightPositionRandomCfg,
+        LightRandomCfg,
         LightRandomizer,
+        ManualGeometryCfg,
         MaterialPresets,
         MaterialRandomizer,
-        ObjectPresets,
-        ObjectRandomizer,
+        # Core (usually transparent)
+        ObjectsLayerCfg,
+        SceneRandomCfg,
+        SceneRandomizer,
+        USDAssetPoolCfg,
+        WorkspaceLayerCfg,
     )
+    from metasim.randomization.presets.scene_presets import ScenePresets, SceneUSDCollections
 
     RANDOMIZATION_AVAILABLE = True
 except ImportError as e:
@@ -149,54 +162,67 @@ except ImportError as e:
     RANDOMIZATION_AVAILABLE = False
 
 
-def log_randomization_result(
-    randomizer_type: str, obj_name: str, property_name: str, before_value, after_value, unit: str = ""
-):
-    """Log randomization results in a consistent format."""
-    if hasattr(before_value, "cpu"):
-        before_str = str(before_value.cpu().numpy().round(3) if hasattr(before_value, "numpy") else before_value)
-    else:
-        before_str = str(before_value)
-
-    if hasattr(after_value, "cpu"):
-        after_str = str(after_value.cpu().numpy().round(3) if hasattr(after_value, "numpy") else after_value)
-    else:
-        after_str = str(after_value)
-
-    log.info(f"  [{randomizer_type}] {obj_name}.{property_name}: {before_str} -> {after_str} {unit}")
-
-
-def log_randomization_header(randomizer_name: str, description: str = ""):
-    """Log a consistent header for randomization sections."""
-    log.info("=" * 50)
-    if description:
-        log.info(f"{randomizer_name}: {description}")
-    else:
-        log.info(randomizer_name)
-
-
 class DomainRandomizationManager:
-    """Manages domain randomization for demo collection with unified interface."""
+    """Manages domain randomization for demo collection.
 
-    def __init__(self, args: Args, scenario, handler):
+    Architecture:
+    - Static Objects: Handler-managed (Robot, task objects, Camera, Light)
+    - Dynamic Objects: SceneRandomizer-managed (Floor, Table, Distractors)
+    - Level system: 0=None, 1=Scene+Material, 2=+Light, 3=+Camera
+    - Mode system: 0=Manual, 1=USD Table, 2=USD Scene, 3=Full USD
+    """
+
+    def __init__(self, args: Args, scenario, handler, init_states: list):
         self.args = args
         self.scenario = scenario
         self.handler = handler
-        self.randomizers = []
-        self._demo_count = 0
+        self.init_states = init_states
+        self.randomizers = {}
+
+        # Store original camera positions BEFORE any randomization
+        self.original_camera_positions = {}
+        for camera in self.handler.cameras:
+            self.original_camera_positions[camera.name] = {
+                "pos": tuple(camera.pos),
+                "look_at": tuple(camera.look_at),
+            }
+
+        # Store original positions for ALL demos (before any modification)
+        # This ensures we always have the true original positions from the trajectory file
+        self.original_positions = {}
+        for demo_idx, init_state in enumerate(init_states):
+            demo_key = f"demo_{demo_idx}"
+            self.original_positions[demo_key] = {}
+
+            if "objects" in init_state:
+                for obj_name, obj_state in init_state["objects"].items():
+                    self.original_positions[demo_key][f"obj_{obj_name}"] = {
+                        "x": float(obj_state["pos"][0]),
+                        "y": float(obj_state["pos"][1]),
+                        "z": float(obj_state["pos"][2]),
+                    }
+
+            if "robots" in init_state:
+                for robot_name, robot_state in init_state["robots"].items():
+                    self.original_positions[demo_key][f"robot_{robot_name}"] = {
+                        "x": float(robot_state["pos"][0]),
+                        "y": float(robot_state["pos"][1]),
+                        "z": float(robot_state["pos"][2]),
+                    }
 
         # Early validation
         if not self._validate_setup():
             return
 
-        log_randomization_header("DOMAIN RANDOMIZATION SETUP", "Initializing randomizers")
+        log.info("=" * 50)
+        log.info("DOMAIN RANDOMIZATION SETUP: Initializing randomizers")
         self._setup_randomizers()
-        log.info(f"Setup complete: {len(self.randomizers)} randomizers ready")
+        log.info(f"Setup complete: Randomizers ready (Level {args.level}, Mode {args.scene_mode})")
 
     def _validate_setup(self) -> bool:
         """Validate if randomization can be set up."""
-        if not self.args.enable_randomization:
-            log.info("Domain randomization disabled")
+        if self.args.level == 0:
+            log.info("Domain randomization disabled (level=0)")
             return False
 
         if not RANDOMIZATION_AVAILABLE:
@@ -206,211 +232,455 @@ class DomainRandomizationManager:
         return True
 
     def _setup_randomizers(self):
-        """Initialize all randomizers based on configuration."""
+        """Initialize all randomizers based on level and mode."""
         seed = self.args.randomization_seed
         self._setup_reproducibility(seed)
 
-        # Setup each randomization type symmetrically
-        if self.args.randomize_materials:
-            self._setup_material_randomizers(seed)
+        self.randomizers = {
+            "scene": None,
+            "material_dynamic": [],
+            "light": [],
+            "camera": [],
+        }
 
-        if self.args.randomize_lights:
+        # Scene Randomizer
+        self._setup_scene_randomizer(seed)
+
+        # Material Randomization
+        self._setup_material_randomizers(seed)
+
+        # Light Randomization (Level 2+)
+        if self.args.level >= 2:
             self._setup_light_randomizers(seed)
 
-        if self.args.randomize_cameras:
+        # Camera Randomization (Level 3+)
+        if self.args.level >= 3:
             self._setup_camera_randomizers(seed)
-
-        if self.args.randomize_physics:
-            self._setup_physics_randomizers(seed)
 
     def _setup_reproducibility(self, seed: int | None):
         """Setup global reproducibility if seed is provided."""
         if seed is not None:
             log.info(f"Setting up reproducible randomization with seed: {seed}")
             torch.manual_seed(seed)
+            import random
+
             import numpy as np
 
             np.random.seed(seed)
+            random.seed(seed)
             if torch.cuda.is_available():
                 torch.cuda.manual_seed(seed)
 
+    def _setup_scene_randomizer(self, seed: int | None):
+        """Setup SceneRandomizer based on scene_mode."""
+        mode = self.args.scene_mode
+        level = self.args.level
+
+        log.info(f"\nScene Creation (Mode {mode})")
+        log.info("-" * 50)
+
+        # Environment Layer
+        if mode >= 2:
+            # USD Scene
+            scene_paths, scene_configs = SceneUSDCollections.kujiale_scenes(return_configs=True)
+            log.info(f"Environment: Kujiale USD ({len(scene_paths)} scenes)")
+            env_element = USDAssetPoolCfg(
+                name="kujiale_scene",
+                usd_paths=scene_paths,
+                per_path_overrides=scene_configs,
+                selection_strategy="random" if level >= 1 else "sequential",
+            )
+            environment_layer = EnvironmentLayerCfg(elements=[env_element])
+        else:
+            # Manual Scene
+            log.info("Environment: Manual geometry (10m x 10m x 5m)")
+            base_cfg = ScenePresets.empty_room(room_size=10.0, wall_height=5.0)
+            environment_layer = base_cfg.environment_layer
+
+        # Workspace Layer
+        if mode >= 1:
+            # USD Table
+            table_paths, table_configs = SceneUSDCollections.table785(return_configs=True)
+            log.info(f"Workspace: Table785 USD ({len(table_paths)} tables)")
+            workspace_element = USDAssetPoolCfg(
+                name="table",
+                usd_paths=table_paths,
+                per_path_overrides=table_configs,
+                selection_strategy="random" if level >= 1 else "sequential",
+                add_collision=True,
+            )
+            workspace_layer = WorkspaceLayerCfg(elements=[workspace_element])
+        else:
+            # Manual Table
+            log.info("Workspace: Manual table (Plywood default, randomized in level 1+)")
+            workspace_layer = WorkspaceLayerCfg(
+                elements=[
+                    ManualGeometryCfg(
+                        name="table",
+                        geometry_type="cube",
+                        size=(1.8, 1.8, 0.1),
+                        position=(0.0, 0.0, 0.7 - 0.05),
+                        default_material="roboverse_data/materials/arnold/Wood/Plywood.mdl",
+                        add_collision=True,
+                    )
+                ]
+            )
+
+        # Objects Layer
+        if mode >= 3:
+            object_paths, object_configs = SceneUSDCollections.desktop_supplies(return_configs=True)
+            log.info(f"Objects: Desktop supplies ({len(object_paths)} items, placing 3)")
+            objects_layer = ObjectsLayerCfg(
+                elements=[
+                    USDAssetPoolCfg(
+                        name=f"desktop_object_{i + 1}",
+                        usd_paths=object_paths,
+                        per_path_overrides=object_configs,
+                        selection_strategy="random" if level >= 1 else "sequential",
+                        add_collision=True,
+                    )
+                    for i in range(3)
+                ]
+            )
+        else:
+            objects_layer = None
+
+        # Create SceneRandomizer
+        scene_cfg = SceneRandomCfg(
+            environment_layer=environment_layer,
+            workspace_layer=workspace_layer,
+            objects_layer=objects_layer,
+        )
+
+        scene_rand = SceneRandomizer(scene_cfg, seed=seed)
+        scene_rand.bind_handler(self.handler)
+        self.randomizers["scene"] = scene_rand
+        log.info("SceneRandomizer created")
+
     def _setup_material_randomizers(self, seed: int | None):
-        """Setup material randomizers for all objects."""
-        objects = getattr(self.scenario, "objects", [])
-        if not objects:
-            log.info("  No objects found for material randomization")
+        """Setup material randomizers for dynamic objects (environment)."""
+        mode = self.args.scene_mode
+        level = self.args.level
+
+        if level == 0:
             return
 
-        log.info(f"  Setting up material randomizers for {len(objects)} objects")
-        for obj in objects:
-            obj_name = obj.name
-            config = self._get_material_config(obj_name)
+        log.info("\nMaterial Randomization")
+        log.info("-" * 50)
 
-            randomizer = MaterialRandomizer(config, seed=seed)
-            randomizer.bind_handler(self.handler)
-            self.randomizers.append(randomizer)
-            log.info(f"    Added MaterialRandomizer for {obj_name}")
+        # Dynamic Objects (Manual geometry only)
+        if mode == 0:
+            # Manual table
+            table_mat = MaterialRandomizer(
+                MaterialPresets.mdl_family_object("table", family=("wood", "metal")),
+                seed=seed + 2 if seed is not None else None,
+            )
+            table_mat.bind_handler(self.handler)
+            self.randomizers["material_dynamic"].append(table_mat)
+            log.info("  Dynamic Object: table (Manual)")
+
+        # Manual environment (mode < 2 and level >= 1)
+        if mode < 2 and level >= 1:
+            # Floor
+            floor_mat = MaterialRandomizer(
+                MaterialPresets.mdl_family_object("floor", family=("carpet", "wood", "stone")),
+                seed=seed + 101 if seed is not None else None,
+            )
+            floor_mat.bind_handler(self.handler)
+            self.randomizers["material_dynamic"].append(floor_mat)
+
+            # Walls
+            wall_seed = seed + 102 if seed is not None else None
+            for wall_name in ["wall_front", "wall_back", "wall_left", "wall_right"]:
+                wall_mat = MaterialRandomizer(
+                    MaterialPresets.mdl_family_object(wall_name, family=("masonry", "architecture")),
+                    seed=wall_seed,
+                )
+                wall_mat.bind_handler(self.handler)
+                self.randomizers["material_dynamic"].append(wall_mat)
+
+            # Ceiling
+            ceiling_mat = MaterialRandomizer(
+                MaterialPresets.mdl_family_object("ceiling", family=("architecture", "wall_board")),
+                seed=seed + 103 if seed is not None else None,
+            )
+            ceiling_mat.bind_handler(self.handler)
+            self.randomizers["material_dynamic"].append(ceiling_mat)
+
+            log.info("  Dynamic Objects: floor + 4 walls + ceiling")
 
     def _setup_light_randomizers(self, seed: int | None):
-        """Setup light randomizers for all lights."""
+        """Setup light randomizers (Level 2+)."""
         from metasim.scenario.lights import DiskLightCfg, DomeLightCfg, SphereLightCfg
+
+        log.info("\nLight Randomization")
+        log.info("-" * 50)
 
         lights = getattr(self.scenario, "lights", [])
         if not lights:
-            log.info("  No lights found for light randomization")
+            log.info("  No lights found")
             return
 
-        log.info(f"  Setting up light randomizers for {len(lights)} lights")
-        for light in lights:
-            light_name = getattr(light, "name", f"light_{len(self.randomizers)}")
+        # Determine intensity ranges based on render mode
+        if hasattr(self.args.render, "mode") and self.args.render.mode == "pathtracing":
+            main_range = (22000.0, 40000.0)
+            corner_range = (10000.0, 18000.0)
+        else:
+            main_range = (16000.0, 30000.0)
+            corner_range = (6000.0, 12000.0)
 
-            if isinstance(light, DomeLightCfg):
+        for i, light in enumerate(lights):
+            light_name = getattr(light, "name", f"light_{i}")
+
+            if isinstance(light, DiskLightCfg):
+                # Main ceiling light with orientation
+                light_rand = LightRandomizer(
+                    LightRandomCfg(
+                        light_name=light_name,
+                        intensity=LightIntensityRandomCfg(intensity_range=main_range, enabled=True),
+                        color=LightColorRandomCfg(
+                            temperature_range=(3000.0, 6000.0), use_temperature=True, enabled=True
+                        ),
+                        orientation=LightOrientationRandomCfg(
+                            angle_range=((-15.0, 15.0), (-15.0, 15.0), (-15.0, 15.0)),
+                            relative_to_origin=True,
+                            distribution="uniform",
+                            enabled=True,
+                        ),
+                    ),
+                    seed=seed + 4 + i if seed is not None else None,
+                )
+            elif isinstance(light, SphereLightCfg):
+                # Corner lights with position and color
+                light_rand = LightRandomizer(
+                    LightRandomCfg(
+                        light_name=light_name,
+                        intensity=LightIntensityRandomCfg(intensity_range=corner_range, enabled=True),
+                        color=LightColorRandomCfg(
+                            temperature_range=(2700.0, 5500.0), use_temperature=True, enabled=True
+                        ),
+                        position=LightPositionRandomCfg(
+                            position_range=((-0.5, 0.5), (-0.5, 0.5), (-0.3, 0.3)),
+                            relative_to_origin=True,
+                            distribution="uniform",
+                            enabled=True,
+                        ),
+                    ),
+                    seed=seed + 5 + i if seed is not None else None,
+                )
+            elif isinstance(light, DomeLightCfg):
+                # Dome light (ambient)
+                from metasim.randomization.presets.light_presets import LightPresets
+
                 config = LightPresets.dome_ambient(light_name)
-            elif isinstance(light, (SphereLightCfg, DiskLightCfg)):
-                config = LightPresets.sphere_ceiling_light(light_name)
+                light_rand = LightRandomizer(config, seed=seed + 4 + i if seed else None)
             else:
-                log.warning(f"Unknown light type for {light_name}, using sphere_ceiling_light preset")
-                config = LightPresets.sphere_ceiling_light(light_name)
+                log.warning(f"  Unknown light type: {light_name}")
+                continue
 
-            randomizer = LightRandomizer(config, seed=seed)
-            randomizer.bind_handler(self.handler)
-            self.randomizers.append(randomizer)
-            log.info(f"    Added LightRandomizer for {light_name}")
+            light_rand.bind_handler(self.handler)
+            self.randomizers["light"].append(light_rand)
+            log.info(f"  Light: {light_name}")
 
     def _setup_camera_randomizers(self, seed: int | None):
-        """Setup camera randomizers for all cameras."""
+        """Setup camera randomizers (Level 3+)."""
+        from metasim.randomization import (
+            CameraIntrinsicsRandomCfg,
+            CameraPositionRandomCfg,
+            CameraRandomCfg,
+        )
+        from metasim.randomization.presets.camera_presets import CameraProperties
+
+        log.info("\nCamera Randomization")
+        log.info("-" * 50)
+
         cameras = getattr(self.scenario, "cameras", [])
         if not cameras:
-            log.info("  No cameras found for camera randomization")
+            log.info("  No cameras found")
             return
 
-        log.info(f"  Setting up camera randomizers for {len(cameras)} cameras")
         for camera in cameras:
-            camera_name = getattr(camera, "name", f"camera_{len(self.randomizers)}")
-            config = CameraPresets.surveillance_camera(camera_name)
+            camera_name = getattr(camera, "name", "camera")
 
-            randomizer = CameraRandomizer(config, seed=seed)
-            randomizer.bind_handler(self.handler)
-            self.randomizers.append(randomizer)
-            log.info(f"    Added CameraRandomizer for {camera_name}")
+            # Orbit camera configuration (no roll to keep camera horizontal)
+            # Z range kept positive to ensure camera stays above table (no upward view)
+            cam_config = CameraRandomCfg(
+                camera_name=camera_name,
+                position=CameraPositionRandomCfg(
+                    delta_range=((-0.1, 0.1), (-0.1, 0.1), (0.0, 0.2)),  # Z: only upward movement
+                    use_delta=True,
+                    distribution="uniform",
+                    enabled=True,
+                ),
+                intrinsics=CameraIntrinsicsRandomCfg(
+                    fov_range=CameraProperties.FOV_NORMAL,
+                    use_fov=True,
+                    distribution="uniform",
+                    enabled=True,
+                ),
+            )
 
-    def _get_material_config(self, obj_name: str):
-        """Get appropriate material configuration based on object type."""
-        obj_lower = obj_name.lower()
-        if "cube" in obj_lower:
-            return MaterialPresets.mdl_family_object(obj_name, family="metal")
-        elif "sphere" in obj_lower:
-            return MaterialPresets.rubber_object(obj_name)
-        else:
-            return MaterialPresets.mdl_family_object(obj_name, family="wood")
+            cam_rand = CameraRandomizer(cam_config, seed=seed + 10 if seed is not None else None)
+            cam_rand.bind_handler(self.handler)
+            self.randomizers["camera"].append(cam_rand)
+            log.info(f"  Camera: {camera_name}")
 
-    def _setup_physics_randomizers(self, seed: int | None):
-        """Setup unified ObjectRandomizers for robots and objects."""
-        robots = getattr(self.scenario, "robots", [])
-        objects = getattr(self.scenario, "objects", [])
+    def apply_randomization(self, demo_idx: int, is_initial: bool = False):
+        """Apply randomization with global deferred visual flush.
 
-        self._setup_object_randomizers(robots, objects, seed)
-
-    def _setup_object_randomizers(self, robots: list, objects: list, seed: int | None):
-        """Setup unified ObjectRandomizers for all physical entities."""
-        log.info("  Setting up ObjectRandomizers for physics randomization")
-
-        # Robot randomization
-        if robots:
-            robot_name = robots[0] if isinstance(robots[0], str) else robots[0].name
-            robot_randomizer = ObjectRandomizer(ObjectPresets.robot_base(robot_name), seed=seed)
-            robot_randomizer.bind_handler(self.handler)
-            self.randomizers.append(robot_randomizer)
-            log.info(f"    Added ObjectRandomizer for robot {robot_name}")
-
-        # Object randomization
-        if objects:
-            for obj in objects:
-                obj_name = obj.name
-                config = self._get_object_physics_config(obj_name)
-
-                obj_randomizer = ObjectRandomizer(config, seed=seed)
-                obj_randomizer.bind_handler(self.handler)
-                self.randomizers.append(obj_randomizer)
-                log.info(f"    Added ObjectRandomizer for {obj_name}")
-
-        if not robots and not objects:
-            log.info("    No robots or objects found for physics randomization")
-
-    def _get_object_physics_config(self, obj_name: str):
-        """Get appropriate physics configuration based on object type."""
-        obj_lower = obj_name.lower()
-        if "cube" in obj_lower:
-            return ObjectPresets.grasping_target(obj_name)
-        elif "sphere" in obj_lower:
-            return ObjectPresets.bouncy_object(obj_name)
-        else:
-            return ObjectPresets.physics_only(obj_name)
-
-    def randomize_for_demo(self, demo_idx: int):
-        """Apply randomization for a new demo."""
-        if not self._should_randomize(demo_idx):
+        Args:
+            demo_idx: Demo index for logging
+            is_initial: Whether this is the initial call (always creates scene)
+        """
+        if self.args.level == 0 or not self.randomizers:
             return
 
-        log_randomization_header("DOMAIN RANDOMIZATION", f"Demo {demo_idx}")
+        log.info("=" * 50)
+        log.info(f"DOMAIN RANDOMIZATION: Demo {demo_idx}")
 
-        # Apply all randomizers and collect statistics
-        stats = self._apply_all_randomizers()
+        # Enable global defer flag
+        if self.handler:
+            self.handler._defer_all_visual_flushes = True
 
-        # Log summary
-        self._log_randomization_summary(stats)
-        self._demo_count += 1
+        try:
+            # Scene creation/switching
+            if self.randomizers["scene"]:
+                if is_initial or self.args.level >= 1:
+                    scene_rand = self.randomizers["scene"]
+                    original_auto_flush = scene_rand.cfg.auto_flush_visuals
+                    scene_rand.cfg.auto_flush_visuals = False
+                    scene_rand()
+                    scene_rand.cfg.auto_flush_visuals = original_auto_flush
+                    log.info("  Applied SceneRandomizer")
 
-    def _should_randomize(self, demo_idx: int) -> bool:
-        """Check if randomization should be applied for this demo."""
-        if not self.args.enable_randomization or not self.randomizers:
-            return False
+            # Level 1+: Material randomization (environment only)
+            if self.args.level >= 1:
+                for mat_rand in self.randomizers["material_dynamic"]:
+                    mat_rand()
+                if self.randomizers["material_dynamic"]:
+                    log.info(f"  Applied MaterialRandomizers ({len(self.randomizers['material_dynamic'])})")
 
-        return self.args.randomization_frequency == "per_demo" or (
-            self.args.randomization_frequency == "per_episode" and demo_idx == 0
-        )
+            # Level 2+: Lighting
+            if self.args.level >= 2:
+                for light_rand in self.randomizers["light"]:
+                    light_rand()
+                if self.randomizers["light"]:
+                    log.info(f"  Applied LightRandomizers ({len(self.randomizers['light'])})")
 
-    def _apply_all_randomizers(self) -> dict[str, int]:
-        """Apply all randomizers and return statistics."""
-        stats = {"ObjectRandomizer": 0, "MaterialRandomizer": 0, "LightRandomizer": 0, "CameraRandomizer": 0}
+            # Level 3+: Camera
+            if self.args.level >= 3:
+                for cam_rand in self.randomizers["camera"]:
+                    cam_rand()
+                if self.randomizers["camera"]:
+                    log.info(f"  Applied CameraRandomizers ({len(self.randomizers['camera'])})")
 
-        for randomizer in self.randomizers:
-            try:
-                obj_name = self._get_randomizer_target_name(randomizer)
-                randomizer_type = type(randomizer).__name__
+        finally:
+            # Disable global defer and flush once
+            if self.handler:
+                self.handler._defer_all_visual_flushes = False
+                if hasattr(self.handler, "flush_visual_updates"):
+                    try:
+                        self.handler.flush_visual_updates(wait_for_materials=True, settle_passes=2)
+                    except Exception as e:
+                        log.debug(f"Failed to flush visual updates: {e}")
 
-                # Apply randomization
-                randomizer()
-                stats[randomizer_type] = stats.get(randomizer_type, 0) + 1
-                log.info(f"  Applied {randomizer_type} for {obj_name}")
+    def update_camera_look_at(self, env_id: int = 0):
+        """Update camera position and look_at to focus on table after scene switch.
 
-            except Exception as e:
-                log.warning(f"  {type(randomizer).__name__} failed for {obj_name}: {e}")
+        Adjusts both camera position and look-at point to maintain the same relative
+        viewing angle but account for the table's height.
+        """
+        if not self.randomizers.get("scene"):
+            return
 
-        return stats
+        table_bounds = self.randomizers["scene"].get_table_bounds(env_id=env_id)
+        if not table_bounds or abs(table_bounds.get("height", 0)) > 100:
+            return
 
-    def _get_randomizer_target_name(self, randomizer) -> str:
-        """Extract target object name from randomizer configuration."""
-        if not hasattr(randomizer, "cfg"):
-            return "unknown"
+        table_height = table_bounds["height"]
 
-        cfg = randomizer.cfg
-        if hasattr(cfg, "obj_name"):
-            return cfg.obj_name
-        elif hasattr(cfg, "light_name"):
-            return cfg.light_name
-        elif hasattr(cfg, "camera_name"):
-            return cfg.camera_name
-        else:
-            return "unknown"
+        # Use original camera positions stored in __init__ (before any randomization)
+        clearance = 0.05
+        target_look_at_z = table_height + clearance
 
-    def _log_randomization_summary(self, stats: dict[str, int]):
-        """Log a summary of applied randomizers."""
-        applied_types = [f"{name}: {count}" for name, count in stats.items() if count > 0]
-        if applied_types:
-            log.info(f"Applied randomizers: {', '.join(applied_types)}")
-        else:
-            log.info("No randomizers were applied")
+        for camera in self.handler.cameras:
+            orig = self.original_camera_positions[camera.name]
+            orig_look_at_z = orig["look_at"][2]
+            orig_pos_z = orig["pos"][2]
+
+            # Compute Z offset needed
+            z_offset = target_look_at_z - orig_look_at_z
+
+            # Apply same offset to both position and look_at
+            camera.pos = (orig["pos"][0], orig["pos"][1], orig_pos_z + z_offset)
+            camera.look_at = (orig["look_at"][0], orig["look_at"][1], target_look_at_z)
+
+        if hasattr(self.handler, "_update_camera_pose"):
+            self.handler._update_camera_pose()
+
+    def update_positions_to_table(self, demo_idx: int, env_id: int = 0):
+        """Update object positions to align with current table after scene switch.
+
+        Maintains relative positions of all objects and robots (rigid body translation).
+        The entire system is translated such that the original ground level aligns with the table surface.
+        """
+        if not self.randomizers.get("scene"):
+            return
+
+        # Get current state
+        if demo_idx >= len(self.init_states):
+            return
+
+        init_state = self.init_states[demo_idx]
+
+        # Get this demo's original positions (stored in __init__)
+        demo_key = f"demo_{demo_idx}"
+        if demo_key not in self.original_positions:
+            log.warning(f"No original positions found for demo {demo_idx}")
+            return
+
+        demo_original_positions = self.original_positions[demo_key]
+
+        # Get table bounds
+        table_bounds = self.randomizers["scene"].get_table_bounds(env_id=env_id)
+        if not table_bounds or abs(table_bounds.get("height", 0)) > 100:
+            return
+
+        table_height = table_bounds["height"]
+        table_center_x = (table_bounds["x_min"] + table_bounds["x_max"]) / 2
+        table_center_y = (table_bounds["y_min"] + table_bounds["y_max"]) / 2
+
+        # Compute system center (XY)
+        all_x = [demo_original_positions[k]["x"] for k in demo_original_positions]
+        all_y = [demo_original_positions[k]["y"] for k in demo_original_positions]
+        system_center_x = sum(all_x) / len(all_x)
+        system_center_y = sum(all_y) / len(all_y)
+
+        # Compute XY offset (to center system on table)
+        offset_x = table_center_x - system_center_x
+        offset_y = table_center_y - system_center_y
+
+        # Compute Z offset: move the reference plane from ground to table
+        # Find the ground level (minimum Z in original trajectory)
+        all_z = [demo_original_positions[k]["z"] for k in demo_original_positions]
+        ground_level = min(all_z)
+
+        # The reference plane (ground) moves to table surface
+        # All objects and robots maintain their relative height from this plane
+        z_offset = table_height - ground_level
+
+        # Apply same offset to everything (rigid body translation)
+        for obj_name, obj_state in init_state["objects"].items():
+            orig = demo_original_positions[f"obj_{obj_name}"]
+            obj_state["pos"][0] = orig["x"] + offset_x
+            obj_state["pos"][1] = orig["y"] + offset_y
+            obj_state["pos"][2] = orig["z"] + z_offset
+
+        for robot_name, robot_state in init_state["robots"].items():
+            orig = demo_original_positions[f"robot_{robot_name}"]
+            robot_state["pos"][0] = orig["x"] + offset_x
+            robot_state["pos"][1] = orig["y"] + offset_y
+            robot_state["pos"][2] = orig["z"] + z_offset
 
 
 def get_actions(all_actions, env, demo_idxs: list[int], robot: RobotCfg):
@@ -455,15 +725,12 @@ def ensure_clean_state(handler, expected_state=None):
         handler.simulate()
         current_state = handler.get_states()
 
-        # Only start checking after minimum steps
         if step >= min_steps:
             if prev_state is not None:
-                # Check if key states are stable (focus on articulated objects)
                 is_stable = True
                 if hasattr(current_state, "objects") and hasattr(prev_state, "objects"):
                     for obj_name, obj_state in current_state.objects.items():
                         if obj_name in prev_state.objects:
-                            # Check DOF positions for articulated objects
                             curr_dof = getattr(obj_state, "dof_pos", None)
                             prev_dof = getattr(prev_state.objects[obj_name], "dof_pos", None)
                             if curr_dof is not None and prev_dof is not None:
@@ -471,51 +738,45 @@ def ensure_clean_state(handler, expected_state=None):
                                     is_stable = False
                                     break
 
-                # Additional validation: check if we're stable at the RIGHT state
                 if is_stable and expected_state is not None:
                     is_correct_state = _validate_state_correctness(current_state, expected_state)
                     if not is_correct_state:
-                        # We're stable but at wrong state - force more simulation
                         log.debug(f"State stable but incorrect at step {step}, continuing simulation...")
                         stable_count = 0
                         is_stable = False
-                        # Continue simulating to let physics settle properly
 
                 if is_stable:
                     stable_count += 1
-                    if stable_count >= 2:  # Stable for 2 consecutive steps at correct state
+                    if stable_count >= 2:
                         break
                 else:
                     stable_count = 0
 
             prev_state = current_state
 
-    # Final validation if we ran out of steps
     if expected_state is not None:
         final_state = handler.get_states()
         is_final_correct = _validate_state_correctness(final_state, expected_state)
         if not is_final_correct:
             log.warning(f"State validation failed after {max_steps} steps - reset may not have taken full effect")
 
-    # Final state refresh
     handler.get_states()
 
 
 def _validate_state_correctness(current_state, expected_state):
     """Validate that current state matches expected initial state for critical objects."""
     if not hasattr(current_state, "objects") or not hasattr(expected_state, "objects"):
-        return True  # Can't validate, assume correct
+        return True
 
-    # Focus on articulated objects which are most prone to reset issues
     critical_objects = []
     for obj_name, expected_obj in expected_state.objects.items():
         if hasattr(expected_obj, "dof_pos") and getattr(expected_obj, "dof_pos", None) is not None:
             critical_objects.append(obj_name)
 
     if not critical_objects:
-        return True  # No critical objects to validate
+        return True
 
-    tolerance = 5e-3  # Reasonable tolerance for DOF positions
+    tolerance = 5e-3
 
     for obj_name in critical_objects:
         if obj_name not in current_state.objects:
@@ -524,13 +785,11 @@ def _validate_state_correctness(current_state, expected_state):
         expected_obj = expected_state.objects[obj_name]
         current_obj = current_state.objects[obj_name]
 
-        # Check DOF positions for articulated objects (most critical for demo consistency)
         expected_dof = getattr(expected_obj, "dof_pos", None)
         current_dof = getattr(current_obj, "dof_pos", None)
 
         if expected_dof is not None and current_dof is not None:
             if not torch.allclose(current_dof, expected_dof, atol=tolerance):
-                # Log the specific difference for debugging
                 diff = torch.abs(current_dof - expected_dof).max().item()
                 log.debug(f"DOF mismatch for {obj_name}: max diff = {diff:.6f} (tolerance = {tolerance})")
                 return False
@@ -541,9 +800,7 @@ def _validate_state_correctness(current_state, expected_state):
 def force_reset_to_state(env, state, env_id):
     """Force reset environment to specific state with validation."""
     env.reset(states=[state], env_ids=[env_id])
-    # Pass expected state for validation
     ensure_clean_state(env.handler, expected_state=state)
-    # Reset episode counter AFTER stabilization to ensure demo starts from action 0
     if hasattr(env, "_episode_steps"):
         env._episode_steps[env_id] = 0
 
@@ -603,7 +860,6 @@ class DemoCollector:
         assert demo_idx in self.cache
         assert status in ["success", "failed"], f"Invalid status: {status}"
 
-        # Use demo_idx directly as continuous_idx to maintain consistency
         continuous_idx = demo_idx
 
         save_dir = os.path.join(self.base_save_dir, status, f"demo_{continuous_idx:04d}")
@@ -611,9 +867,7 @@ class DemoCollector:
             os.remove(os.path.join(save_dir, "status.txt"))
 
         os.makedirs(save_dir, exist_ok=True)
-        log.info(f"Saving demo {demo_idx} (original) as {continuous_idx:04d} (continuous) to {save_dir}")
-
-        ## Option 1: Save immediately, blocking and slower
+        log.info(f"Saving demo {demo_idx} as {continuous_idx:04d} to {save_dir}")
 
         from metasim.utils.save_util import save_demo
 
@@ -622,9 +876,6 @@ class DemoCollector:
         if status == "failed":
             with open(os.path.join(save_dir, "status.txt"), "w") as f:
                 f.write(status)
-
-        ## Option 2: Save in a separate process, non-blocking, not friendly to KeyboardInterrupt
-        # self.save_request_queue.put({"demo": self.cache[demo_idx], "save_dir": save_dir})
 
     def delete(self, demo_idx: int):
         assert demo_idx in self.cache
@@ -709,21 +960,48 @@ def main():
     if is_libero_dataset:
         dp_pos = (2.0, 0.0, 2)
     elif dp_camera:
-        # import warnings
-        # warnings.warn("Using dp camera position!")
         dp_pos = (1.0, 0.0, 0.75)
     else:
         dp_pos = (1.5, 0.0, 1.5)
 
-    # libero specific camera position
-    # dp_pos = (0.8, -0, 1.6)
-    # look_at = (-2.5, 0.0, 0.0)
-
     camera = PinholeCameraCfg(data_types=["rgb", "depth"], pos=dp_pos, look_at=(0.0, 0.0, 0.0))
+
+    # Lighting setup
+    if args.render.mode == "pathtracing":
+        ceiling_main = 18000.0
+        ceiling_corners = 8000.0
+    else:
+        ceiling_main = 12000.0
+        ceiling_corners = 5000.0
+
+    lights = [
+        DiskLightCfg(
+            name="ceiling_main",
+            intensity=ceiling_main,
+            color=(1.0, 1.0, 1.0),
+            radius=1.2,
+            pos=(0.0, 0.0, 2.8),
+            rot=(0.7071, 0.0, 0.0, 0.7071),
+        ),
+        SphereLightCfg(
+            name="ceiling_ne", intensity=ceiling_corners, color=(1.0, 1.0, 1.0), radius=0.6, pos=(1.0, 1.0, 2.5)
+        ),
+        SphereLightCfg(
+            name="ceiling_nw", intensity=ceiling_corners, color=(1.0, 1.0, 1.0), radius=0.6, pos=(-1.0, 1.0, 2.5)
+        ),
+        SphereLightCfg(
+            name="ceiling_sw", intensity=ceiling_corners, color=(1.0, 1.0, 1.0), radius=0.6, pos=(-1.0, -1.0, 2.5)
+        ),
+        SphereLightCfg(
+            name="ceiling_se", intensity=ceiling_corners, color=(1.0, 1.0, 1.0), radius=0.6, pos=(1.0, -1.0, 2.5)
+        ),
+    ]
+
     scenario = task_cls.scenario.update(
         robots=[args.robot],
         scene=args.scene,
         cameras=[camera],
+        lights=lights,
         render=args.render,
         simulator=args.sim,
         renderer=args.renderer,
@@ -734,11 +1012,12 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     env = task_cls(scenario, device=device)
 
-    # Initialize domain randomization manager
-    randomization_manager = DomainRandomizationManager(args, scenario, env.handler)
     ## Data
     assert os.path.exists(env.traj_filepath), f"Trajectory file does not exist: {env.traj_filepath}"
     init_states, all_actions, all_states = get_traj(env.traj_filepath, robot, env.handler)
+
+    # Initialize domain randomization manager
+    randomization_manager = DomainRandomizationManager(args, scenario, env.handler, init_states)
 
     tot_demo = len(all_actions)
     if args.split == "train":
@@ -756,11 +1035,6 @@ def main():
     ########################################################
     ## Main
     ########################################################
-    # if args.max_demo_idx > n_demo:
-    #     log.warning(
-    #         f"Max demo {args.max_demo_idx} is greater than the number of demos in the dataset {n_demo}, using {n_demo}"
-    #     )
-    # max_demo = min(args.max_demo_idx, n_demo)
     max_demo = n_demo
     try_num = args.retry_num + 1
 
@@ -769,10 +1043,8 @@ def main():
     ## CollectingDemo -> Timeout -> Retry/GiveUp -> NextDemo
 
     ## Setup
-    # Get task description from environment
     task_desc = getattr(env, "task_desc", "")
     collector = DemoCollector(env.handler, robot, task_desc)
-    # pbar = tqdm(total=max_demo - args.demo_start_idx, desc="Collecting demos")
     pbar = tqdm(total=args.num_demo_success, desc="Collecting successful demos")
 
     ## State variables
@@ -803,25 +1075,27 @@ def main():
         demo_indexer.move_on()
     log.info(f"Initialize with demo idxs: {demo_idxs}")
 
-    ## Apply initial randomization
+    ## Apply initial randomization (create scene and update positions)
     for env_id, demo_idx in enumerate(demo_idxs):
-        randomization_manager.randomize_for_demo(demo_idx)
+        randomization_manager.apply_randomization(demo_idx, is_initial=True)
+        randomization_manager.update_positions_to_table(demo_idx, env_id)
+        randomization_manager.update_camera_look_at(env_id)
 
-    ## Reset to initial states
+    ## Reset to initial states (after position adjustment)
     obs, extras = env.reset(states=[init_states[demo_idx] for demo_idx in demo_idxs])
 
-    ## Wait for environment to stabilize after reset (before counting demo steps)
-    # For initial setup, we can't validate individual states easily, so just ensure stability
+    ## Wait for environment to stabilize after reset
     ensure_clean_state(env.handler)
 
-    ## Reset episode step counters AFTER stabilization
+    ## Reset episode step counters after stabilization
     if hasattr(env, "_episode_steps"):
         for env_id in range(env.handler.num_envs):
             env._episode_steps[env_id] = 0
 
-    ## Now record the clean, stabilized initial state
+    ## Record the clean, stabilized initial state
     obs = env.handler.get_states()
     obs = state_tensor_to_nested(env.handler, obs)
+
     for env_id, demo_idx in enumerate(demo_idxs):
         log.info(f"Starting Demo {demo_idx} in Env {env_id}")
         collector.create(demo_idx, obs[env_id])
@@ -874,7 +1148,8 @@ def main():
                     demo_idxs[env_id] = new_demo_idx
                     log.info(f"Transitioning Env {env_id}: Demo {demo_idx} to Demo {new_demo_idx}")
 
-                    randomization_manager.randomize_for_demo(new_demo_idx)
+                    randomization_manager.apply_randomization(new_demo_idx, is_initial=False)
+                    randomization_manager.update_positions_to_table(new_demo_idx, env_id)
                     force_reset_to_state(env, init_states[new_demo_idx], env_id)
 
                     obs = env.handler.get_states()
@@ -897,7 +1172,9 @@ def main():
 
             if failure_count[env_id] < try_num:
                 log.info(f"Demo {demo_idx} failed {failure_count[env_id]} times, retrying...")
-                randomization_manager.randomize_for_demo(demo_idx)
+                randomization_manager.apply_randomization(demo_idx, is_initial=False)
+                randomization_manager.update_positions_to_table(demo_idx, env_id)
+                randomization_manager.update_camera_look_at(env_id)
                 force_reset_to_state(env, init_states[demo_idx], env_id)
 
                 obs = env.handler.get_states()
@@ -913,7 +1190,9 @@ def main():
                 if demo_indexer.next_idx < max_demo:
                     new_demo_idx = demo_indexer.next_idx
                     demo_idxs[env_id] = new_demo_idx
-                    randomization_manager.randomize_for_demo(new_demo_idx)
+                    randomization_manager.apply_randomization(new_demo_idx, is_initial=False)
+                    randomization_manager.update_positions_to_table(new_demo_idx, env_id)
+                    randomization_manager.update_camera_look_at(env_id)
                     force_reset_to_state(env, init_states[new_demo_idx], env_id)
 
                     obs = env.handler.get_states()
