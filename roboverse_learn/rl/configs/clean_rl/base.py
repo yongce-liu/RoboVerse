@@ -34,7 +34,7 @@ class BaseRLConfig:
     headless: bool = False
 
     # Training
-    max_iterations: int = 50000
+    max_iterations: int = 400
     save_interval: int = 100
 
     # Logging (for compatibility with different RL frameworks)

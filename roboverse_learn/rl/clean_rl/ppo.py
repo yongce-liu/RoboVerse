@@ -100,7 +100,7 @@ if __name__ == "__main__":
     args = tyro.cli(CleanRLPPOConfig)
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
-    args.num_iterations = args.total_timesteps // args.batch_size
+    args.total_timesteps = args.batch_size *  args.num_iterations
     run_name = f"{args.exp_name}__{args.seed}__{int(time.time())}"
     if args.track:
         import wandb

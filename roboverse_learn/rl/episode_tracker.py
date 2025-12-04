@@ -50,6 +50,30 @@ class EpisodeTracker:
 
         return avg_return, avg_length
 
+    def get_detailed_stats(self, window_size=100):
+        """Return mean/std stats for returns and lengths over a recent window."""
+        if len(self.total_returns) == 0:
+            return {
+                "return_mean": 0.0,
+                "return_std": 0.0,
+                "length_mean": 0.0,
+                "length_std": 0.0,
+                "episodes_in_window": 0,
+                "episode_count": self.episode_count,
+            }
+
+        recent_returns = list(self.total_returns)[-window_size:]
+        recent_lengths = list(self.total_lengths)[-window_size:]
+
+        return {
+            "return_mean": float(np.mean(recent_returns)),
+            "return_std": float(np.std(recent_returns)),
+            "length_mean": float(np.mean(recent_lengths)),
+            "length_std": float(np.std(recent_lengths)),
+            "episodes_in_window": len(recent_returns),
+            "episode_count": self.episode_count,
+        }
+
     def get_episode_count(self):
         """Get total number of completed episodes."""
         return self.episode_count

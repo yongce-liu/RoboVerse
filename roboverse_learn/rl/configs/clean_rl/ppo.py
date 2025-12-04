@@ -35,7 +35,7 @@ class CleanRLPPOConfig(BaseRLConfig):
     learning_rate: float = 3e-4
     num_envs: int = 4096
     num_steps: int = 64
-    anneal_lr: bool = True
+    anneal_lr: bool = False
     gamma: float = 0.99
     gae_lambda: float = 0.95
     num_minibatches: int = 128
@@ -49,10 +49,9 @@ class CleanRLPPOConfig(BaseRLConfig):
     target_kl: Optional[float] = None
 
     # Network architecture
-    actor_hidden_dim: int = 64
-    critic_hidden_dim: int = 64
+    actor_hidden_dim: int = 256
+    critic_hidden_dim: int = 256
 
     # Runtime-computed (filled in main script)
     batch_size: int = 0
     minibatch_size: int = 0
-    num_iterations: int = 0

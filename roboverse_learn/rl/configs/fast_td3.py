@@ -37,42 +37,42 @@ class FastTD3Config:
     headless: bool = True
 
     # Rollout & Timesteps
-    num_envs: int = 1024
-    num_eval_envs: int = 1024
-    total_timesteps: int = 1500
-    learning_starts: int = 10
+    num_envs: int = 4096
+    num_eval_envs: int = 4096
+    total_timesteps: int = 100000000
+    learning_starts: int = 25000
     num_steps: int = 1
 
     # Replay, Batching, Discounting
-    buffer_size: int = 20480
-    batch_size: int = 32768
+    buffer_size: int = int(1e7)
+    batch_size: int = 4096
     gamma: float = 0.99
-    tau: float = 0.1
+    tau: float = 0.005
 
     # Update Schedule
     policy_frequency: int = 2
-    num_updates: int = 12
+    num_updates: int = 1
 
     # Optimizer & Network
     critic_learning_rate: float = 3e-4
     actor_learning_rate: float = 3e-4
-    weight_decay: float = 0.1
-    critic_hidden_dim: int = 1024
-    actor_hidden_dim: int = 512
+    weight_decay: float = 0.0
+    critic_hidden_dim: int = 256
+    actor_hidden_dim: int = 256
     init_scale: float = 0.01
-    num_atoms: int = 101
+    num_atoms: int = 1
 
     # Value Distribution & Exploration
     v_min: float = -250.0
     v_max: float = 250.0
-    policy_noise: float = 0.001
-    std_min: float = 0.001
-    std_max: float = 0.4
+    policy_noise: float = 0.2
+    std_min: float = 0.05
+    std_max: float = 0.05
     noise_clip: float = 0.5
 
     # Algorithm Flags
-    use_cdq: bool = True
-    compile: bool = True
+    use_cdq: bool = False
+    compile: bool = False
     obs_normalization: bool = True
     max_grad_norm: float = 0.0
     amp: bool = True
