@@ -104,6 +104,9 @@ class DiffusionDenoisingImagePolicy(BaseImagePolicy):
         step_kwargs = dict(self.scheduler_step_kwargs)
         step_kwargs.update(kwargs)
 
+        # Ensure timesteps are on the same device as trajectory
+        scheduler.timesteps = scheduler.timesteps.to(trajectory.device)
+
         for t in scheduler.timesteps:
             # 1. Apply conditioning.
             trajectory[condition_mask] = condition_data[condition_mask]

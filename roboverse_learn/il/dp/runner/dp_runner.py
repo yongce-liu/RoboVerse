@@ -30,175 +30,94 @@ from roboverse_learn.il.utils.common.lr_scheduler import get_scheduler
 from roboverse_learn.il.utils.common.pytorch_util import dict_apply, optimizer_to
 from torch.utils.data import DataLoader
 
-from roboverse_pack.randomization import (
-    CameraPresets,
-    CameraRandomizer,
-    LightPresets,
-    LightRandomizer,
-    MaterialPresets,
-    MaterialRandomizer,
-    ObjectPresets,
-    ObjectRandomizer,
-)
-# from roboverse_pack.randomization.presets.light_presets import LightScenarios
-
 from metasim.task.registry import get_task_class
 
-@dataclass
-class DomainRandomizationCfg:
-    enable: bool = True
-    seed: int | None = 42
+from metasim.randomization import DomainRandomizationManager, DRConfig
 
-    use_unified_object_randomizer: bool = True
-    cube_mass_range: tuple[float, float] = (0.3, 0.7)
-    robot_friction_range: tuple[float, float] = (0.5, 1.5)
-    robot_mass_range: tuple[float, float] = (0.2, 0.4)
-
-    enable_material_random: bool = True
-    cube_material_type: str = "wood"
-    sphere_material_type: str = "rubber"
-    box_material_type: str = "metal"
-
-    lighting_scenario: Literal["default", "indoor_room", "outdoor_scene", "studio", "demo"] = "default"
-
-    camera_scenario: Literal["combined", "position_only", "orientation_only", "look_at_only", "intrinsics_only", "image_only"] = "combined"
-    camera_name: str = "camera0"
+RANDOMIZATION_AVAILABLE = True
 
 
-class DomainRandomizationManager:
-    def __init__(self, cfg: DomainRandomizationCfg, scenario, sim_handler):
+def ensure_clean_state(handler, expected_state=None):
+    """Ensure environment is in clean initial state with intelligent validation."""
+    prev_state = None
+    stable_count = 0
+    max_steps = 10
+    min_steps = 2
 
-        self.cfg = cfg
-        self.scenario = scenario
-        self.sim_handler = sim_handler
-        self.randomizers = self._init_all_randomizers()
+    for step in range(max_steps):
+        handler.simulate()
+        current_state = handler.get_states()
 
-        if self.cfg.seed is not None:
-            torch.manual_seed(self.cfg.seed)
-            np.random.seed(self.cfg.seed)
-            if torch.cuda.is_available():
-                torch.cuda.manual_seed(self.cfg.seed)
+        if step >= min_steps:
+            if prev_state is not None:
+                is_stable = True
+                if hasattr(current_state, "objects") and hasattr(prev_state, "objects"):
+                    for obj_name, obj_state in current_state.objects.items():
+                        if obj_name in prev_state.objects:
+                            curr_dof = getattr(obj_state, "dof_pos", None)
+                            prev_dof = getattr(prev_state.objects[obj_name], "dof_pos", None)
+                            if curr_dof is not None and prev_dof is not None:
+                                if not torch.allclose(curr_dof, prev_dof, atol=1e-5):
+                                    is_stable = False
+                                    break
 
-    def _init_all_randomizers(self):
-        randomizers = {
-            "object": [],
-            "material": [],
-            "light": [],
-            "camera": []
-        }
+                if is_stable and expected_state is not None:
+                    is_correct_state = _validate_state_correctness(current_state, expected_state)
+                    if not is_correct_state:
+                        log.debug(f"State stable but incorrect at step {step}, continuing simulation...")
+                        stable_count = 0
+                        is_stable = False
 
-        if self.cfg.enable and self.cfg.use_unified_object_randomizer:
-            # Unified Object Randomization
-            robot_rand = ObjectRandomizer(ObjectPresets.robot_base(self.scenario.robots[0].name), seed=self.cfg.seed)
+                if is_stable:
+                    stable_count += 1
+                    if stable_count >= 2:
+                        break
+                else:
+                    stable_count = 0
 
-            # for rand in [cube_rand, sphere_rand, robot_rand]:
-            for rand in [robot_rand]:
-                rand.bind_handler(self.sim_handler)
-                randomizers["object"].append(rand)
+            prev_state = current_state
 
-        # 2. Initialize material randomizers
-        if self.cfg.enable and self.cfg.enable_material_random:
-            ## cube
-            # cube_mat_rand = MaterialRandomizer(
-            #     MaterialPresets.wood_object("cube", use_mdl=True, randomization_mode="combined"),
-            #     seed=self.cfg.seed
-            # )
-            ## sphere
-            # sphere_mat_rand = MaterialRandomizer(
-            #     MaterialPresets.rubber_object("sphere", randomization_mode="combined"),
-            #     seed=self.cfg.seed
-            # )
-            ## Box
-            box_mat_rand = MaterialRandomizer(
-                MaterialPresets.mdl_family_object("box_base", family="metal"),
-                seed=self.cfg.seed,
-            )
+    if expected_state is not None:
+        final_state = handler.get_states()
+        is_final_correct = _validate_state_correctness(final_state, expected_state)
+        if not is_final_correct:
+            log.warning(f"State validation failed after {max_steps} steps - reset may not have taken full effect")
 
-            # for rand in [cube_mat_rand, sphere_mat_rand, box_mat_rand]:
-            for rand in [box_mat_rand]:
-                rand.bind_handler(self.sim_handler)
-                randomizers["material"].append(rand)
+    handler.get_states()
 
-        # 3. Initialize light randomizers
-        # if self.cfg.enable:
-        #     light_configs = []
-        #     if self.cfg.lighting_scenario == "indoor_room":
-        #         light_configs = LightScenarios.indoor_room()
-        #     elif self.cfg.lighting_scenario == "outdoor_scene":
-        #         light_configs = LightScenarios.outdoor_scene()
-        #     elif self.cfg.lighting_scenario == "studio":
-        #         light_configs = LightScenarios.three_point_studio()
-        #     elif self.cfg.lighting_scenario == "demo":
-        #         light_configs = [
-        #             LightPresets.demo_colors("rainbow_light"),
-        #             LightPresets.demo_positions("disco_light"),
-        #             LightPresets.demo_positions("shadow_light")
-        #         ]
-        #     else:  # default
-        #         light_configs = [
-        #             LightPresets.outdoor_daylight("light"),
-        #             #LightPresets.indoor_ambient("ambient_light")
-        #         ]
 
-        #     for cfg in light_configs:
-        #         light_rand = LightRandomizer(cfg, seed=self.cfg.seed)
-        #         light_rand.bind_handler(self.sim_handler)
-        #         randomizers["light"].append(light_rand)
+def _validate_state_correctness(current_state, expected_state):
+    """Validate that current state matches expected initial state for critical objects."""
+    if not hasattr(current_state, "objects") or not hasattr(expected_state, "objects"):
+        return True
 
-        # 4. Initialize camera randomizer
-        if self.cfg.enable:
-            camera_rand = CameraRandomizer(
-                CameraPresets.surveillance_camera(self.cfg.camera_name),
-                seed=self.cfg.seed
-            )
-            camera_rand.bind_handler(self.sim_handler)
-            randomizers["camera"].append(camera_rand)
+    critical_objects = []
+    for obj_name, expected_obj in expected_state.objects.items():
+        if hasattr(expected_obj, "dof_pos") and getattr(expected_obj, "dof_pos", None) is not None:
+            critical_objects.append(obj_name)
 
-        return randomizers
+    if not critical_objects:
+        return True
 
-    def randomize_for_demo(self, demo_idx: int = 0):
-        """
-        Args:
-            demo_idx: current demonstration index
-        """
-        if not self.cfg.enable:
-            return
+    tolerance = 5e-3
 
-        log.info(f"=== Executing Domain Randomization for Demo {demo_idx} ===")
+    for obj_name in critical_objects:
+        if obj_name not in current_state.objects:
+            continue
 
-        # 1. Object Randomization
-        for i, rand in enumerate(self.randomizers["object"]):
-            try:
-                rand()
-                log.debug(f"Object Randomizer {i+1} applied successfully")
-            except Exception as e:
-                log.warning(f"Object Randomizer {i+1} failed: {str(e)}")
+        expected_obj = expected_state.objects[obj_name]
+        current_obj = current_state.objects[obj_name]
 
-        # 2. Material Randomization
-        for i, rand in enumerate(self.randomizers["material"]):
-            try:
-                rand()
-                log.debug(f"Material Randomizer {i+1} applied successfully")
-            except Exception as e:
-                log.warning(f"Material Randomizer {i+1} failed: {str(e)}")
+        expected_dof = getattr(expected_obj, "dof_pos", None)
+        current_dof = getattr(current_obj, "dof_pos", None)
 
-        # 3. Light Randomization
-        for i, rand in enumerate(self.randomizers["light"]):
-            try:
-                rand()
-                log.debug(f"Light Randomizer {i+1} applied successfully")
-            except Exception as e:
-                log.warning(f"Light Randomizer {i+1} failed: {str(e)}")
+        if expected_dof is not None and current_dof is not None:
+            if not torch.allclose(current_dof, expected_dof, atol=tolerance):
+                diff = torch.abs(current_dof - expected_dof).max().item()
+                log.debug(f"DOF mismatch for {obj_name}: max diff = {diff:.6f} (tolerance = {tolerance})")
+                return False
 
-        # 4. Camera Randomization
-        for i, rand in enumerate(self.randomizers["camera"]):
-            try:
-                rand()
-                log.debug(f"Camera Randomizer {i+1} applied successfully")
-            except Exception as e:
-                log.warning(f"Camera Randomizer {i+1} failed: {str(e)}")
-
-        log.info(f"=== Domain Randomization for Demo {demo_idx} Completed ===")
+    return True
 
 class DPRunner(BaseRunner):
     include_keys = ["global_step", "epoch"]
@@ -484,45 +403,73 @@ class DPRunner(BaseRunner):
     def evaluate(self, ckpt_path=None):
         args = self.eval_args
 
-        # Setup Domain Randomization Config
-        self.dr_cfg = DomainRandomizationCfg(
-            enable=False,
-            seed=args.dr_seed if hasattr(args, "dr_seed") else 42,
-            use_unified_object_randomizer=True,
-            lighting_scenario=args.lighting_scenario if hasattr(args, "lighting_scenario") else "default",
-            camera_scenario=args.camera_scenario if hasattr(args, "camera_scenario") else "combined",
-            camera_name="camera0"
-        )
-
         num_envs: int = args.num_envs
         log.info(f"Using GPU device: {args.gpu_id}")
         task_cls = get_task_class(args.task)
 
-        if args.task == 'stack_cube':
+        # Camera configuration
+        if args.task in {"stack_cube", "pick_cube", "pick_butter"}:
             dp_camera = True
-        elif args.task == 'close_box':
-            dp_camera = False
         else:
-            dp_camera = True
+            dp_camera = args.task != "close_box"
 
-        if dp_camera:
-            # import warnings
-            # warnings.warn("Using dp camera position!")
+        is_libero_dataset = "libero_90" in args.task
+
+        if is_libero_dataset:
+            dp_pos = (2.0, 0.0, 2)
+        elif dp_camera:
             dp_pos = (1.0, 0.0, 0.75)
         else:
             dp_pos = (1.5, 0.0, 1.5)
 
         camera = PinholeCameraCfg(
             name="camera0",
+            data_types=["rgb", "depth"],
+            width=256,
+            height=256,
             pos=dp_pos,
-            look_at=(0.0, 0.0, 0.0)
+            look_at=(0.0, 0.0, 0.0),
         )
+
+        # Lighting setup
+        render_mode = getattr(args, 'render_mode', 'raytracing')
+        if render_mode == "pathtracing":
+            ceiling_main = 18000.0
+            ceiling_corners = 8000.0
+        else:
+            ceiling_main = 12000.0
+            ceiling_corners = 5000.0
+
+        from metasim.scenario.lights import DiskLightCfg, SphereLightCfg
+        lights = [
+            DiskLightCfg(
+                name="ceiling_main",
+                intensity=ceiling_main,
+                color=(1.0, 1.0, 1.0),
+                radius=1.2,
+                pos=(0.0, 0.0, 2.8),
+                rot=(0.7071, 0.0, 0.0, 0.7071),
+            ),
+            SphereLightCfg(
+                name="ceiling_ne", intensity=ceiling_corners, color=(1.0, 1.0, 1.0), radius=0.6, pos=(1.0, 1.0, 2.5)
+            ),
+            SphereLightCfg(
+                name="ceiling_nw", intensity=ceiling_corners, color=(1.0, 1.0, 1.0), radius=0.6, pos=(-1.0, 1.0, 2.5)
+            ),
+            SphereLightCfg(
+                name="ceiling_sw", intensity=ceiling_corners, color=(1.0, 1.0, 1.0), radius=0.6, pos=(-1.0, -1.0, 2.5)
+            ),
+            SphereLightCfg(
+                name="ceiling_se", intensity=ceiling_corners, color=(1.0, 1.0, 1.0), radius=0.6, pos=(1.0, -1.0, 2.5)
+            ),
+        ]
 
         scenario = task_cls.scenario.update(
             robots=[args.robot],
             simulator=args.sim,
             num_envs=args.num_envs,
             headless=args.headless,
+            lights=lights,
             cameras=[camera]
         )
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -530,25 +477,43 @@ class DPRunner(BaseRunner):
         env = task_cls(scenario, device=device)
         robot = get_robot(args.robot)
 
-        # Initialize Domain Randomization Manager
-        if self.dr_cfg.enable:
-            self.randomization_manager = DomainRandomizationManager(
-                cfg=self.dr_cfg,
-                scenario=scenario,
-                sim_handler=env.handler
-            )
-            log.info("Domain Randomization Manager initialized successfully")
+        # Domain Randomization configuration
+        dr_level = getattr(args, 'level', 0)
+        dr_scene_mode = getattr(args, 'scene_mode', 0)
+        dr_seed = getattr(args, 'randomization_seed', None)
+
+        if not RANDOMIZATION_AVAILABLE:
+            if dr_level > 0:
+                log.warning("Domain randomization requested but not available!")
+            randomization_manager = None
         else:
-            self.randomization_manager = None
-            log.info("Domain Randomization is disabled")
+            from dataclasses import dataclass as dc
+            @dc
+            class SimpleRenderCfg:
+                mode: str = render_mode
+
+            randomization_manager = DomainRandomizationManager(
+                config=DRConfig(
+                    level=dr_level,
+                    scene_mode=dr_scene_mode,
+                    randomization_seed=dr_seed,
+                ),
+                scenario=scenario,
+                handler=env.handler,
+                init_states=None,
+                render_cfg=SimpleRenderCfg(mode=render_mode)
+            )
+            if dr_level > 0:
+                log.info(f"Domain Randomization enabled: level={dr_level}, scene_mode={dr_scene_mode}, seed={dr_seed}")
+            else:
+                log.info("Domain Randomization disabled (level=0)")
 
         toc = time.time()
         log.trace(f"Time to launch: {toc - tic:.2f}s")
 
         time_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         checkpoint = self.get_checkpoint_path()
-        # checkpoint = ckpt_path if checkpoint is None else checkpoint
-        checkpoint = ckpt_path if ckpt_path is None else checkpoint
+        checkpoint = ckpt_path if ckpt_path is not None else checkpoint
         if checkpoint is None:
             raise ValueError(
                 "No checkpoint found, please provide a valid checkpoint path."
@@ -580,6 +545,30 @@ class DPRunner(BaseRunner):
         toc = time.time()
         log.trace(f"Time to load data: {toc - tic:.2f}s")
 
+        # Update DR manager with init_states
+        if randomization_manager is not None:
+            randomization_manager.init_states = init_states
+            randomization_manager.original_positions = {}
+            for demo_idx, init_state in enumerate(init_states):
+                demo_key = f"demo_{demo_idx}"
+                randomization_manager.original_positions[demo_key] = {}
+
+                if "objects" in init_state:
+                    for obj_name, obj_state in init_state["objects"].items():
+                        randomization_manager.original_positions[demo_key][f"obj_{obj_name}"] = {
+                            "x": float(obj_state["pos"][0]),
+                            "y": float(obj_state["pos"][1]),
+                            "z": float(obj_state["pos"][2]),
+                        }
+
+                if "robots" in init_state:
+                    for robot_name, robot_state in init_state["robots"].items():
+                        randomization_manager.original_positions[demo_key][f"robot_{robot_name}"] = {
+                            "x": float(robot_state["pos"][0]),
+                            "y": float(robot_state["pos"][1]),
+                            "z": float(robot_state["pos"][2]),
+                        }
+
         total_success = 0
         total_completed = 0
         if args.max_demo is None:
@@ -595,17 +584,29 @@ class DPRunner(BaseRunner):
             demo_end_idx = min(demo_start_idx + num_envs, num_demos)
             current_demo_idxs = list(range(demo_start_idx, demo_end_idx))
 
-            ## Randomize environment for current batch of demos
-            if self.randomization_manager is not None:
-                for demo_idx in current_demo_idxs:
-                    self.randomization_manager.randomize_for_demo(demo_idx)
+            # Apply domain randomization before reset
+            if randomization_manager is not None and dr_level > 0:
+                for env_id, demo_idx in enumerate(current_demo_idxs):
+                    log.info(f"[DP Eval] Episode {demo_idx}: Applying DR")
+                    randomization_manager.apply_randomization(demo_idx=demo_idx, is_initial=(demo_start_idx == args.task_id_range_low))
+                    randomization_manager.update_positions_to_table(demo_idx=demo_idx, env_id=env_id)
+                    randomization_manager.update_camera_look_at(env_id=env_id)
+                    randomization_manager.apply_camera_randomization()
 
-            ## Reset before first step
             tic = time.time()
             obs, extras = env.reset(states=init_states[demo_start_idx:demo_end_idx])
-            policyRunner.reset()
             toc = time.time()
             log.trace(f"Time to reset: {toc - tic:.2f}s")
+
+            # Ensure environment stabilizes after reset
+            if randomization_manager is not None and dr_level > 0:
+                ensure_clean_state(env.handler)
+
+                if hasattr(env, "_episode_steps"):
+                    for env_id in range(num_envs):
+                        env._episode_steps[env_id] = 0
+
+            policyRunner.reset()
 
             step = 0
             MaxStep = args.max_step
@@ -613,16 +614,9 @@ class DPRunner(BaseRunner):
             TimeOut = [False] * num_envs
             images_list = []
             print(policyRunner.policy_cfg)
-            # env.handler.refresh_render()
 
-            dynamic_dr_interval = 20
             while step < MaxStep:
                 log.debug(f"Step {step}")
-
-                ## DR after dynamic_dr_interval steps
-                # if self.randomization_manager is not None and step % dynamic_dr_interval == 0 and step > 0:
-                #     log.info(f"Step {step}: Executing dynamic domain randomization")
-                #     self.randomization_manager.randomize_for_demo(demo_idx=demo_start_idx + step//dynamic_dr_interval)
 
                 new_obs = {
                     "rgb": obs.cameras["camera0"].rgb,
@@ -659,7 +653,9 @@ class DPRunner(BaseRunner):
                     f.write(f"SuccessOnce: {SuccessOnce[i]}\n")
                     f.write(f"SuccessEnd: {SuccessEnd[i]}\n")
                     f.write(f"TimeOut: {TimeOut[i]}\n")
-                    f.write(f"Domain Randomization Enabled: {self.dr_cfg.enable}\n")  # Record DR status
+                    f.write(f"Domain Randomization Level: {dr_level}\n")
+                    f.write(f"Domain Randomization Scene Mode: {dr_scene_mode}\n")
+                    f.write(f"Domain Randomization Seed: {dr_seed}\n")
                     f.write(
                         f"Cumulative Average Success Rate: {total_success / total_completed:.4f}\n"
                     )
@@ -672,8 +668,10 @@ class DPRunner(BaseRunner):
         with open(f"tmp/{ckpt_name}/final_stats.txt", "w") as f:
             f.write(f"Total Success: {total_success}\n")
             f.write(f"Total Completed: {total_completed}\n")
-            f.write(f"Average Average Success Rate: {total_success / total_completed:.4f}\n")
-            f.write(f"Domain Randomization Config: {self.dr_cfg}\n")  # save DR config
+            f.write(f"Average Success Rate: {total_success / total_completed:.4f}\n")
+            f.write(f"Domain Randomization Level: {dr_level}\n")
+            f.write(f"Domain Randomization Scene Mode: {dr_scene_mode}\n")
+            f.write(f"Domain Randomization Seed: {dr_seed}\n")
         env.close()
 
     def run(

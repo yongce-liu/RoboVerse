@@ -209,25 +209,14 @@ def main():
     args = parse_args()
     num_envs: int = args.num_envs
 
-    # specificly for isaacgym
-    if args.sim == "isaacgym":
-        pass
-
-    ## Import put here to support isaacgym
-
     import numpy as np
     import torch
 
-    # from metasim.scenario.scenario import RandomizationCfg
     from metasim.scenario.cameras import PinholeCameraCfg
     from metasim.scenario.lights import DiskLightCfg, SphereLightCfg
-    from metasim.constants import SimType
     from metasim.utils.demo_util import get_traj
     from metasim.utils.setup_util import get_robot
 
-#    from metasim.utils.setup_util import get_sim_env_class
-
-    # Camera configuration (same logic as collect_demo.py)
     task_cls = get_task_class(args.task)
 
     if args.task in {"stack_cube", "pick_cube", "pick_butter"}:
@@ -286,18 +275,6 @@ def main():
         ),
     ]
 
-    # randomization = RandomizationCfg(camera=False, light=False, ground=False, reflection=False)
-    # scenario = ScenarioCfg(
-    #     task=args.task,
-    #     robots=[args.robot],
-    #     cameras=[camera],
-    #     # random=randomization,
-    #     sim=args.sim,
-    #     num_envs=args.num_envs,
-    #     try_add_table=True,
-    #     headless=args.headless,
-    # )
-
     scenario = task_cls.scenario.update(
         robots=[args.robot],
         simulator=args.sim,
@@ -308,8 +285,6 @@ def main():
     )
 
     tic = time.time()
-    # env_class = get_sim_env_class(SimType(args.sim))
-    # env = env_class(scenario)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     env = task_cls(scenario, device=device)
     robot = get_robot(args.robot)
@@ -325,17 +300,15 @@ def main():
     toc = time.time()
     log.trace(f"Time to load data: {toc - tic:.2f}s")
 
-    # Initialize Domain Randomization Manager (same logic as collect_demo.py)
-    # Note: DR Manager is always created, even for level=0
-    # The apply_randomization() method will skip operations when level=0
+    # Initialize Domain Randomization Manager
     if not RANDOMIZATION_AVAILABLE:
         log.warning("Randomization components not available!")
         raise ImportError("Domain Randomization not available. Please check installation.")
 
-    # Determine render mode from args (if available)
+    # Determine render mode from args
     render_mode = getattr(args, 'render_mode', 'raytracing')
 
-    # Create a simple render config for DR (needed for light intensity adjustment)
+    # Create render config for DR
     from dataclasses import dataclass
     @dataclass
     class SimpleRenderCfg:
@@ -426,30 +399,27 @@ def main():
     num_eval: int = args.num_eval
 
     for i in range(num_eval):
-        # Use positive indexing (same as collect_demo.py)
         demo_idx = i
 
-        # Apply domain randomization BEFORE reset (same logic as collect_demo.py)
-        # Note: If level=0, apply_randomization() will skip but update_positions_to_table() still runs
+        # Apply domain randomization before reset
         log.info(f"[ACT Eval] Episode {i}: Applying DR for demo_idx={demo_idx}")
         randomization_manager.apply_randomization(demo_idx=demo_idx, is_initial=(i == 0))
         randomization_manager.update_positions_to_table(demo_idx=demo_idx, env_id=0)
         randomization_manager.update_camera_look_at(env_id=0)
-        randomization_manager.apply_camera_randomization()  # Apply camera randomization after baseline adjustment
+        randomization_manager.apply_camera_randomization()
 
         tic = time.time()
         obs, extras = env.reset(states=[init_states[demo_idx]])
         toc = time.time()
         log.trace(f"Time to reset: {toc - tic:.2f}s")
 
-        # Ensure environment stabilizes after reset (same as collect_demo.py)
+        # Ensure environment stabilizes after reset
         ensure_clean_state(env.handler, expected_state=init_states[demo_idx])
 
         # Reset episode step counter after stabilization
         if hasattr(env, "_episode_steps"):
             env._episode_steps[0] = 0
 
-        # save_obs(obs, 0)
         log.debug(f"Env: {i}")
 
         step = 0
