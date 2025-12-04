@@ -83,10 +83,12 @@ class FastTD3Config:
     # Logging & Checkpointing
     wandb_project: str = "get_started_fttd3"
     use_wandb: bool = False
+    track: bool = False  # CleanRL-style alias for use_wandb
     wandb_entity: Optional[str] = None
     checkpoint_path: Optional[str] = None
     eval_interval: int = 700
     save_interval: int = 700
+    log_interval: int = 1  # Logging frequency (iterations)
     video_width: int = 1024
     video_height: int = 1024
     max_iterations: int = 50000

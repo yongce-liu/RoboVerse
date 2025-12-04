@@ -2,9 +2,13 @@
 #
 # This file is based on CleanRL's TD3 implementation and has been adapted for RoboVerse.
 # Original CleanRL code is licensed under MIT License.
+from __future__ import annotations
 
+import csv
+import os
 import random
 import time
+from typing import Any
 
 try:
     import isaacgym  # noqa: F401
@@ -20,6 +24,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 import tyro
 from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
 
 # RoboVerse imports
 
@@ -30,6 +35,7 @@ import metasim  # noqa: F401
 from roboverse_learn.rl.clean_rl.buffer import ReplayBuffer
 from roboverse_learn.rl.episode_tracker import EpisodeTracker
 from roboverse_learn.rl.configs.clean_rl.td3 import CleanRLTD3Config
+from roboverse_learn.rl.logging.metrics_logger import save_metrics_history
 
 
 
@@ -50,14 +56,14 @@ def make_roboverse_env(args):
 
 # ALGO LOGIC: initialize agent here:
 class QNetwork(nn.Module):
-    def __init__(self, env):
+    def __init__(self, env, hidden_dim=256):
         super().__init__()
-        self.fc1 = nn.Linear(
-            np.array(env.single_observation_space.shape).prod() + np.prod(env.single_action_space.shape),
-            256,
-        )
-        self.fc2 = nn.Linear(256, 256)
-        self.fc3 = nn.Linear(256, 1)
+        obs_dim = np.array(env.single_observation_space.shape).prod()
+        action_dim = np.prod(env.single_action_space.shape)
+
+        self.fc1 = nn.Linear(obs_dim + action_dim, hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
+        self.fc3 = nn.Linear(hidden_dim, 1)
 
     def forward(self, x, a):
         x = torch.cat([x, a], 1)
@@ -68,11 +74,14 @@ class QNetwork(nn.Module):
 
 
 class Actor(nn.Module):
-    def __init__(self, env):
+    def __init__(self, env, hidden_dim=256):
         super().__init__()
-        self.fc1 = nn.Linear(np.array(env.single_observation_space.shape).prod(), 256)
-        self.fc2 = nn.Linear(256, 256)
-        self.fc_mu = nn.Linear(256, np.prod(env.single_action_space.shape))
+        obs_dim = np.array(env.single_observation_space.shape).prod()
+        action_dim = np.prod(env.single_action_space.shape)
+
+        self.fc1 = nn.Linear(obs_dim, hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
+        self.fc_mu = nn.Linear(hidden_dim, action_dim)
         # action rescaling
         self.register_buffer(
             "action_scale",
@@ -130,12 +139,12 @@ if __name__ == "__main__":
     envs = make_roboverse_env(args)
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
 
-    actor = Actor(envs).to(device)
-    qf1 = QNetwork(envs).to(device)
-    qf2 = QNetwork(envs).to(device)
-    qf1_target = QNetwork(envs).to(device)
-    qf2_target = QNetwork(envs).to(device)
-    target_actor = Actor(envs).to(device)
+    actor = Actor(envs, hidden_dim=args.actor_hidden_dim).to(device)
+    qf1 = QNetwork(envs, hidden_dim=args.critic_hidden_dim).to(device)
+    qf2 = QNetwork(envs, hidden_dim=args.critic_hidden_dim).to(device)
+    qf1_target = QNetwork(envs, hidden_dim=args.critic_hidden_dim).to(device)
+    qf2_target = QNetwork(envs, hidden_dim=args.critic_hidden_dim).to(device)
+    target_actor = Actor(envs, hidden_dim=args.actor_hidden_dim).to(device)
     target_actor.load_state_dict(actor.state_dict())
     qf1_target.load_state_dict(qf1.state_dict())
     qf2_target.load_state_dict(qf2.state_dict())
@@ -160,6 +169,17 @@ if __name__ == "__main__":
 
     # Initialize episode tracker
     episode_tracker = EpisodeTracker(args.num_envs, device)
+
+    # Initialize metrics tracking
+    model_dir = f"runs/{run_name}"
+    metrics_path = os.path.join(model_dir, "metrics.csv")
+    metrics_history: list[dict[str, Any]] = []
+
+    # Track number of training updates
+    update_step = 0
+
+    # Create progress bar for total timesteps
+    pbar = tqdm(total=args.total_timesteps, desc="TD3 Training")
 
     while global_step < args.total_timesteps:
         # ALGO LOGIC: put action logic here
@@ -207,15 +227,32 @@ if __name__ == "__main__":
             qf2_loss = F.mse_loss(qf2_a_values, next_q_value)
             qf_loss = qf1_loss + qf2_loss
 
+            # Compute TD error statistics (for logging)
+            with torch.no_grad():
+                td_error = (next_q_value - qf1_a_values).detach()
+                td_error_mean = td_error.mean()
+                td_error_std = td_error.std()
+                td_error_abs_mean = td_error.abs().mean()
+
             # optimize the model
             q_optimizer.zero_grad()
             qf_loss.backward()
+            critic_grad_norm = torch.nn.utils.clip_grad_norm_(
+                list(qf1.parameters()) + list(qf2.parameters()),
+                max_norm=float('inf')
+            )
             q_optimizer.step()
+
+            update_step += 1
 
             if global_step % args.policy_frequency == 0:
                 actor_loss = -qf1(data.observations, actor(data.observations)).mean()
                 actor_optimizer.zero_grad()
                 actor_loss.backward()
+                actor_grad_norm = torch.nn.utils.clip_grad_norm_(
+                    actor.parameters(),
+                    max_norm=float('inf')
+                )
                 actor_optimizer.step()
 
                 # update the target network
@@ -226,27 +263,106 @@ if __name__ == "__main__":
                 for param, target_param in zip(qf2.parameters(), qf2_target.parameters()):
                     target_param.data.copy_(args.tau * param.data + (1 - args.tau) * target_param.data)
 
-            if global_step % 100 == 0:
+            if global_step % args.log_interval == 0:
+                # Compute action statistics
+                with torch.no_grad():
+                    current_actions = actor(data.observations)
+                    action_mean = current_actions.mean(dim=0).cpu().numpy()
+                    action_std = current_actions.std(dim=0).cpu().numpy()
+                    action_l2_norm = torch.norm(current_actions, p=2, dim=-1).mean().cpu().item()
+
+                # Compute buffer usage
+                buffer_usage = rb.pos / args.buffer_size
+
                 writer.add_scalar("losses/qf1_values", qf1_a_values.mean().item(), global_step)
                 writer.add_scalar("losses/qf2_values", qf2_a_values.mean().item(), global_step)
                 writer.add_scalar("losses/qf1_loss", qf1_loss.item(), global_step)
                 writer.add_scalar("losses/qf2_loss", qf2_loss.item(), global_step)
                 writer.add_scalar("losses/qf_loss", qf_loss.item() / 2.0, global_step)
                 writer.add_scalar("losses/actor_loss", actor_loss.item(), global_step)
+                writer.add_scalar("losses/critic_grad_norm", critic_grad_norm.item(), global_step)
+                writer.add_scalar("losses/actor_grad_norm", actor_grad_norm.item(), global_step)
+                writer.add_scalar("losses/td_error_mean", td_error_mean.item(), global_step)
+                writer.add_scalar("losses/td_error_std", td_error_std.item(), global_step)
+                writer.add_scalar("actions/action_mean", np.mean(action_mean), global_step)
+                writer.add_scalar("actions/action_std", np.mean(action_std), global_step)
+                writer.add_scalar("actions/action_l2_norm", action_l2_norm, global_step)
+                writer.add_scalar("buffer/usage", buffer_usage, global_step)
 
                 # Log episode statistics
-                avg_return, avg_length = episode_tracker.get_stats()
+                episode_stats = episode_tracker.get_detailed_stats()
                 if episode_tracker.get_episode_count() > 0:
-                    writer.add_scalar("charts/avg_episodic_return", avg_return, global_step)
-                    writer.add_scalar("charts/avg_episodic_length", avg_length, global_step)
-                    print(f"SPS: {int(global_step / (time.time() - start_time))}, avg_return: {avg_return:.2f}, avg_length: {avg_length:.1f}, timesteps: {global_step}")
-                else:
-                    print(f"SPS: {int(global_step / (time.time() - start_time))}, timesteps: {global_step}")
-                writer.add_scalar(
-                    "charts/SPS",
-                    int(global_step / (time.time() - start_time)),
-                    global_step,
-                )
+                    writer.add_scalar("charts/episodic_return_mean", episode_stats['return_mean'], global_step)
+                    writer.add_scalar("charts/episodic_return_std", episode_stats['return_std'], global_step)
+                    writer.add_scalar("charts/episodic_length_mean", episode_stats['length_mean'], global_step)
+                    writer.add_scalar("charts/episodic_length_std", episode_stats['length_std'], global_step)
+
+                writer.add_scalar("charts/updates", update_step, global_step)
+                writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
+
+                # Compute wall clock time and SPS for metrics
+                wall_clock_time = time.time() - start_time
+                sps = int(global_step / wall_clock_time)
+
+                # Build metrics entry for CSV export
+                metrics_entry = {
+                    "global_step": int(global_step),
+                    "updates": int(update_step),
+                    "speed": float(sps),
+                    "wall_clock_time": float(wall_clock_time),
+                    "qf1_values": float(qf1_a_values.mean().item()),
+                    "qf2_values": float(qf2_a_values.mean().item()),
+                    "qf1_loss": float(qf1_loss.item()),
+                    "qf2_loss": float(qf2_loss.item()),
+                    "qf_loss": float(qf_loss.item() / 2.0),
+                    "actor_loss": float(actor_loss.item()),
+                    "critic_grad_norm": float(critic_grad_norm.item()),
+                    "actor_grad_norm": float(actor_grad_norm.item()),
+                    "td_error_mean": float(td_error_mean.item()),
+                    "td_error_std": float(td_error_std.item()),
+                    "action_mean": float(np.mean(action_mean)),
+                    "action_std": float(np.mean(action_std)),
+                    "action_l2_norm": float(action_l2_norm),
+                    "buffer_usage": float(buffer_usage),
+                }
+                if episode_tracker.get_episode_count() > 0:
+                    metrics_entry.update({
+                        "episodic_return_mean": float(episode_stats['return_mean']),
+                        "episodic_return_std": float(episode_stats['return_std']),
+                        "episodic_length_mean": float(episode_stats['length_mean']),
+                        "episodic_length_std": float(episode_stats['length_std']),
+                        "episode_count": int(episode_tracker.get_episode_count()),
+                    })
+                metrics_history.append(metrics_entry)
+
+                # Save checkpoint every save_interval steps
+                if args.save_interval > 0 and global_step % (args.save_interval * args.log_interval) == 0:
+                    checkpoint_path = os.path.join(model_dir, f"checkpoint_{global_step}.pt")
+                    os.makedirs(model_dir, exist_ok=True)
+                    torch.save({
+                        'global_step': global_step,
+                        'actor_state_dict': actor.state_dict(),
+                        'qf1_state_dict': qf1.state_dict(),
+                        'qf2_state_dict': qf2.state_dict(),
+                        'actor_optimizer_state_dict': actor_optimizer.state_dict(),
+                        'q_optimizer_state_dict': q_optimizer.state_dict(),
+                    }, checkpoint_path)
+                    print(f"Saved checkpoint to {checkpoint_path}")
+                    # Also save metrics
+                    save_metrics_history(metrics_path, metrics_history)
+
+                # Update progress bar
+                pbar.update(args.num_envs)
+                if episode_tracker.get_episode_count() > 0:
+                    pbar.set_postfix({
+                        'return': f"{episode_stats['return_mean']:.2f}",
+                        'length': f"{episode_stats['length_mean']:.1f}",
+                        'SPS': sps
+                    })
+
+    # Save final metrics
+    pbar.close()
+    save_metrics_history(metrics_path, metrics_history)
 
     if args.save_model:
         model_path = f"runs/{run_name}/{args.exp_name}.cleanrl_model"

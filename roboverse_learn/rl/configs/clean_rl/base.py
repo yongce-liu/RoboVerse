@@ -37,10 +37,12 @@ class BaseRLConfig:
     max_iterations: int = 50000
     save_interval: int = 100
 
-    # Logging
-    use_wandb: bool = False
+    # Logging (for compatibility with different RL frameworks)
+    use_wandb: bool = False  # RSL-RL style
+    track: bool = False  # CleanRL style (alias for use_wandb)
     wandb_project: str = "roboverse_rl"
     wandb_entity: Optional[str] = None
+    log_interval: int = 1  # Logging frequency
 
     # Model directory
     model_dir: Optional[str] = None

@@ -15,10 +15,13 @@ class CleanRLTD3Config(BaseRLConfig):
     # Tracking / logging flags (CleanRL-style)
     track: bool = False
     wandb_project: str = "cleanRL"
+    wandb_entity: Optional[str] = None
     capture_video: bool = False
     save_model: bool = False
     upload_model: bool = False
     hf_entity: str = ""
+    log_interval: int = 262144
+    save_interval: int = 25
 
     # RoboVerse specific arguments
     task: str = "reach_origin"
@@ -28,18 +31,22 @@ class CleanRLTD3Config(BaseRLConfig):
     device: str = "cuda"
 
     # Algorithm specific arguments
-    total_timesteps: int = 10000
+    total_timesteps: int = 100000000
     learning_rate: float = 3e-4
-    num_envs: int = 128
-    buffer_size: int = int(1e6)
+    num_envs: int = 4096
+    buffer_size: int = int(1e7)
     gamma: float = 0.99
     tau: float = 0.005
-    batch_size: int = 256
+    batch_size: int = 4096
     policy_noise: float = 0.2
-    exploration_noise: float = 0.1
-    learning_starts: int = 10
+    exploration_noise: float = 0.05
+    learning_starts: int = 25000
     policy_frequency: int = 2
     noise_clip: float = 0.5
+
+    # Network architecture
+    actor_hidden_dim: int = 256
+    critic_hidden_dim: int = 256
 
 
 __all__ = ["CleanRLTD3Config"]
