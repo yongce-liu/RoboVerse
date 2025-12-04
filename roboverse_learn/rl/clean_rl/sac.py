@@ -130,7 +130,7 @@ class Actor(nn.Module):
 if __name__ == "__main__":
 
     args = tyro.cli(CleanRLSACConfig)
-    args.total_timesteps = args.num_iterations * args.num_envs
+    args.total_timesteps = args.max_iterations * args.num_envs
     run_name = f"{args.exp_name}__{args.seed}__{int(time.time())}"
     if args.track:
         import wandb
@@ -211,9 +211,9 @@ if __name__ == "__main__":
     metrics_history: list[dict[str, Any]] = []
 
     # Create progress bar for total iterations (each iteration collects num_envs steps)
-    pbar = tqdm(total=args.num_iterations, desc="SAC Training")
+    pbar = tqdm(total=args.max_iterations, desc="SAC Training")
 
-    for iteration in range(1, args.num_iterations + 1):
+    for iteration in range(1, args.max_iterations + 1):
         # ALGO LOGIC: put action logic here
         if global_step < args.learning_starts:
             actions = torch.tensor([envs.single_action_space.sample() for _ in range(envs.num_envs)], device=device)

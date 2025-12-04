@@ -100,7 +100,7 @@ if __name__ == "__main__":
     args = tyro.cli(CleanRLPPOConfig)
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
-    args.total_timesteps = args.batch_size *  args.num_iterations
+    args.total_timesteps = args.batch_size *  args.max_iterations
     run_name = f"{args.exp_name}__{args.seed}__{int(time.time())}"
     if args.track:
         import wandb
@@ -159,11 +159,11 @@ if __name__ == "__main__":
     metrics_history: list[dict[str, Any]] = []
 
     start_time = time.time()
-    pbar = tqdm(total=args.num_iterations, desc="PPO Training")
-    for iteration in range(1, args.num_iterations + 1):
+    pbar = tqdm(total=args.max_iterations, desc="PPO Training")
+    for iteration in range(1, args.max_iterations + 1):
         # Annealing the rate if instructed to do so.
         if args.anneal_lr:
-            frac = 1.0 - (iteration - 1.0) / args.num_iterations
+            frac = 1.0 - (iteration - 1.0) / args.max_iterations
             lrnow = frac * args.learning_rate
             optimizer.param_groups[0]["lr"] = lrnow
 

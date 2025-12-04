@@ -108,7 +108,7 @@ class Actor(nn.Module):
 if __name__ == "__main__":
 
     args = tyro.cli(CleanRLTD3Config)
-    args.total_timesteps = args.num_iterations * args.num_envs
+    args.total_timesteps = args.max_iterations * args.num_envs
     run_name = f"{args.exp_name}__{args.seed}__{int(time.time())}"
     if args.track:
         import wandb
@@ -180,9 +180,9 @@ if __name__ == "__main__":
     update_step = 0
 
     # Create progress bar for total iterations (each iteration collects num_envs steps)
-    pbar = tqdm(total=args.num_iterations, desc="TD3 Training")
+    pbar = tqdm(total=args.max_iterations, desc="TD3 Training")
 
-    for iteration in range(1, args.num_iterations + 1):
+    for iteration in range(1, args.max_iterations + 1):
         # ALGO LOGIC: put action logic here
         if global_step < args.learning_starts:
              actions = torch.tensor([envs.single_action_space.sample() for _ in range(envs.num_envs)], device=device)
