@@ -14,10 +14,17 @@ from rich.logging import RichHandler
 
 rootutils.setup_root(__file__, pythonpath=True)
 log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
-# from metasim.scenario.scenario import ScenarioCfg
-from metasim.utils.kinematics import get_curobo_models
 
+from metasim.utils.kinematics import get_curobo_models
 from metasim.task.registry import get_task_class
+
+# Try to import randomization components
+try:
+    from metasim.randomization import DomainRandomizationManager, DRConfig
+    RANDOMIZATION_AVAILABLE = True
+except ImportError as e:
+    log.warning(f"Domain randomization not available: {e}")
+    RANDOMIZATION_AVAILABLE = False
 
 
 
@@ -38,6 +45,89 @@ def images_to_video(images, video_path, frame_size=(1920, 1080), fps=30):
 
     writer.close()
     print("Video created successfully!")
+
+
+def ensure_clean_state(handler, expected_state=None):
+    """Ensure environment is in clean initial state with intelligent validation."""
+    prev_state = None
+    stable_count = 0
+    max_steps = 10
+    min_steps = 2
+
+    for step in range(max_steps):
+        handler.simulate()
+        current_state = handler.get_states()
+
+        if step >= min_steps:
+            if prev_state is not None:
+                is_stable = True
+                if hasattr(current_state, "objects") and hasattr(prev_state, "objects"):
+                    for obj_name, obj_state in current_state.objects.items():
+                        if obj_name in prev_state.objects:
+                            curr_dof = getattr(obj_state, "dof_pos", None)
+                            prev_dof = getattr(prev_state.objects[obj_name], "dof_pos", None)
+                            if curr_dof is not None and prev_dof is not None:
+                                if not torch.allclose(curr_dof, prev_dof, atol=1e-5):
+                                    is_stable = False
+                                    break
+
+                if is_stable and expected_state is not None:
+                    is_correct_state = _validate_state_correctness(current_state, expected_state)
+                    if not is_correct_state:
+                        log.debug(f"State stable but incorrect at step {step}, continuing simulation...")
+                        stable_count = 0
+                        is_stable = False
+
+                if is_stable:
+                    stable_count += 1
+                    if stable_count >= 2:
+                        break
+                else:
+                    stable_count = 0
+
+            prev_state = current_state
+
+    if expected_state is not None:
+        final_state = handler.get_states()
+        is_final_correct = _validate_state_correctness(final_state, expected_state)
+        if not is_final_correct:
+            log.warning(f"State validation failed after {max_steps} steps - reset may not have taken full effect")
+
+    handler.get_states()
+
+
+def _validate_state_correctness(current_state, expected_state):
+    """Validate that current state matches expected initial state for critical objects."""
+    if not hasattr(current_state, "objects") or not hasattr(expected_state, "objects"):
+        return True
+
+    critical_objects = []
+    for obj_name, expected_obj in expected_state.objects.items():
+        if hasattr(expected_obj, "dof_pos") and getattr(expected_obj, "dof_pos", None) is not None:
+            critical_objects.append(obj_name)
+
+    if not critical_objects:
+        return True
+
+    tolerance = 5e-3
+
+    for obj_name in critical_objects:
+        if obj_name not in current_state.objects:
+            continue
+
+        expected_obj = expected_state.objects[obj_name]
+        current_obj = current_state.objects[obj_name]
+
+        expected_dof = getattr(expected_obj, "dof_pos", None)
+        current_dof = getattr(current_obj, "dof_pos", None)
+
+        if expected_dof is not None and current_dof is not None:
+            if not torch.allclose(current_dof, expected_dof, atol=tolerance):
+                diff = torch.abs(current_dof - expected_dof).max().item()
+                log.debug(f"DOF mismatch for {obj_name}: max diff = {diff:.6f} (tolerance = {tolerance})")
+                return False
+
+    return True
 
 
 def parse_args():
@@ -84,6 +174,28 @@ def parse_args():
         default=400,
     )
 
+    # Domain Randomization options
+    parser.add_argument(
+        "--level",
+        type=int,
+        default=0,
+        choices=[0, 1, 2, 3],
+        help="Randomization level: 0=None, 1=Scene+Material, 2=+Light, 3=+Camera"
+    )
+    parser.add_argument(
+        "--scene_mode",
+        type=int,
+        default=0,
+        choices=[0, 1, 2, 3],
+        help="Scene mode: 0=Manual, 1=USD Table, 2=USD Scene, 3=Full USD"
+    )
+    parser.add_argument(
+        "--randomization_seed",
+        type=int,
+        default=None,
+        help="Seed for reproducible randomization. If None, uses random seed"
+    )
+
     args = parser.parse_args()
     return args
 
@@ -108,20 +220,72 @@ def main():
 
     # from metasim.scenario.scenario import RandomizationCfg
     from metasim.scenario.cameras import PinholeCameraCfg
+    from metasim.scenario.lights import DiskLightCfg, SphereLightCfg
     from metasim.constants import SimType
     from metasim.utils.demo_util import get_traj
     from metasim.utils.setup_util import get_robot
 
 #    from metasim.utils.setup_util import get_sim_env_class
 
+    # Camera configuration (same logic as collect_demo.py)
+    task_cls = get_task_class(args.task)
+
+    if args.task in {"stack_cube", "pick_cube", "pick_butter"}:
+        dp_camera = True
+    else:
+        dp_camera = args.task != "close_box"
+
+    is_libero_dataset = "libero_90" in args.task
+
+    if is_libero_dataset:
+        dp_pos = (2.0, 0.0, 2)
+    elif dp_camera:
+        dp_pos = (1.0, 0.0, 0.75)
+    else:
+        dp_pos = (1.5, 0.0, 1.5)
+
     camera = PinholeCameraCfg(
         name="camera",
         data_types=["rgb", "depth"],
         width=256,
         height=256,
-        pos=(1.5, 0.0, 1.5),
+        pos=dp_pos,
         look_at=(0.0, 0.0, 0.0),
     )
+
+    # Lighting setup (same logic as collect_demo.py)
+    # Determine intensity based on render mode (if available)
+    render_mode = getattr(args, 'render_mode', 'raytracing')
+    if render_mode == "pathtracing":
+        ceiling_main = 18000.0
+        ceiling_corners = 8000.0
+    else:
+        ceiling_main = 12000.0
+        ceiling_corners = 5000.0
+
+    lights = [
+        DiskLightCfg(
+            name="ceiling_main",
+            intensity=ceiling_main,
+            color=(1.0, 1.0, 1.0),
+            radius=1.2,
+            pos=(0.0, 0.0, 2.8),
+            rot=(0.7071, 0.0, 0.0, 0.7071),
+        ),
+        SphereLightCfg(
+            name="ceiling_ne", intensity=ceiling_corners, color=(1.0, 1.0, 1.0), radius=0.6, pos=(1.0, 1.0, 2.5)
+        ),
+        SphereLightCfg(
+            name="ceiling_nw", intensity=ceiling_corners, color=(1.0, 1.0, 1.0), radius=0.6, pos=(-1.0, 1.0, 2.5)
+        ),
+        SphereLightCfg(
+            name="ceiling_sw", intensity=ceiling_corners, color=(1.0, 1.0, 1.0), radius=0.6, pos=(-1.0, -1.0, 2.5)
+        ),
+        SphereLightCfg(
+            name="ceiling_se", intensity=ceiling_corners, color=(1.0, 1.0, 1.0), radius=0.6, pos=(1.0, -1.0, 2.5)
+        ),
+    ]
+
     # randomization = RandomizationCfg(camera=False, light=False, ground=False, reflection=False)
     # scenario = ScenarioCfg(
     #     task=args.task,
@@ -134,12 +298,12 @@ def main():
     #     headless=args.headless,
     # )
 
-    task_cls = get_task_class(args.task)
     scenario = task_cls.scenario.update(
         robots=[args.robot],
         simulator=args.sim,
         num_envs=args.num_envs,
         headless=args.headless,
+        lights=lights,
         cameras=[camera]
     )
 
@@ -151,6 +315,43 @@ def main():
     robot = get_robot(args.robot)
     toc = time.time()
     log.trace(f"Time to launch: {toc - tic:.2f}s")
+
+    ## Data
+    tic = time.time()
+    assert os.path.exists(env.traj_filepath), (
+        f"Trajectory file: {env.traj_filepath} does not exist."
+    )
+    init_states, all_actions, all_states = get_traj(env.traj_filepath, robot, env.handler)
+    toc = time.time()
+    log.trace(f"Time to load data: {toc - tic:.2f}s")
+
+    # Initialize Domain Randomization Manager (same logic as collect_demo.py)
+    # Note: DR Manager is always created, even for level=0
+    # The apply_randomization() method will skip operations when level=0
+    if not RANDOMIZATION_AVAILABLE:
+        log.warning("Randomization components not available!")
+        raise ImportError("Domain Randomization not available. Please check installation.")
+
+    # Determine render mode from args (if available)
+    render_mode = getattr(args, 'render_mode', 'raytracing')
+
+    # Create a simple render config for DR (needed for light intensity adjustment)
+    from dataclasses import dataclass
+    @dataclass
+    class SimpleRenderCfg:
+        mode: str = render_mode
+
+    randomization_manager = DomainRandomizationManager(
+        config=DRConfig(
+            level=args.level,
+            scene_mode=args.scene_mode,
+            randomization_seed=args.randomization_seed,
+        ),
+        scenario=scenario,
+        handler=env.handler,
+        init_states=init_states,
+        render_cfg=SimpleRenderCfg(mode=render_mode)
+    )
 
     if args.algo == "act":
         state_dim = 9
@@ -215,29 +416,39 @@ def main():
     ckpt_name = args.ckpt_path.split("/")[-1]
     os.makedirs(f"tmp/{args.algo}/{args.task}/{ckpt_name}", exist_ok=True)
 
-    ## Data
-    tic = time.time()
-    assert os.path.exists(env.traj_filepath), (
-        f"Trajectory file: {env.traj_filepath} does not exist."
-    )
-    init_states, all_actions, all_states = get_traj(env.traj_filepath, robot, env.handler)
-    toc = time.time()
-    log.trace(f"Time to load data: {toc - tic:.2f}s")
-
-    ## cuRobo controller
-    *_, robot_ik = get_curobo_models(scenario.robots[0])
-    curobo_n_dof = len(robot_ik.robot_config.cspace.joint_names)
-    ee_n_dof = len(scenario.robots[0].gripper_open_q)
+    ## cuRobo controller (commented out - not needed for ACT joint control)
+    # *_, robot_ik = get_curobo_models(scenario.robots[0])
+    # curobo_n_dof = len(robot_ik.robot_config.cspace.joint_names)
+    # ee_n_dof = len(scenario.robots[0].gripper_open_q)
 
     ## Reset before first step
     TotalSuccess = 0
     num_eval: int = args.num_eval
 
     for i in range(num_eval):
+        # Use positive indexing (same as collect_demo.py)
+        demo_idx = i
+
+        # Apply domain randomization BEFORE reset (same logic as collect_demo.py)
+        # Note: If level=0, apply_randomization() will skip but update_positions_to_table() still runs
+        log.info(f"[ACT Eval] Episode {i}: Applying DR for demo_idx={demo_idx}")
+        randomization_manager.apply_randomization(demo_idx=demo_idx, is_initial=(i == 0))
+        randomization_manager.update_positions_to_table(demo_idx=demo_idx, env_id=0)
+        randomization_manager.update_camera_look_at(env_id=0)
+        randomization_manager.apply_camera_randomization()  # Apply camera randomization after baseline adjustment
+
         tic = time.time()
-        obs, extras = env.reset(states=[init_states[-(i + 1)]])
+        obs, extras = env.reset(states=[init_states[demo_idx]])
         toc = time.time()
         log.trace(f"Time to reset: {toc - tic:.2f}s")
+
+        # Ensure environment stabilizes after reset (same as collect_demo.py)
+        ensure_clean_state(env.handler, expected_state=init_states[demo_idx])
+
+        # Reset episode step counter after stabilization
+        if hasattr(env, "_episode_steps"):
+            env._episode_steps[0] = 0
+
         # save_obs(obs, 0)
         log.debug(f"Env: {i}")
 
@@ -259,15 +470,15 @@ def main():
                 log.debug(f"Step {step}")
                 robot_joint_limits = scenario.robots[0].joint_limits
 
-                image_list.append(np.array(obs.cameras['camera'].rgb)[0])
+                image_list.append(np.array(obs.cameras['camera'].rgb.cpu())[0])
 
-                qpos_numpy = np.array(obs.robots['franka'].joint_pos)
+                qpos_numpy = np.array(obs.robots['franka'].joint_pos.cpu())
                 # qpos_numpy = np.array(obs["joint_qpos"])
                 qpos = pre_process(qpos_numpy)
                 # qpos = np.concatenate([qpos, np.zeros((qpos.shape[0], 14 - qpos.shape[1]))], axis=1)
                 qpos = torch.from_numpy(qpos).float().cuda()
                 qpos_history[:, step] = qpos
-                curr_image = np.array(obs.cameras['camera'].rgb).transpose(0, 3, 1, 2)
+                curr_image = np.array(obs.cameras['camera'].rgb.cpu()).transpose(0, 3, 1, 2)
                 # cur_image = np.stack([curr_image, curr_image], axis=0)
                 curr_image = torch.from_numpy(curr_image / 255.0).float().cuda().unsqueeze(0)
                 # breakpoint()
@@ -300,8 +511,8 @@ def main():
                 inverse_reorder_idx = [reorder_idx.index(i) for i in range(len(reorder_idx))]
                 actions = action[inverse_reorder_idx]
                 inner_actions = {"dof_pos_target": dict(zip(scenario.robots[0].joint_limits.keys(), actions))}
-                actions = {"franka": inner_actions}
-                #actions = [{"dof_pos_target": dict(zip(scenario.robots[0].joint_limits.keys(), action))}]
+                # Format: actions[env_id][robot_name][action_type]
+                actions = [{"franka": inner_actions}]
                 #log.debug(f"Actions: {actions}")
                 # log.debug(f"Action: {actions}")
                 obs, reward, success, time_out, extras = env.step(actions)

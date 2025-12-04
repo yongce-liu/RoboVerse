@@ -50,6 +50,12 @@ if [ "${eval_enable}" = "true" ]; then
   echo "=== Evaluation ==="
   # # export TORCH_CUDA_ARCH_LIST="8.9"
   ckpt_path=$(cat ./roboverse_learn/il/act/ckpt_dir_path.txt)
+
+  # Domain Randomization parameters for evaluation
+  eval_level=3          # 0=None, 1=Scene+Material, 2=+Light, 3=+Camera
+  eval_scene_mode=2     # 0=Manual, 1=USD Table, 2=USD Scene, 3=Full USD
+  eval_seed=42          # Randomization seed (optional)
+
   python -m roboverse_learn.il.act.act_eval_runner \
   --task ${task_name_set} \
   --robot franka \
@@ -58,7 +64,10 @@ if [ "${eval_enable}" = "true" ]; then
   --algo act \
   --ckpt_path  ./${ckpt_path} \
   --headless True \
-  --num_eval 100 \
+  --num_eval 5 \
   --temporal_agg True \
-  --chunk_size ${chunk_size}
+  --chunk_size ${chunk_size} \
+  --level ${eval_level} \
+  --scene_mode ${eval_scene_mode} \
+  --randomization_seed ${eval_seed}
 fi

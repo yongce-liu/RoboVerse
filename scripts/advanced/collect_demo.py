@@ -547,6 +547,7 @@ def main():
         randomization_manager.apply_randomization(demo_idx, is_initial=True)
         randomization_manager.update_positions_to_table(demo_idx, env_id)
         randomization_manager.update_camera_look_at(env_id)
+        randomization_manager.apply_camera_randomization()  # Apply camera randomization after baseline adjustment
 
     ## Reset to initial states (after position adjustment)
     obs, extras = env.reset(states=[init_states[demo_idx] for demo_idx in demo_idxs])
@@ -617,6 +618,8 @@ def main():
 
                     randomization_manager.apply_randomization(new_demo_idx, is_initial=False)
                     randomization_manager.update_positions_to_table(new_demo_idx, env_id)
+                    randomization_manager.update_camera_look_at(env_id)
+                    randomization_manager.apply_camera_randomization()  # Apply camera randomization
                     force_reset_to_state(env, init_states[new_demo_idx], env_id)
 
                     obs = env.handler.get_states()
@@ -642,6 +645,7 @@ def main():
                 randomization_manager.apply_randomization(demo_idx, is_initial=False)
                 randomization_manager.update_positions_to_table(demo_idx, env_id)
                 randomization_manager.update_camera_look_at(env_id)
+                randomization_manager.apply_camera_randomization()  # Apply camera randomization
                 force_reset_to_state(env, init_states[demo_idx], env_id)
 
                 obs = env.handler.get_states()
@@ -660,6 +664,7 @@ def main():
                     randomization_manager.apply_randomization(new_demo_idx, is_initial=False)
                     randomization_manager.update_positions_to_table(new_demo_idx, env_id)
                     randomization_manager.update_camera_look_at(env_id)
+                    randomization_manager.apply_camera_randomization()  # Apply camera randomization
                     force_reset_to_state(env, init_states[new_demo_idx], env_id)
 
                     obs = env.handler.get_states()
