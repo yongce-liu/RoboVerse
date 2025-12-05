@@ -109,7 +109,12 @@ if __name__ == "__main__":
 
     args = tyro.cli(CleanRLTD3Config)
     args.total_timesteps = args.max_iterations * args.num_envs
+
+    # Use RSL-RL style directory structure: outputs/{exp_name}/{task}/
     run_name = f"{args.exp_name}__{args.seed}__{int(time.time())}"
+    model_dir = os.path.join("outputs", args.exp_name, args.task)
+    os.makedirs(model_dir, exist_ok=True)
+
     if args.track:
         import wandb
 
@@ -122,7 +127,7 @@ if __name__ == "__main__":
             monitor_gym=True,
             save_code=True,
         )
-    writer = SummaryWriter(f"runs/{run_name}")
+    writer = SummaryWriter(os.path.join(model_dir, "tensorboard"))
     writer.add_text(
         "hyperparameters",
         "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
@@ -172,7 +177,6 @@ if __name__ == "__main__":
     episode_tracker = EpisodeTracker(args.num_envs, device)
 
     # Initialize metrics tracking
-    model_dir = f"runs/{run_name}"
     metrics_path = os.path.join(model_dir, "metrics.csv")
     metrics_history: list[dict[str, Any]] = []
 
@@ -369,7 +373,7 @@ if __name__ == "__main__":
     save_metrics_history(metrics_path, metrics_history)
 
     if args.save_model:
-        model_path = f"runs/{run_name}/{args.exp_name}.cleanrl_model"
+        model_path = os.path.join(model_dir, f"{args.exp_name}.cleanrl_model")
         torch.save((actor.state_dict(), qf1.state_dict(), qf2.state_dict()), model_path)
         print(f"model saved to {model_path}")
     envs.close()

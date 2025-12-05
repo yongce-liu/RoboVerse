@@ -161,6 +161,15 @@ def main() -> None:
             raise ValueError("No GPU available")
     log.info(f"Using device: {device}")
 
+    # Setup model directory using RSL-RL style: outputs/{exp_name}/{task}/
+    exp_name = cfg("exp_name", "fast_td3")
+    task_name = cfg("task")
+    model_dir = cfg("model_dir", None)
+    if model_dir is None:
+        model_dir = os.path.join("outputs", exp_name, task_name)
+    os.makedirs(model_dir, exist_ok=True)
+    log.info(f"Model directory: {model_dir}")
+
     task_cls = get_task_class(cfg("task"))
     # Get default scenario from task class and update with specific parameters
     scenario = task_cls.scenario.update(
@@ -543,8 +552,7 @@ def main() -> None:
 
             if cfg("save_interval") > 0 and global_step > 0 and global_step % cfg("save_interval") == 0:
                 log.info(f"Saving model at global step {global_step}")
-                model_dir = cfg("model_dir", "models")
-                run_name = cfg("run_name", cfg("task"))
+                run_name = cfg("run_name", None) or task_name
                 save_path = os.path.join(model_dir, f"{run_name}_{global_step}.pt")
                 save_params(
                     global_step,

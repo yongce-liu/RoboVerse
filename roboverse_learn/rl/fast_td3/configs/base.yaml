@@ -79,7 +79,9 @@ measure_burnin: 3
 # Logging & Checkpointing
 # -------------------------------------------------------------------------------
 wandb_project: "get_started_fttd3"
-exp_name: "get_started_fttd3"
+exp_name: "fast_td3"
+run_name: null  # defaults to task name if null
+model_dir: null  # defaults to outputs/{exp_name}/{task} if null
 use_wandb: false
 checkpoint_path: null
 eval_interval: 700
