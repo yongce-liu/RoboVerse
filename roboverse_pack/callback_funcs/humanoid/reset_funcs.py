@@ -37,7 +37,7 @@ def random_root_state(
     env.setup_initial_env_states.robots[env.name].root_state[env_ids, 0:3] = positions
     env.setup_initial_env_states.robots[env.name].root_state[env_ids, 3:7] = orientations
     env.setup_initial_env_states.robots[env.name].root_state[env_ids, 7:13] = velocities
-    # # set into the physics simulation
+    # set into the physics simulation
     # env.write_robot_root_state(torch.cat([positions, orientations, velocities], dim=-1), env_ids=env_ids)
 
 
