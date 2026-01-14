@@ -129,5 +129,10 @@ class RslRlPPOConfig(RslRlOnPolicyRunnerCfg):
         if self.clip_actions is not None:
             self.train_cfg["clip_actions"] = self.clip_actions
 
+        # Sync logger with use_wandb flag
+        if self.use_wandb:
+            self.logger = "wandb"
+            self.train_cfg["logger"] = "wandb"
+
 
 __all__ = ["RslRlPPOConfig"]
