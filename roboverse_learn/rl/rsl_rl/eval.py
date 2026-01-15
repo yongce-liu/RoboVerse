@@ -111,9 +111,7 @@ def evaluate(args: RslRlPPOConfig):
 
     obs = wrapped_env.get_observations()
 
-    # Use the same obs_groups as training (from RslRlPPOConfig.__post_init__)
-    # critic gets both policy and critic observations concatenated
-    obs_groups = args.obs_groups or {"policy": ["policy"], "critic": ["policy", "critic"]}
+    obs_groups = args.obs_groups or {"policy": ["policy"], "critic": ["critic"]}
 
     # Extract policy config
     policy_cfg = args.policy
