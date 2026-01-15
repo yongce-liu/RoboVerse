@@ -21,11 +21,11 @@ from roboverse_learn.rl.configs.rsl_rl.ppo import RslRlPPOConfig
 from roboverse_learn.rl.rsl_rl.env_wrapper import RslRlEnvWrapper
 from metasim.task.registry import get_task_class
 
-def get_log_dir(robot_name: str, task_name: str, now=None) -> str:
-    """Get the log directory."""
+def get_log_dir(exp_name: str, task_name: str, now=None) -> str:
+    """Get the log directory (aligned with ppo.py saving logic)."""
     if now is None:
-        now = datetime.datetime.now().strftime("%Y_%m%d_%H%M%S")
-    log_dir = f"./outputs/{robot_name}/{task_name}/{now}"
+        now = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    log_dir = f"./outputs/{exp_name}/{task_name}/{now}"
     if not os.path.exists(log_dir):
         os.makedirs(log_dir, exist_ok=True)
     log.info("Log directory: {}", log_dir)
@@ -84,10 +84,12 @@ def evaluate(args: RslRlPPOConfig):
         raise ValueError("Please provide --resume (timestamp/log dir) for evaluation.")
 
     # Convert resume string to full log directory path
+    # Use exp_name to match ppo.py's saving logic (defaults to experiment_name -> task)
+    exp_name = args.exp_name or args.experiment_name or args.task
     log_dir = (
         args.resume
         if os.path.isdir(args.resume)
-        else get_log_dir(robot_name=args.robot, task_name=args.task, now=args.resume)
+        else get_log_dir(exp_name=exp_name, task_name=args.task, now=args.resume)
     )
 
     # Use get_load_path helper to handle checkpoint loading logic
@@ -109,10 +111,9 @@ def evaluate(args: RslRlPPOConfig):
 
     obs = wrapped_env.get_observations()
 
-    # Resolve obs_groups (mimicking OnPolicyRunner.__init__)
-    default_sets = ["critic"]
-    args.obs_groups = resolve_obs_groups(obs, {}, default_sets)
-    obs_groups = args.obs_groups
+    # Use the same obs_groups as training (from RslRlPPOConfig.__post_init__)
+    # critic gets both policy and critic observations concatenated
+    obs_groups = args.obs_groups or {"policy": ["policy"], "critic": ["policy", "critic"]}
 
     # Extract policy config
     policy_cfg = args.policy
