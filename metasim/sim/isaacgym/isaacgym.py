@@ -422,11 +422,8 @@ class IsaacgymHandler(BaseSimHandler):
         asset_options.fix_base_link = self.robots[0].fix_base_link
         asset_options.disable_gravity = not self.robots[0].enabled_gravity
         asset_options.flip_visual_attachments = self.robots[0].isaacgym_flip_visual_attachments
-        # NOTE: Always collapse fixed joints in IsaacGym to reduce rigid body count.
-        # This prevents PhysX contact buffer overflow at scale (for g1_dof29 over 2048+ envs).
-        asset_options.collapse_fixed_joints = True
+        asset_options.collapse_fixed_joints = getattr(self.robots[0], "collapse_fixed_joints", False)
         asset_options.default_dof_drive_mode = gymapi.DOF_MODE_NONE
-        # Defaults are set to free movement and will be updated based on the configuration in actuator_cfg below.
         asset_options.replace_cylinder_with_capsule = self.scenario.sim_params.replace_cylinder_with_capsule
         robot_asset = self.gym.load_asset(self.sim, asset_root, robot_asset_file, asset_options)
         # configure robot dofs

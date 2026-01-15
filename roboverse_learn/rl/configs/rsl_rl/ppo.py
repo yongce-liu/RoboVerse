@@ -100,7 +100,7 @@ class RslRlPPOConfig(RslRlOnPolicyRunnerCfg):
             self.model_dir = os.path.join("outputs", name, self.task, log_dir)
 
         if self.obs_groups is None:
-            self.obs_groups = {"policy": ["policy"], "critic": ["policy", "critic"]}
+            self.obs_groups = {"policy": ["policy"], "critic": ["critic"]}
 
         # Build runner training config for RSL-RL
         policy_cfg = self.policy.to_dict() if hasattr(self.policy, "to_dict") else dict(self.policy.__dict__)
