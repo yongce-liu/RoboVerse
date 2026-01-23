@@ -269,7 +269,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # # Load config
-    config_path = f"roboverse_pack/tasks/humanoid/unitree_deploy/configs/{args.config}"
+    config_path = f"scripts/unitree_deploy/configs/{args.config}"
     config = G1Config(config_path)
 
     # Initialize DDS communication
